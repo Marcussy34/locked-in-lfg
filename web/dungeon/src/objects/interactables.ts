@@ -23,6 +23,7 @@ export function setupInteractables(scene: Scene) {
     while (target) {
       if (target.metadata?.interactable) {
         const objectId = target.metadata.objectId as string;
+        console.log(`[interactable] tapped: ${objectId} (mesh: ${target.name})`);
         sendToRN({ type: 'objectTapped', payload: { objectId } });
         flashMesh(target, scene);
         return;

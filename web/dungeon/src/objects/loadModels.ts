@@ -13,8 +13,8 @@ import { setEmberPosition } from '../effects/embers';
 
 const TILE_PATH = '/assets/models/dungeon_tiles/';
 const TILE_MODEL = 'base_basic_pbr.glb';
-const GRID_SIZE = 5;
-const FLOOR_DEPTH = 6; // extra row to reach the back wall
+const GRID_SIZE = 7;
+const FLOOR_DEPTH = 8; // deeper room
 const WALL_HEIGHT = 5;
 const TILE_SCALE = 1;
 
@@ -64,31 +64,31 @@ export async function createDungeonGeometry(scene: Scene) {
     }
   }
 
-  // --- Right wall ---
+  // --- Right wall (depth matches floor) ---
   for (let row = 0; row < WALL_HEIGHT; row++) {
-    for (let col = 0; col < GRID_SIZE; col++) {
+    for (let col = 0; col < FLOOR_DEPTH; col++) {
       const clone = wrapper.clone(`rightWall_${row}_${col}`, null)!;
-      clone.position = new Vector3(offsetX + tileWidth / 2, row * tileDepth, col * tileDepth - offsetZ);
+      clone.position = new Vector3(offsetX + tileWidth / 2, row * tileDepth, col * tileDepth - floorOffsetZ);
       clone.rotation = new Vector3(0, -Math.PI / 2, 0);
       clone.setEnabled(true);
     }
   }
 
-  // --- Left wall ---
+  // --- Left wall (depth matches floor) ---
   for (let row = 0; row < WALL_HEIGHT; row++) {
-    for (let col = 0; col < GRID_SIZE; col++) {
+    for (let col = 0; col < FLOOR_DEPTH; col++) {
       const clone = wrapper.clone(`leftWall_${row}_${col}`, null)!;
-      clone.position = new Vector3(-offsetX - tileWidth / 2, row * tileDepth, col * tileDepth - offsetZ);
+      clone.position = new Vector3(-offsetX - tileWidth / 2, row * tileDepth, col * tileDepth - floorOffsetZ);
       clone.rotation = new Vector3(0, Math.PI / 2, 0);
       clone.setEnabled(true);
     }
   }
 
-  // --- Back wall ---
+  // --- Back wall (positioned at back edge of floor) ---
   for (let row = 0; row < WALL_HEIGHT; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
       const clone = wrapper.clone(`backWall_${row}_${col}`, null)!;
-      clone.position = new Vector3(col * tileWidth - offsetX, row * tileDepth, offsetZ + tileDepth / 2);
+      clone.position = new Vector3(col * tileWidth - offsetX, row * tileDepth, floorOffsetZ + tileDepth / 2);
       clone.rotation = new Vector3(0, 0, 0);
       clone.setEnabled(true);
     }
@@ -99,7 +99,7 @@ export async function createDungeonGeometry(scene: Scene) {
     '', '/assets/models/bookshelf/', 'base_basic_pbr.glb', scene,
   );
   const bookshelf = bookshelfResult.meshes[0];
-  bookshelf.position = new Vector3(-4, 0, 0);
+  bookshelf.position = new Vector3(-5.5, 0, 1);
   bookshelf.scaling = new Vector3(1, 1, 1);
   bookshelf.metadata = { interactable: true, objectId: 'bookshelf' };
   for (const mesh of bookshelfResult.meshes) {
@@ -118,6 +118,7 @@ export async function createDungeonGeometry(scene: Scene) {
   createChest(scene);
   createNoticeBoard(scene);
   createBookshelfDecorations(scene, bookshelf.position);
+  createSingleBook(scene, bookshelf.position);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +155,7 @@ function createFireplace(scene: Scene) {
   opening.material = mat('fp_openingMat', new Color3(0.05, 0.03, 0.02), scene);
   opening.parent = parent;
 
-  parent.position = new Vector3(0, 0, 4);
+  parent.position = new Vector3(0, 0, 5);
 
   // Tag the parent mesh (base) as interactable
   const rootMesh = base as Mesh;
@@ -165,9 +166,9 @@ function createFireplace(scene: Scene) {
   makeMovable(rootMesh, 'fireplace', scene);
 
   // Reposition flame & embers inside the hearth
-  const flamePos = new Vector3(0, 1.1, 3.6);
+  const flamePos = new Vector3(0, 1.1, 4.6);
   setFlamePosition(flamePos);
-  setEmberPosition(new Vector3(0, 1.5, 3.5));
+  setEmberPosition(new Vector3(0, 1.5, 4.5));
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +232,7 @@ function createAlchemyTable(scene: Scene) {
   tube.material = mat('alch_tubeMat', glassColor, scene, 0.4);
   tube.parent = parent;
 
-  parent.position = new Vector3(4, 0, 1);
+  parent.position = new Vector3(5.5, 0, 1);
 
   // Tag all children as interactable
   const meta = { interactable: true, objectId: 'alchemy' };
@@ -279,7 +280,7 @@ function createChest(scene: Scene) {
   lock.material = mat('chest_lockMat', new Color3(0.6, 0.55, 0.2), scene);
   lock.parent = parent;
 
-  parent.position = new Vector3(3, 0, -2);
+  parent.position = new Vector3(4, 0, -2);
 
   makeMovable(body, 'chest', scene);
 }
@@ -319,7 +320,7 @@ function createNoticeBoard(scene: Scene) {
     note.parent = parent;
   });
 
-  parent.position = new Vector3(-2, 0, 3);
+  parent.position = new Vector3(-3, 0, 5);
 
   // Tag as interactable
   const meta = { interactable: true, objectId: 'noticeboard' };
@@ -330,7 +331,29 @@ function createNoticeBoard(scene: Scene) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Bookshelf Decorations (non-interactable)
+// 5. Single interactive book (in front of bookshelf, clearly tappable)
+// ---------------------------------------------------------------------------
+function createSingleBook(scene: Scene, bookshelfPos: Vector3) {
+  const book = MeshBuilder.CreateBox('book_main', {
+    width: 0.4, height: 0.9, depth: 0.45,
+  }, scene);
+
+  // Place clearly in front of the bookshelf so it's never occluded
+  book.position = bookshelfPos.add(new Vector3(0, 0.5, -1.2));
+  book.rotation.y = 0.15;
+  book.rotation.z = 0.05;
+  book.isPickable = true;
+
+  const bookMat = mat('book_mainMat', new Color3(0.6, 0.12, 0.1), scene);
+  bookMat.emissiveColor = new Color3(0.2, 0.06, 0.03);
+  book.material = bookMat;
+
+  book.metadata = { interactable: true, objectId: 'book' };
+  // No makeMovable — drag behavior eats tap events
+}
+
+// ---------------------------------------------------------------------------
+// 6. Bookshelf Decorations (non-interactable)
 // ---------------------------------------------------------------------------
 function createBookshelfDecorations(scene: Scene, bookshelfPos: Vector3) {
   const parent = new TransformNode('bookdeco_root', scene);

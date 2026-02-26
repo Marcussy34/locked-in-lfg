@@ -15,31 +15,31 @@ export interface ViewpointDef {
 
 /**
  * 6 fixed camera viewpoints for the dungeon room.
- * Positions assume room is roughly 10x10x6 units, centered at origin.
+ * Room is ~14 wide x 16 deep (7×8 tiles), centered at origin.
  */
 export const VIEWPOINTS: Record<Viewpoint, ViewpointDef> = {
   overview: {
-    position: new Vector3(0, 5, -8),
-    target: new Vector3(0, 1.5, 0),
+    position: new Vector3(0, 7, -10),
+    target: new Vector3(0, 1.5, 1),
   },
   bookshelf: {
-    position: new Vector3(-4, 3, -3),
-    target: new Vector3(-5, 2, 2),
+    position: new Vector3(-5, 3, -3),
+    target: new Vector3(-6, 2, 2),
   },
   fireplace: {
     position: new Vector3(0, 2.5, -4),
-    target: new Vector3(0, 1.5, 3),
+    target: new Vector3(0, 1.5, 4),
   },
   alchemy: {
-    position: new Vector3(4, 3, -3),
-    target: new Vector3(5, 1.5, 1),
+    position: new Vector3(5, 3, -3),
+    target: new Vector3(6, 1.5, 1),
   },
   noticeboard: {
-    position: new Vector3(-2, 3, -2),
-    target: new Vector3(-3, 2.5, 4),
+    position: new Vector3(-3, 3, -2),
+    target: new Vector3(-3, 2.5, 5),
   },
   character: {
-    position: new Vector3(1, 2.5, -3),
+    position: new Vector3(1, 2.5, -4),
     target: new Vector3(1.5, 1.5, 2),
   },
 };
