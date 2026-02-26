@@ -17,7 +17,7 @@ export type MainStackParamList = {
   UndergroundHub: undefined;
   CourseBrowser: undefined;
   Lesson: { lessonId: string; courseId: string };
-  LessonResult: { lessonId: string; score: number };
+  LessonResult: { lessonId: string; courseId: string; score: number; totalQuestions: number };
   FlameDashboard: undefined;
   Alchemy: undefined;
   Leaderboard: undefined;

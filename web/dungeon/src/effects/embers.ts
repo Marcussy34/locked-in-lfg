@@ -4,12 +4,15 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Color4 } from '@babylonjs/core/Maths/math.color';
 
+let emberSystem: ParticleSystem;
+
 /**
  * Floating ember particles that rise slowly from the fireplace area.
  * Always active (even when flame is COLD — embers from lingering heat).
  */
 export function createEmbers(scene: Scene): ParticleSystem {
   const embers = new ParticleSystem('embers', 50, scene);
+  emberSystem = embers;
 
   embers.particleTexture = new Texture(createEmberDataURL(), scene);
 
@@ -43,6 +46,12 @@ export function createEmbers(scene: Scene): ParticleSystem {
   embers.start();
 
   return embers;
+}
+
+/** Move the ember emitter to a new world position. */
+export function setEmberPosition(pos: Vector3) {
+  if (!emberSystem) return;
+  emberSystem.emitter = pos.clone();
 }
 
 function createEmberDataURL(): string {

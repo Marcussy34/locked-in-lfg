@@ -6,18 +6,21 @@ import { Color4 } from '@babylonjs/core/Maths/math.color';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { PointerDragBehavior } from '@babylonjs/core/Behaviors/Meshes/pointerDragBehavior';
 import { FLAME_CONFIGS, type FlameState } from './flameStates';
 import { setFireLightIntensity, getFireLight } from '../scene/lighting';
 import gsap from 'gsap';
 
 let flameSystem: ParticleSystem;
+let flameAnchor: AbstractMesh;
 
 const FIRE_ORIGIN = new Vector3(0, 1.1, 3.8);
 
 export function createFlameParticles(scene: Scene): ParticleSystem {
   // Draggable anchor sphere
-  const anchor = MeshBuilder.CreateSphere('flameAnchor', { diameter: 0.5 }, scene);
+  flameAnchor = MeshBuilder.CreateSphere('flameAnchor', { diameter: 0.5 }, scene);
+  const anchor = flameAnchor;
   anchor.position = FIRE_ORIGIN.clone();
   const anchorMat = new StandardMaterial('anchorMat', scene);
   anchorMat.diffuseColor = new Color3(1, 0.4, 0);
@@ -121,6 +124,18 @@ function startFlicker() {
     ease: 'rough({ strength: 2, points: 10, randomize: true })',
     onUpdate: () => setFireLightIntensity(flickerObj.intensity),
   });
+}
+
+/** Move the flame anchor (and fire light) to a new world position. */
+export function setFlamePosition(pos: Vector3) {
+  if (!flameAnchor) return;
+  flameAnchor.position.copyFrom(pos);
+  const light = getFireLight();
+  if (light) {
+    light.position.x = pos.x;
+    light.position.y = pos.y + 1;
+    light.position.z = pos.z;
+  }
 }
 
 /**
