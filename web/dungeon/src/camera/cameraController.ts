@@ -65,6 +65,62 @@ export function transitionTo(viewpoint: Viewpoint) {
   });
 }
 
+/** Smoothly zoom the camera to focus on a world position */
+export function focusOn(target: Vector3, distance = 5) {
+  if (isTransitioning) return;
+  isTransitioning = true;
+
+  // Calculate camera angles to look at the target from current direction
+  const dir = camera.position.subtract(target).normalize();
+  const alpha = Math.atan2(dir.x, dir.z);
+  const beta = Math.acos(Math.max(-1, Math.min(1, dir.y)));
+
+  gsap.to(camera, {
+    alpha,
+    beta,
+    radius: distance,
+    duration: 1.0,
+    ease: 'power2.inOut',
+    onComplete: () => { isTransitioning = false; },
+  });
+
+  const targetObj = { x: camera.target.x, y: camera.target.y, z: camera.target.z };
+  gsap.to(targetObj, {
+    x: target.x,
+    y: target.y,
+    z: target.z,
+    duration: 1.0,
+    ease: 'power2.inOut',
+    onUpdate: () => {
+      camera.target.set(targetObj.x, targetObj.y, targetObj.z);
+    },
+  });
+}
+
 export function getCamera(): ArcRotateCamera {
   return camera;
+}
+
+export function logCameraPosition() {
+  const pos = camera.position;
+  const t = camera.target;
+  console.log(
+    `[camera] alpha: ${camera.alpha.toFixed(3)} beta: ${camera.beta.toFixed(3)} radius: ${camera.radius.toFixed(2)}` +
+    `\n  pos: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})` +
+    `\n  target: (${t.x.toFixed(2)}, ${t.y.toFixed(2)}, ${t.z.toFixed(2)})`
+  );
+}
+
+let cameraLocked = false;
+
+export function toggleCameraLock(): boolean {
+  cameraLocked = !cameraLocked;
+  const canvas = camera.getScene().getEngine().getRenderingCanvas()!;
+  if (cameraLocked) {
+    logCameraPosition();
+    camera.detachControl();
+  } else {
+    camera.attachControl(canvas, true);
+  }
+  return cameraLocked;
 }

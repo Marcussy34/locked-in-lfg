@@ -3,13 +3,19 @@ import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sendToRN } from '../bridge';
+import { focusOn } from '../camera/cameraController';
 
 /**
  * Sets up tap detection on interactable meshes.
- * Meshes with `metadata.interactable === true` trigger objectTapped messages.
+ * Single tap: flash + notify RN
+ * Double tap: zoom camera to the object
  */
 export function setupInteractables(scene: Scene) {
+  let lastTapTime = 0;
+  let lastTapId = '';
+
   scene.onPointerObservable.add((pointerInfo) => {
     if (pointerInfo.type !== PointerEventTypes.POINTERTAP) return;
 
@@ -23,6 +29,23 @@ export function setupInteractables(scene: Scene) {
     while (target) {
       if (target.metadata?.interactable) {
         const objectId = target.metadata.objectId as string;
+        const now = performance.now();
+
+        // Double-tap detection (within 400ms, same object)
+        if (objectId === lastTapId && now - lastTapTime < 400) {
+          console.log(`[interactable] double-tapped: ${objectId} → zooming`);
+          // Get bounding center of the model
+          const bounds = target.getBoundingInfo();
+          const center = bounds.boundingBox.centerWorld;
+          focusOn(center, 4);
+          lastTapTime = 0;
+          lastTapId = '';
+          return;
+        }
+
+        lastTapTime = now;
+        lastTapId = objectId;
+
         console.log(`[interactable] tapped: ${objectId} (mesh: ${target.name})`);
         sendToRN({ type: 'objectTapped', payload: { objectId } });
         flashMesh(target, scene);

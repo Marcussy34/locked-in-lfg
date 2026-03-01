@@ -1,5 +1,6 @@
 import { Scene } from '@babylonjs/core/scene';
 import { Engine } from '@babylonjs/core/Engines/engine';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { setupEnvironment } from './environment';
 import { setupLighting } from './lighting';
 import { setupPostProcessing } from './postProcessing';
@@ -12,6 +13,9 @@ import { sendToRN } from '../bridge';
 
 export async function createScene(engine: Engine): Promise<Scene> {
   const scene = new Scene(engine);
+
+  // Disable physical light falloff so brightness doesn't change with camera zoom
+  (scene as any).usePhysicalLightFalloff = false;
 
   sendToRN({ type: 'loadProgress', payload: { progress: 0.1 } });
 
