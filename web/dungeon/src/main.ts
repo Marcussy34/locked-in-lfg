@@ -9,7 +9,7 @@ import { setEmitterMultiplier } from './effects/candleFlames';
 import { applyPhase } from './scene/environment';
 import { setRoomTexture, setGizmoMode, onModelSelect, setModelTransform, getSelectedModel, type GizmoMode } from './objects/loadModels';
 import { toggleOrb, cycleOrbColor, getOrbColorName, toggleSunMode, setLightMultiplier } from './scene/lighting';
-import { toggleCameraLock, logCameraPosition } from './camera/cameraController';
+import { logCameraPosition, toggleCameraLock, nextViewpoint, prevViewpoint, goBack } from './camera/cameraController';
 import type { Viewpoint } from './camera/viewpoints';
 import type { FlameState } from './effects/flameStates';
 import type { RoomPhase } from './scene/environment';
@@ -177,11 +177,11 @@ async function main() {
     lightPanel.appendChild(hint);
   }
 
-  // Camera controls
+  // Camera controls (dev panel — unlock to orbit freely, lock + log to capture position)
   const cameraPanel = document.getElementById('cameraPanelBody');
   if (cameraPanel) {
     const lockBtn = document.createElement('button');
-    lockBtn.textContent = 'Lock Camera';
+    lockBtn.textContent = 'Unlock Camera';
     lockBtn.style.cssText = `
       background: #1c1c1e; color: #999; border: 1px solid #333;
       border-radius: 6px; padding: 6px 10px; cursor: pointer;
@@ -190,8 +190,8 @@ async function main() {
     lockBtn.addEventListener('click', () => {
       const locked = toggleCameraLock();
       lockBtn.textContent = locked ? 'Unlock Camera' : 'Lock Camera';
-      lockBtn.style.background = locked ? '#dc2626' : '#1c1c1e';
-      lockBtn.style.color = locked ? '#fff' : '#999';
+      lockBtn.style.background = locked ? '#1c1c1e' : '#dc2626';
+      lockBtn.style.color = locked ? '#999' : '#fff';
     });
 
     const logBtn = document.createElement('button');
@@ -206,6 +206,29 @@ async function main() {
     cameraPanel.appendChild(lockBtn);
     cameraPanel.appendChild(logBtn);
   }
+
+  // Arrow navigation buttons
+  const arrowLeft = document.getElementById('arrowLeft');
+  const arrowRight = document.getElementById('arrowRight');
+  const backBtn = document.getElementById('backBtn');
+
+  if (arrowLeft) arrowLeft.addEventListener('click', () => prevViewpoint());
+  if (arrowRight) arrowRight.addEventListener('click', () => nextViewpoint());
+  if (backBtn) backBtn.addEventListener('click', () => goBack());
+
+  // When camera zooms into an object — hide arrows, show back button
+  window.addEventListener('camera-zoomed-in', () => {
+    arrowLeft?.classList.add('hidden');
+    arrowRight?.classList.add('hidden');
+    backBtn?.classList.add('visible');
+  });
+
+  // When camera returns from zoom — show arrows, hide back button
+  window.addEventListener('camera-zoom-back', () => {
+    arrowLeft?.classList.remove('hidden');
+    arrowRight?.classList.remove('hidden');
+    backBtn?.classList.remove('visible');
+  });
 
   // Gizmo mode controls — click a model, then use these to transform it
   const gizmoPanel = document.getElementById('gizmoPanelBody');

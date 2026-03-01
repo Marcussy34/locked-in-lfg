@@ -609,10 +609,13 @@ async function loadModel(
     ` → scale: (${root.scaling.x.toFixed(2)}, ${root.scaling.y.toFixed(2)}, ${root.scaling.z.toFixed(2)})`
   );
 
-  // Tag meshes as interactable
-  for (const mesh of result.meshes) {
-    if (mesh.getTotalVertices() > 0) {
-      mesh.metadata = { interactable: true, objectId: name };
+  // Tag meshes as interactable (skip non-interactive objects)
+  const NON_INTERACTABLE = ['chandelier', 'candles_set', 'candles_set2', 'candles_set3', 'candles_set4', 'pillar'];
+  if (!NON_INTERACTABLE.includes(name)) {
+    for (const mesh of result.meshes) {
+      if (mesh.getTotalVertices() > 0) {
+        mesh.metadata = { interactable: true, objectId: name };
+      }
     }
   }
 }

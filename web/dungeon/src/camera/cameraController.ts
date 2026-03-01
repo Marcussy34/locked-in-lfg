@@ -3,29 +3,30 @@ import { Scene } from '@babylonjs/core/scene';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import gsap from 'gsap';
 import { VIEWPOINTS, VIEWPOINT_ORDER, type Viewpoint } from './viewpoints';
-import { sendToRN } from '../bridge';
 
 let camera: ArcRotateCamera;
 let currentIndex = 0;
 let isTransitioning = false;
+let zoomedIn = false;
+let lastViewpointIndex = 0;
 
 export function createCamera(scene: Scene): ArcRotateCamera {
-  // ArcRotateCamera: alpha (horizontal), beta (vertical), radius, target
-  camera = new ArcRotateCamera('mainCam', -Math.PI / 2, Math.PI / 3, 12, Vector3.Zero(), scene);
+  const overview = VIEWPOINTS['overview'];
 
-  // Attach controls — drag to orbit, scroll to zoom, right-drag to pan
+  // Use Babylon's own alpha/beta/radius directly — no manual conversion
+  camera = new ArcRotateCamera(
+    'mainCam',
+    overview.alpha,
+    overview.beta,
+    overview.radius,
+    overview.target.clone(),
+    scene,
+  );
+
+  // Temporarily enable controls so we can debug the view
   camera.attachControl(scene.getEngine().getRenderingCanvas()!, true);
-
-  // Limits
-  camera.lowerRadiusLimit = 3;
-  camera.upperRadiusLimit = 30;
-  camera.lowerBetaLimit = 0.1;
-  camera.upperBetaLimit = Math.PI / 2 + 0.3; // allow slightly below horizon
-
-  // Smooth feel
-  camera.inertia = 0.85;
-  camera.wheelPrecision = 30;
-  camera.panningSensibility = 100;
+  camera.lowerRadiusLimit = 1;
+  camera.upperRadiusLimit = 50;
 
   return camera;
 }
@@ -39,12 +40,14 @@ export function transitionTo(viewpoint: Viewpoint) {
   const idx = VIEWPOINT_ORDER.indexOf(viewpoint);
   if (idx !== -1) currentIndex = idx;
 
+  zoomedIn = false;
   isTransitioning = true;
 
+  // Animate alpha/beta/radius directly — values from Babylon's own log
   gsap.to(camera, {
-    alpha: Math.atan2(def.position.x - def.target.x, def.position.z - def.target.z),
-    beta: Math.acos((def.position.y - def.target.y) / Vector3.Distance(def.position, def.target)),
-    radius: Vector3.Distance(def.position, def.target),
+    alpha: def.alpha,
+    beta: def.beta,
+    radius: def.radius,
     duration: 1.2,
     ease: 'power2.inOut',
     onComplete: () => {
@@ -66,20 +69,17 @@ export function transitionTo(viewpoint: Viewpoint) {
 }
 
 /** Smoothly zoom the camera to focus on a world position */
-export function focusOn(target: Vector3, distance = 5) {
+export function focusOn(target: Vector3, distance = 4) {
   if (isTransitioning) return;
+
+  lastViewpointIndex = currentIndex;
+  zoomedIn = true;
   isTransitioning = true;
 
-  // Calculate camera angles to look at the target from current direction
-  const dir = camera.position.subtract(target).normalize();
-  const alpha = Math.atan2(dir.x, dir.z);
-  const beta = Math.acos(Math.max(-1, Math.min(1, dir.y)));
-
+  // Keep current alpha/beta (viewing angle), just reduce radius and shift target
   gsap.to(camera, {
-    alpha,
-    beta,
     radius: distance,
-    duration: 1.0,
+    duration: 1.2,
     ease: 'power2.inOut',
     onComplete: () => { isTransitioning = false; },
   });
@@ -89,12 +89,39 @@ export function focusOn(target: Vector3, distance = 5) {
     x: target.x,
     y: target.y,
     z: target.z,
-    duration: 1.0,
+    duration: 1.2,
     ease: 'power2.inOut',
     onUpdate: () => {
       camera.target.set(targetObj.x, targetObj.y, targetObj.z);
     },
   });
+}
+
+/** Cycle to the next viewpoint */
+export function nextViewpoint() {
+  if (isTransitioning || zoomedIn) return;
+  currentIndex = (currentIndex + 1) % VIEWPOINT_ORDER.length;
+  transitionTo(VIEWPOINT_ORDER[currentIndex]);
+}
+
+/** Cycle to the previous viewpoint */
+export function prevViewpoint() {
+  if (isTransitioning || zoomedIn) return;
+  currentIndex = (currentIndex - 1 + VIEWPOINT_ORDER.length) % VIEWPOINT_ORDER.length;
+  transitionTo(VIEWPOINT_ORDER[currentIndex]);
+}
+
+/** Return camera to the last viewpoint after a zoom */
+export function goBack() {
+  if (isTransitioning || !zoomedIn) return;
+  const viewpoint = VIEWPOINT_ORDER[lastViewpointIndex];
+  transitionTo(viewpoint);
+  window.dispatchEvent(new CustomEvent('camera-zoom-back'));
+}
+
+/** Returns true when focused on an object (not at a viewpoint) */
+export function isZoomedIn(): boolean {
+  return zoomedIn;
 }
 
 export function getCamera(): ArcRotateCamera {
@@ -111,7 +138,7 @@ export function logCameraPosition() {
   );
 }
 
-let cameraLocked = false;
+let cameraLocked = true;
 
 export function toggleCameraLock(): boolean {
   cameraLocked = !cameraLocked;

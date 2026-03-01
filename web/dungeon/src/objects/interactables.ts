@@ -5,19 +5,16 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sendToRN } from '../bridge';
-import { focusOn } from '../camera/cameraController';
+import { focusOn, isZoomedIn } from '../camera/cameraController';
 
 /**
  * Sets up tap detection on interactable meshes.
- * Single tap: flash + notify RN
- * Double tap: zoom camera to the object
+ * Single tap: zoom camera to the object + flash + notify RN
  */
 export function setupInteractables(scene: Scene) {
-  let lastTapTime = 0;
-  let lastTapId = '';
-
   scene.onPointerObservable.add((pointerInfo) => {
     if (pointerInfo.type !== PointerEventTypes.POINTERTAP) return;
+    if (isZoomedIn()) return; // ignore taps while zoomed in
 
     const pickResult = pointerInfo.pickInfo;
     if (!pickResult?.hit || !pickResult.pickedMesh) return;
@@ -29,26 +26,19 @@ export function setupInteractables(scene: Scene) {
     while (target) {
       if (target.metadata?.interactable) {
         const objectId = target.metadata.objectId as string;
-        const now = performance.now();
 
-        // Double-tap detection (within 400ms, same object)
-        if (objectId === lastTapId && now - lastTapTime < 400) {
-          console.log(`[interactable] double-tapped: ${objectId} → zooming`);
-          // Get bounding center of the model
-          const bounds = target.getBoundingInfo();
-          const center = bounds.boundingBox.centerWorld;
-          focusOn(center, 4);
-          lastTapTime = 0;
-          lastTapId = '';
-          return;
-        }
+        console.log(`[interactable] tapped: ${objectId} → zooming`);
 
-        lastTapTime = now;
-        lastTapId = objectId;
+        // Get bounding center of the model
+        const bounds = target.getBoundingInfo();
+        const center = bounds.boundingBox.centerWorld;
+        focusOn(center, 4);
 
-        console.log(`[interactable] tapped: ${objectId} (mesh: ${target.name})`);
         sendToRN({ type: 'objectTapped', payload: { objectId } });
         flashMesh(target, scene);
+
+        // Notify UI layer to show back button and hide arrows
+        window.dispatchEvent(new CustomEvent('camera-zoomed-in'));
         return;
       }
       target = target.parent as AbstractMesh | null;

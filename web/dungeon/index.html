@@ -37,10 +37,74 @@
     .dev-panel-body {
       display: flex; flex-direction: column; gap: 6px;
     }
+    /* Navigation buttons */
+    .nav-arrow {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 60;
+      background: rgba(10, 10, 12, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+      font-family: monospace;
+      font-size: 22px;
+      width: 44px;
+      height: 64px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, opacity 0.3s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-arrow:active {
+      background: rgba(124, 58, 237, 0.4);
+    }
+    .nav-arrow.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #arrowLeft { left: 10px; }
+    #arrowRight { right: 10px; }
+
+    #backBtn {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 60;
+      background: rgba(10, 10, 12, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.8);
+      font-family: monospace;
+      font-size: 13px;
+      padding: 8px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.3s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #backBtn:active {
+      background: rgba(124, 58, 237, 0.4);
+    }
+    #backBtn.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
   <canvas id="renderCanvas"></canvas>
+
+  <!-- Camera navigation -->
+  <button id="arrowLeft" class="nav-arrow" aria-label="Previous viewpoint">&#x2039;</button>
+  <button id="arrowRight" class="nav-arrow" aria-label="Next viewpoint">&#x203a;</button>
+  <button id="backBtn" aria-label="Back">&#x2190; Back</button>
 
   <!-- Performance stats -->
   <div id="statsOverlay" style="

@@ -9,42 +9,58 @@ export type Viewpoint =
   | 'character';
 
 export interface ViewpointDef {
-  position: Vector3;
+  alpha: number;
+  beta: number;
+  radius: number;
   target: Vector3;
 }
 
 /**
  * 6 fixed camera viewpoints for the dungeon room.
- * Room is ~14 wide x 16 deep (7×8 tiles), centered at origin.
+ * Values come directly from Babylon's logged alpha/beta/radius
+ * (use the Lock Camera + Log Position dev tools to capture new ones).
  */
 export const VIEWPOINTS: Record<Viewpoint, ViewpointDef> = {
   overview: {
-    position: new Vector3(0, 7, -10),
+    alpha: 3.987,
+    beta: 1.320,
+    radius: 11.97,
     target: new Vector3(0, 1.5, 1),
   },
+  // TODO: capture correct values using Lock Camera + Log Position
   bookshelf: {
-    position: new Vector3(-5, 3, -3),
-    target: new Vector3(-6, 2, 2),
+    alpha: 3.987,
+    beta: 1.320,
+    radius: 11.97,
+    target: new Vector3(0, 1.5, 1),
   },
   fireplace: {
-    position: new Vector3(0, 2.5, -4),
-    target: new Vector3(0, 1.5, 4),
+    alpha: 3.987,
+    beta: 1.320,
+    radius: 11.97,
+    target: new Vector3(0, 1.5, 1),
   },
   alchemy: {
-    position: new Vector3(5, 3, -3),
-    target: new Vector3(6, 1.5, 1),
+    alpha: 3.987,
+    beta: 1.320,
+    radius: 11.97,
+    target: new Vector3(0, 1.5, 1),
   },
   noticeboard: {
-    position: new Vector3(-3, 3, -2),
-    target: new Vector3(-3, 2.5, 5),
+    alpha: 3.987,
+    beta: 1.320,
+    radius: 11.97,
+    target: new Vector3(0, 1.5, 1),
   },
   character: {
-    position: new Vector3(1, 2.5, -4),
-    target: new Vector3(1.5, 1.5, 2),
+    alpha: 3.987,
+    beta: 1.320,
+    radius: 11.97,
+    target: new Vector3(0, 1.5, 1),
   },
 };
 
-/** Ordered array for swipe cycling. */
+/** Ordered array for arrow cycling. */
 export const VIEWPOINT_ORDER: Viewpoint[] = [
   'overview',
   'bookshelf',
