@@ -1,6 +1,8 @@
 import { Scene } from '@babylonjs/core/scene';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -39,9 +41,6 @@ let gizmoManager: GizmoManager;
 const modelRoots: Map<string, TransformNode> = new Map();
 
 export type GizmoMode = 'position' | 'rotation' | 'scale' | 'none';
-
-/** Per-model triangle/vertex stats, populated during loading */
-export const modelStats: Map<string, { tris: number; verts: number }> = new Map();
 
 export function setupGizmos(scene: Scene) {
   gizmoManager = new GizmoManager(scene);
@@ -261,11 +260,7 @@ export async function createDungeonGeometry(scene: Scene) {
 
   // Walls — normals face inward, aligned to floor
   const wallCenterY = FLOOR_Y + ROOM_HEIGHT / 2;
-  // Back wall — flat (no alcove)
-  createWall(scene, 'backWall', ROOM_WIDTH, ROOM_HEIGHT,
-    new Vector3(0, wallCenterY, ROOM_DEPTH / 2),
-    0, ROOM_WIDTH / TILE_SIZE, ROOM_HEIGHT / TILE_SIZE);
-  // Right wall
+  createBackWallWithAlcove(scene, wallCenterY);
   createWall(scene, 'rightWall', ROOM_DEPTH, ROOM_HEIGHT,
     new Vector3(ROOM_WIDTH / 2, wallCenterY, 0),
     Math.PI / 2, 5, 3);
@@ -288,31 +283,35 @@ export async function createDungeonGeometry(scene: Scene) {
     { name: 'oil_lamp_right', pos: new Vector3(2.50, 0.48, 6.90), scale: new Vector3(3.00, 3.00, 3.00), rot: new Vector3(0, 3.14, 0) },
   ];
 
-  // ── Load unique models in parallel + batch-instance repeated ones ──
-  const [uniqueResults] = await Promise.all([
-    // Unique models (each GLB loaded once)
-    Promise.all([
-      /* 0 */ loadModel(scene, M, 'bookshelf.glb',
-        'bookshelf', new Vector3(0.86, -1.20, 7.15), new Vector3(3.20, -1.73, 2.07), new Vector3(0, -2.99, 0)),
-      /* 1 */ loadModel(scene, M, 'alchemy_table_-_game_model.glb',
-        'alchemy_table', new Vector3(6.22, -3.03, 1.56), new Vector3(0.03, 0.03, 0.03), new Vector3(0, 3.14, 0)),
-      /* 2 */ loadModel(scene, M + 'alchemy_yield/', 'base_basic_shaded.glb',
-        'alchemy_yield', new Vector3(6.22, -1.50, 1.56), new Vector3(2.00, 2.00, 2.00), new Vector3(0, 1.79, 0)),
-      /* 3 */ loadModel(scene, M, 'a_slightly_different_magic_fire_potion.glb',
-        'fire_potion', potionPos, new Vector3(0.50, 0.50, 0.50), new Vector3(0, 3.14, 0)),
-      /* 4 */ loadModel(scene, M, 'medieval_chandelier3.glb',
-        'chandelier', chandelierPos, new Vector3(0.10, 0.10, 0.10), new Vector3(0, 3.14, 0)),
-      /* 5 */ loadModel(scene, M, 'old_chest.glb',
-        'old_chest', new Vector3(3.19, -1.13, 7.62), new Vector3(3.50, 2.80, 3.00), new Vector3(0, -2.41, 0)),
-    ]),
-    // Batch-instanced models (GLB loaded once, cloned for each placement)
-    loadModelBatch(scene, M, 'candles_set.glb', candlePositions),
-    loadModelBatch(scene, M, 'old_gas_lamp.glb', saverLampPositions),
+  // ── Load ALL models in one parallel batch ──
+  const results = await Promise.all([
+    /* 0 */ loadModel(scene, M, 'bookshelf.glb',
+    'bookshelf', new Vector3(0.86, -1.20, 7.15), new Vector3(3.20, -1.73, 2.07), new Vector3(0, -2.99, 0)),
+    /* 1 */ loadModel(scene, M, 'pillar.glb',
+      'pillar', new Vector3(7.08, -2.95, -4.68), new Vector3(2.00, 2.00, 2.00)),
+    /* 2 */ loadModel(scene, M, 'alchemy_shelf.glb',
+        'alchemy_shelf', new Vector3(6.48, 0.92, 0.00)),
+    /* 3 */ loadModel(scene, M, 'alchemy_table_-_game_model.glb',
+          'alchemy_table', new Vector3(6.22, -3.03, 1.56), new Vector3(0.03, 0.03, 0.03), new Vector3(0, 3.14, 0)),
+    /* 4 */ loadModel(scene, M + 'alchemy_yield/', 'base_basic_shaded.glb',
+            'alchemy_yield', new Vector3(6.22, -1.50, 1.56), new Vector3(2.00, 2.00, 2.00), new Vector3(0, 1.79, 0)),
+    /* 5 */ loadModel(scene, M, 'a_slightly_different_magic_fire_potion.glb',
+              'fire_potion', potionPos, new Vector3(0.50, 0.50, 0.50), new Vector3(0, 3.14, 0)),
+    /* 6 */ loadModel(scene, M, 'medieval_chandelier3.glb',
+                'chandelier', chandelierPos, new Vector3(0.10, 0.10, 0.10), new Vector3(0, 3.14, 0)),
+    /* 7 */ loadModel(scene, M, 'old_chest.glb',
+                  'old_chest', new Vector3(3.19, -1.13, 7.62), new Vector3(3.50, 2.80, 3.00), new Vector3(0, -2.41, 0)),
+    // Candles (4)
+    ...candlePositions.map(c =>
+      loadModel(scene, M, 'candles_set.glb', c.name, c.pos, c.scale, c.rot)),
+    // Saver lamps (3)
+    ...saverLampPositions.map(lamp =>
+      loadModel(scene, M, 'old_gas_lamp.glb', lamp.name, lamp.pos, lamp.scale, lamp.rot)
+        .catch(e => { console.warn(`Failed to load ${lamp.name}:`, e); return null; })),
   ]);
-  const results = uniqueResults;
 
   // Post-load setup: alchemy yield glass
-  const yieldResult = results[2];
+  const yieldResult = results[4];
   for (const mesh of yieldResult.meshes) {
     if (!mesh.material) continue;
     const mat = mesh.material as PBRMaterial;
@@ -372,11 +371,146 @@ function createWall(
   return wall;
 }
 
+/**
+ * Back wall with a recessed arched alcove/niche.
+ *
+ * Layout (front view, looking at back wall):
+ * ┌──────────┬─────────┬──────────┐
+ * │          │  top    │          │
+ * │  left    ├───╮ ╭───┤  right   │
+ * │  wall    │   ╰─╯   │  wall    │
+ * │  seg     │ alcove  │  seg     │
+ * │          │ opening │          │
+ * └──────────┴─────────┴──────────┘
+ */
+function createBackWallWithAlcove(scene: Scene, wallCenterY: number) {
+  const backZ = ROOM_DEPTH / 2; // 8
+  const alcoveW = 2;
+  const alcoveH = 3.5;
+  const alcoveD = 0.8;
+  const halfAlcoveW = alcoveW / 2; // 1
+  const halfRoomW = ROOM_WIDTH / 2; // 7
+
+  // Parent node so you can drag the whole alcove with gizmos
+  const alcoveRoot = new TransformNode('alcove', scene);
+  modelRoots.set('alcove', alcoveRoot);
+
+  // Alcove bottom = floor, top = FLOOR_Y + alcoveH
+  const alcoveBottomY = FLOOR_Y;
+  const alcoveTopY = FLOOR_Y + alcoveH;
+
+  // --- Left wall segment (not parented — stays fixed) ---
+  const leftSegW = halfRoomW - halfAlcoveW;
+  const leftCenterX = -(halfAlcoveW + leftSegW / 2);
+  createWall(scene, 'backWallLeft', leftSegW, ROOM_HEIGHT,
+    new Vector3(leftCenterX, wallCenterY, backZ), 0, leftSegW / TILE_SIZE, ROOM_HEIGHT / TILE_SIZE);
+
+  // --- Right wall segment (not parented — stays fixed) ---
+  const rightSegW = halfRoomW - halfAlcoveW;
+  const rightCenterX = halfAlcoveW + rightSegW / 2;
+  createWall(scene, 'backWallRight', rightSegW, ROOM_HEIGHT,
+    new Vector3(rightCenterX, wallCenterY, backZ), 0, rightSegW / TILE_SIZE, ROOM_HEIGHT / TILE_SIZE);
+
+  // --- Top segment above alcove (parented to alcove) ---
+  const topSegH = ROOM_HEIGHT - alcoveH;
+  const topCenterY = alcoveTopY + topSegH / 2;
+  createWall(scene, 'backWallTop', alcoveW, topSegH,
+    new Vector3(0, topCenterY, backZ), 0, alcoveW / TILE_SIZE, topSegH / TILE_SIZE, alcoveRoot);
+
+  // --- Alcove interior: back face (recessed) ---
+  createWall(scene, 'alcoveBack', alcoveW, alcoveH,
+    new Vector3(0, alcoveBottomY + alcoveH / 2, backZ + alcoveD),
+    0, alcoveW / TILE_SIZE, alcoveH / TILE_SIZE, alcoveRoot);
+
+  // --- Alcove interior: left inner face ---
+  createWall(scene, 'alcoveLeft', alcoveD, alcoveH,
+    new Vector3(-halfAlcoveW, alcoveBottomY + alcoveH / 2, backZ + alcoveD / 2),
+    Math.PI / 2, alcoveD / TILE_SIZE, alcoveH / TILE_SIZE, alcoveRoot);
+
+  // --- Alcove interior: right inner face ---
+  createWall(scene, 'alcoveRight', alcoveD, alcoveH,
+    new Vector3(halfAlcoveW, alcoveBottomY + alcoveH / 2, backZ + alcoveD / 2),
+    -Math.PI / 2, alcoveD / TILE_SIZE, alcoveH / TILE_SIZE, alcoveRoot);
+
+  // --- Alcove interior: ceiling (top face inside the recess) ---
+  const alcoveCeiling = MeshBuilder.CreateGround('alcoveCeiling', {
+    width: alcoveW,
+    height: alcoveD,
+  }, scene);
+  alcoveCeiling.position = new Vector3(0, alcoveTopY, backZ + alcoveD / 2);
+  alcoveCeiling.rotation.x = Math.PI; // flip to be visible from below
+  alcoveCeiling.material = createTiledMaterial('alcoveCeilingMat', alcoveW / TILE_SIZE, alcoveD / TILE_SIZE, scene);
+  alcoveCeiling.parent = alcoveRoot;
+
+  // --- Arch at the top of the alcove opening ---
+  createAlcoveArch(scene, backZ, alcoveTopY, halfAlcoveW, alcoveD, alcoveRoot);
+}
+
+/**
+ * Half-cylinder arch at the top of the alcove opening.
+ * Creates a smooth curved ceiling for the niche entrance.
+ */
+function createAlcoveArch(
+  scene: Scene, backZ: number, alcoveTopY: number,
+  halfWidth: number, depth: number, parent?: TransformNode,
+) {
+  const segments = 12;
+  const radius = halfWidth; // arch radius = half of alcove width
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+
+  // Build a half-cylinder from backZ to backZ + depth
+  // Two rows of vertices: front (z = backZ) and back (z = backZ + depth)
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI; // 0 to PI (left to right)
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const u = i / segments;
+
+    // Normal points inward (toward center of room, i.e. -z and down toward center)
+    const nx = -Math.cos(angle);
+    const ny = -Math.sin(angle);
+
+    // Front edge (z = backZ)
+    positions.push(x, alcoveTopY + y, backZ);
+    normals.push(nx, ny, 0);
+    uvs.push(u, 0);
+
+    // Back edge (z = backZ + depth)
+    positions.push(x, alcoveTopY + y, backZ + depth);
+    normals.push(nx, ny, 0);
+    uvs.push(u, 1);
+  }
+
+  // Triangles connecting front and back rows
+  for (let i = 0; i < segments; i++) {
+    const f0 = i * 2;
+    const f1 = f0 + 1;
+    const f2 = f0 + 2;
+    const f3 = f0 + 3;
+
+    indices.push(f0, f2, f1);
+    indices.push(f1, f2, f3);
+  }
+
+  const mesh = new Mesh('alcoveArch', scene);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.uvs = uvs;
+  vertexData.applyToMesh(mesh);
+
+  mesh.material = createTiledMaterial('alcoveArchMat', 1.5, 0.5, scene);
+  if (parent) mesh.parent = parent;
+}
 
 function createTiledMaterial(
   name: string, uScale: number, vScale: number, scene: Scene,
 ): StandardMaterial {
-  const isMob = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const m = new StandardMaterial(name, scene);
   const tex = new Texture(TILE_TEXTURE_PATH, scene);
   tex.uScale = uScale;
@@ -384,7 +518,7 @@ function createTiledMaterial(
   m.diffuseTexture = tex;
   m.specularColor = new Color3(0.1, 0.1, 0.1);
   m.backFaceCulling = false;
-  m.maxSimultaneousLights = isMob ? 8 : 16;
+  m.maxSimultaneousLights = 16;
   roomMaterials.push({ mat: m, uScale, vScale });
   return m;
 }
@@ -453,86 +587,6 @@ async function heightToNormalMap(imagePath: string, maxRes = 1024, strength = 2)
 
 const AUTO_FIT_HEIGHT = 2.0; // target height in world units for auto-scaled models
 
-/**
- * Load a GLB once, then instantiate it at multiple positions.
- * Saves network requests, parse time, and GPU memory vs loading the same file N times.
- */
-async function loadModelBatch(
-  scene: Scene, path: string, file: string,
-  placements: { name: string; pos: Vector3; scale?: Vector3; rot?: Vector3 }[],
-) {
-  // Load the asset container (parsed once, not added to scene yet)
-  const container = await SceneLoader.LoadAssetContainerAsync(path, file, scene);
-
-  const isMob = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  // Fix materials on the master copy
-  for (const mesh of container.meshes) {
-    if (!mesh.material) continue;
-    const mat = mesh.material as any;
-    if ('maxSimultaneousLights' in mat) {
-      mat.maxSimultaneousLights = isMob ? 12 : 16;
-    }
-    if (mat instanceof PBRMaterial) {
-      if (mat.unlit) { mat.unlit = false; mat.metallic = 0; mat.roughness = 0.9; }
-      if (mat.emissiveTexture && !mat.albedoTexture) {
-        mat.albedoTexture = mat.emissiveTexture;
-        mat.emissiveTexture = null;
-        mat.emissiveColor = new Color3(0, 0, 0);
-        mat.metallic = 0; mat.roughness = 0.9;
-      }
-      const eLen = mat.emissiveColor.r + mat.emissiveColor.g + mat.emissiveColor.b;
-      const aLen = mat.albedoColor.r + mat.albedoColor.g + mat.albedoColor.b;
-      if (eLen > 0.5 && aLen < 0.1 && !mat.albedoTexture) {
-        mat.albedoColor = mat.emissiveColor.clone();
-        mat.emissiveColor = new Color3(0, 0, 0);
-        mat.metallic = 0; mat.roughness = 0.9;
-      }
-    }
-  }
-
-  // Count tris from master (shared across all instances)
-  let totalTris = 0;
-  let totalVerts = 0;
-  for (const mesh of container.meshes) {
-    totalTris += (mesh.getTotalIndices() / 3) | 0;
-    totalVerts += mesh.getTotalVertices();
-  }
-
-  // Instantiate at each placement
-  const NON_INTERACTIVE = new Set(['candles_set', 'candles_set2', 'candles_set3', 'candles_set4']);
-
-  for (const p of placements) {
-    const entries = container.instantiateModelsToScene(
-      (sourceName) => `${p.name}_${sourceName}`,
-      false, // don't clone materials — share them
-    );
-
-    const root = entries.rootNodes[0] as TransformNode;
-    root.name = p.name;
-    root.position = p.pos;
-    if (p.rot) root.rotation = p.rot;
-    if (p.scale) root.scaling = p.scale;
-
-    modelRoots.set(p.name, root);
-    modelStats.set(p.name, { tris: totalTris, verts: totalVerts });
-
-    // Tag interactable meshes
-    if (!NON_INTERACTIVE.has(p.name)) {
-      for (const node of entries.rootNodes) {
-        const meshes = (node as TransformNode).getChildMeshes();
-        for (const mesh of meshes) {
-          if (mesh.getTotalVertices() > 0) {
-            mesh.metadata = { interactable: true, objectId: p.name };
-          }
-        }
-      }
-    }
-
-    console.log(`[model-batch] ${p.name}: ${totalTris.toLocaleString()} tris (shared from ${file})`);
-  }
-}
-
 async function loadModel(
   scene: Scene, path: string, file: string,
   name: string, position: Vector3, scaling?: Vector3, rotation?: Vector3,
@@ -560,7 +614,7 @@ async function loadModel(
     if (mesh.material) {
       const mat = mesh.material as any;
       if ('maxSimultaneousLights' in mat) {
-        mat.maxSimultaneousLights = isMob ? 12 : 16;
+        mat.maxSimultaneousLights = isMob ? 8 : 16;
       }
       // Fix unlit / emissive-only GLB models so they respond to scene lights.
       // Skip for alchemy_yield — its baked emissive texture IS the visual.
@@ -611,8 +665,6 @@ async function loadModel(
     totalVerts += mesh.getTotalVertices();
   }
 
-  modelStats.set(name, { tris: totalTris, verts: totalVerts });
-
   console.log(
     `[model] ${name}: ${totalTris.toLocaleString()} tris, ${totalVerts.toLocaleString()} verts` +
     ` | raw: ${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)}` +
@@ -620,7 +672,7 @@ async function loadModel(
   );
 
   // Tag meshes as interactable (skip non-interactive objects)
-  const NON_INTERACTABLE = ['chandelier', 'candles_set', 'candles_set2', 'candles_set3', 'candles_set4'];
+  const NON_INTERACTABLE = ['chandelier', 'candles_set', 'candles_set2', 'candles_set3', 'candles_set4', 'pillar'];
   if (!NON_INTERACTABLE.includes(name)) {
     for (const mesh of result.meshes) {
       if (mesh.getTotalVertices() > 0) {
