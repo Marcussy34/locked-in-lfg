@@ -4,7 +4,7 @@ import { asyncStorageAdapter } from './storage';
 import type { OnboardingPhase, UserProfile } from '@/types';
 
 interface UserStore extends UserProfile {
-  setWallet: (address: string) => void;
+  setWallet: (address: string, authToken?: string) => void;
   disconnect: () => void;
   setOnboardingPhase: (phase: OnboardingPhase) => void;
   setDisplayName: (name: string) => void;
@@ -19,6 +19,7 @@ const initialState: UserProfile = {
   createdAt: null,
   gauntletStartDate: null,
   gauntletCompleted: false,
+  authToken: null,
 };
 
 export const useUserStore = create<UserStore>()(
@@ -26,9 +27,10 @@ export const useUserStore = create<UserStore>()(
     (set) => ({
       ...initialState,
 
-      setWallet: (address) =>
+      setWallet: (address, authToken) =>
         set({
           walletAddress: address,
+          authToken: authToken ?? null,
           onboardingPhase: 'onboarding',
           createdAt: new Date().toISOString(),
         }),
