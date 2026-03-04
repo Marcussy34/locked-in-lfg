@@ -1,50 +1,175 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useUserStore, useYieldStore } from '@/stores';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MainStackParamList } from '@/navigation/types';
+import { useTokenStore, useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores/courseStore';
+
+type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 export function ProfileScreen() {
-  const navigation = useNavigation();
-  const { walletAddress, disconnect } = useUserStore();
-  const { lockedAmount, totalAccrued, apy } = useYieldStore();
+  const navigation = useNavigation<Nav>();
+
+  const fullTokens = useTokenStore((s) => s.fullTokens);
+  const fragments = useTokenStore((s) => s.fragments);
+
+  const activeCourseId = useCourseStore((s) => s.activeCourseId);
+  const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
+  const courseStates = useCourseStore((s) => s.courseStates);
+  const courses = useCourseStore((s) => s.courses);
+  const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
+  const deactivateCourse = useCourseStore((s) => s.deactivateCourse);
+
+  const activeState = activeCourseId ? courseStates[activeCourseId] : null;
+  const activeCourse = activeCourseId
+    ? courses.find((c) => c.id === activeCourseId)
+    : null;
+
+  const streak = activeState?.currentStreak ?? 0;
+  const ichor = activeState?.ichorBalance ?? 0;
+  const saverCount = activeState?.saverCount ?? 0;
+
+  const menuItems = [
+    { label: 'Streak Status', screen: 'StreakStatus' as const, icon: '\u2739' },
+    { label: 'Leaderboard', screen: 'Leaderboard' as const, icon: '\u2694' },
+    { label: 'Ichor Shop', screen: 'IchorShop' as const, icon: '\u2697' },
+    { label: 'Community Pot', screen: 'CommunityPot' as const, icon: '\u26b2' },
+    { label: 'Inventory', screen: 'Inventory' as const, icon: '\u2692' },
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-neutral-950">
-      <View className="flex-1 px-6 pt-4">
+      <ScrollView className="flex-1 px-6 pt-4">
         <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Close</Text>
+          <Text className="text-neutral-400">{'\u2190'} Back</Text>
         </Pressable>
 
         <Text className="mt-4 text-2xl font-bold text-white">Profile</Text>
-
-        <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-6">
-          <Text className="text-sm text-neutral-400">Wallet</Text>
-          <Text className="mt-1 text-white">
-            {walletAddress
-              ? `${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}`
-              : 'Not connected'}
+        {activeCourse && (
+          <Text className="mt-1 text-sm text-neutral-500">
+            {activeCourse.title}
           </Text>
+        )}
 
-          <Text className="mt-4 text-sm text-neutral-400">Locked</Text>
-          <Text className="mt-1 text-white">
-            ${lockedAmount.toFixed(2)} USDC @ {apy}% APY
-          </Text>
-
-          <Text className="mt-4 text-sm text-neutral-400">Yield Earned</Text>
-          <Text className="mt-1 text-emerald-400">
-            +${totalAccrued.toFixed(4)}
-          </Text>
+        {/* Stats row */}
+        <View className="mt-6 flex-row gap-3">
+          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
+            <Text className="text-xs uppercase text-neutral-500">Streak</Text>
+            <Text className="mt-1 text-xl font-bold text-white">{streak}</Text>
+          </View>
+          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
+            <Text className="text-xs uppercase text-neutral-500">Ichor</Text>
+            <Text className="mt-1 text-xl font-bold text-amber-400">
+              {Math.floor(ichor)}
+            </Text>
+          </View>
+          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
+            <Text className="text-xs uppercase text-neutral-500">M Tokens</Text>
+            <Text className="mt-1 text-xl font-bold text-emerald-400">
+              {fullTokens}
+              {fragments > 0 && (
+                <Text className="text-sm text-neutral-600">
+                  .{Math.round(fragments * 10)}
+                </Text>
+              )}
+            </Text>
+          </View>
+          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
+            <Text className="text-xs uppercase text-neutral-500">Savers</Text>
+            <Text className="mt-1 text-xl font-bold text-purple-400">
+              {3 - saverCount}/3
+            </Text>
+          </View>
         </View>
 
-        <Pressable
-          className="mt-6 rounded-xl bg-red-600 px-6 py-3 active:bg-red-700"
-          onPress={disconnect}
-        >
-          <Text className="text-center font-semibold text-white">
-            Disconnect Wallet
-          </Text>
-        </Pressable>
-      </View>
+        {/* Course Switcher */}
+        {activeCourseIds.length > 1 && (
+          <View className="mt-6">
+            <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-500">
+              Switch Course
+            </Text>
+            {activeCourseIds.map((courseId) => {
+              const course = courses.find((c) => c.id === courseId);
+              if (!course) return null;
+              const isActive = courseId === activeCourseId;
+              return (
+                <Pressable
+                  key={courseId}
+                  className={`mb-2 rounded-xl border p-3 ${
+                    isActive
+                      ? 'border-amber-500/50 bg-amber-500/10'
+                      : 'border-neutral-700 bg-neutral-900'
+                  } active:opacity-80`}
+                  onPress={() => {
+                    setActiveCourse(courseId);
+                    navigation.goBack();
+                  }}
+                >
+                  <Text
+                    className={`text-sm font-semibold ${
+                      isActive ? 'text-amber-400' : 'text-white'
+                    }`}
+                  >
+                    {course.title}
+                    {isActive ? ' (active)' : ''}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Menu Items */}
+        <View className="mt-6">
+          {menuItems.map((item) => (
+            <Pressable
+              key={item.screen}
+              className="flex-row items-center gap-4 border-b border-neutral-800 py-4 active:opacity-70"
+              onPress={() => navigation.navigate(item.screen)}
+            >
+              <Text className="w-6 text-center text-lg text-neutral-500">
+                {item.icon}
+              </Text>
+              <Text className="text-base font-medium text-white">
+                {item.label}
+              </Text>
+              <Text className="ml-auto text-neutral-600">{'\u203A'}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Danger zone */}
+        <View className="mt-6 gap-3 pb-8">
+          <Pressable
+            className="rounded-xl border border-neutral-700 bg-neutral-900 py-3 active:opacity-80"
+            onPress={() => {
+              if (activeCourseId) {
+                deactivateCourse(activeCourseId);
+                if (activeCourseIds.length <= 1) {
+                  navigation.replace('CourseBrowser');
+                } else {
+                  navigation.goBack();
+                }
+              }
+            }}
+          >
+            <Text className="text-center text-sm font-semibold text-neutral-400">
+              Exit Course
+            </Text>
+          </Pressable>
+          <Pressable
+            className="rounded-xl border border-red-500/30 bg-red-500/10 py-3 active:opacity-80"
+            onPress={() => {
+              useUserStore.getState().disconnect();
+            }}
+          >
+            <Text className="text-center text-sm font-semibold text-red-400">
+              Disconnect
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

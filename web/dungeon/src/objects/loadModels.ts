@@ -290,19 +290,17 @@ export async function createDungeonGeometry(scene: Scene) {
   const results = await Promise.all([
     /* 0 */ loadModel(scene, M, 'bookshelf.glb',
     'bookshelf', new Vector3(0.86, -1.20, 7.15), new Vector3(3.20, -1.73, 2.07), new Vector3(0, -2.99, 0)),
-    /* 1 */ loadModel(scene, M, 'pillar.glb',
-      'pillar', new Vector3(7.08, -2.95, -4.68), new Vector3(2.00, 2.00, 2.00)),
-    /* 2 */ loadModel(scene, M, 'alchemy_shelf.glb',
+    /* 1 */ loadModel(scene, M, 'alchemy_shelf.glb',
         'alchemy_shelf', new Vector3(6.48, 0.92, 0.00)),
-    /* 3 */ loadModel(scene, M, 'alchemy_table_-_game_model.glb',
+    /* 2 */ loadModel(scene, M, 'alchemy_table_-_game_model.glb',
           'alchemy_table', new Vector3(6.22, -3.03, 1.56), new Vector3(0.03, 0.03, 0.03), new Vector3(0, 3.14, 0)),
-    /* 4 */ loadModel(scene, M + 'alchemy_yield/', 'base_basic_shaded.glb',
+    /* 3 */ loadModel(scene, M + 'alchemy_yield/', 'base_basic_shaded.glb',
             'alchemy_yield', new Vector3(6.22, -1.50, 1.56), new Vector3(2.00, 2.00, 2.00), new Vector3(0, 1.79, 0)),
-    /* 5 */ loadModel(scene, M, 'a_slightly_different_magic_fire_potion.glb',
+    /* 4 */ loadModel(scene, M, 'a_slightly_different_magic_fire_potion.glb',
               'fire_potion', potionPos, new Vector3(0.50, 0.50, 0.50), new Vector3(0, 3.14, 0)),
-    /* 6 */ loadModel(scene, M, 'medieval_chandelier3.glb',
+    /* 5 */ loadModel(scene, M, 'medieval_chandelier3.glb',
                 'chandelier', chandelierPos, new Vector3(0.10, 0.10, 0.10), new Vector3(0, 3.14, 0)),
-    /* 7 */ loadModel(scene, M, 'old_chest.glb',
+    /* 6 */ loadModel(scene, M, 'old_chest.glb',
                   'old_chest', new Vector3(3.19, -1.13, 7.62), new Vector3(3.50, 2.80, 3.00), new Vector3(0, -2.41, 0)),
     // Candles (4)
     ...candlePositions.map(c =>
@@ -314,7 +312,7 @@ export async function createDungeonGeometry(scene: Scene) {
   ]);
 
   // Post-load setup: alchemy yield glass
-  const yieldResult = results[4];
+  const yieldResult = results[3];
   for (const mesh of yieldResult.meshes) {
     if (!mesh.material) continue;
     const mat = mesh.material as PBRMaterial;
@@ -511,6 +509,8 @@ function createAlcoveArch(
   if (parent) mesh.parent = parent;
 }
 
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
 function createTiledMaterial(
   name: string, uScale: number, vScale: number, scene: Scene,
 ): StandardMaterial {
@@ -521,7 +521,7 @@ function createTiledMaterial(
   m.diffuseTexture = tex;
   m.specularColor = new Color3(0.1, 0.1, 0.1);
   m.backFaceCulling = false;
-  m.maxSimultaneousLights = 16;
+  m.maxSimultaneousLights = isMobile ? 8 : 16;
   roomMaterials.push({ mat: m, uScale, vScale });
   return m;
 }
@@ -677,7 +677,7 @@ async function loadModel(
   );
 
   // Tag meshes as interactable (skip non-interactive objects)
-  const NON_INTERACTABLE = ['chandelier', 'candles_set', 'candles_set2', 'candles_set3', 'candles_set4', 'pillar'];
+  const NON_INTERACTABLE = ['chandelier', 'candles_set', 'candles_set2', 'candles_set3', 'candles_set4'];
   if (!NON_INTERACTABLE.includes(name)) {
     for (const mesh of result.meshes) {
       if (mesh.getTotalVertices() > 0) {

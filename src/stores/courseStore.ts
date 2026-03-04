@@ -23,7 +23,6 @@ interface CourseStore {
   getStreak: () => number;
   getSaverCount: () => number;
   getIchorBalance: () => number;
-  getYieldAccrued: () => number;
   getFlameState: () => FlameState;
   isGauntletActive: () => boolean;
 
@@ -90,11 +89,6 @@ export const useCourseStore = create<CourseStore>()(
       getIchorBalance: () => {
         const state = get().getActiveState();
         return state?.ichorBalance ?? 0;
-      },
-
-      getYieldAccrued: () => {
-        const state = get().getActiveState();
-        return state?.yieldAccrued ?? 0;
       },
 
       getFlameState: () => {

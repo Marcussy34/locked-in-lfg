@@ -8,7 +8,6 @@ import { setFlameState } from './effects/flameParticles';
 import { applyPhase } from './scene/environment';
 import { setRoomTexture, modelStats, setGizmoMode, onModelSelect, setModelTransform, getSelectedModel } from './objects/loadModels';
 import { toggleSunMode, isSunMode, toggleOrb, cycleOrbColor, getOrbColorName, setLightMultiplier, getLightMultiplier } from './scene/lighting';
-import { nextViewpoint, prevViewpoint } from './camera/cameraController';
 import type { Viewpoint } from './camera/viewpoints';
 import type { FlameState } from './effects/flameStates';
 import type { RoomPhase } from './scene/environment';
@@ -72,25 +71,6 @@ async function main() {
     diffuse:   `${TEX}/tile_texture.png`,
     bump:      `${TEX}/tile_texture.png`,
     bumpLevel: 4.0,
-  });
-
-  // Arrow navigation buttons
-  const arrowLeft = document.getElementById('arrowLeft');
-  const arrowRight = document.getElementById('arrowRight');
-
-  if (arrowLeft) arrowLeft.addEventListener('click', () => prevViewpoint());
-  if (arrowRight) arrowRight.addEventListener('click', () => nextViewpoint());
-
-  // When an object is tapped — immediately hide arrows
-  window.addEventListener('camera-tap', () => {
-    arrowLeft?.classList.add('hidden');
-    arrowRight?.classList.add('hidden');
-  });
-
-  // When camera returns from zoom — show arrows
-  window.addEventListener('camera-zoom-back', () => {
-    arrowLeft?.classList.remove('hidden');
-    arrowRight?.classList.remove('hidden');
   });
 
   // ── Dev Panel ──

@@ -15,8 +15,8 @@ const PENALTY_MAP: Record<number, number> = {
   0: 0,
   1: 10,
   2: 20,
-  3: 20,
-  // 4th miss = 100% (streak fully broken)
+  3: 100,
+  // After 3rd saver: lock extension instead
 };
 
 const DEFAULT_APY = 8.0;

@@ -4,23 +4,24 @@ import { UndergroundHubScreen } from '@/screens/main/UndergroundHubScreen';
 import { CourseBrowserScreen } from '@/screens/main/CourseBrowserScreen';
 import { LessonScreen } from '@/screens/main/LessonScreen';
 import { LessonResultScreen } from '@/screens/main/LessonResultScreen';
-import { FlameDashboardScreen } from '@/screens/main/FlameDashboardScreen';
+import { StreakStatusScreen } from '@/screens/main/StreakStatusScreen';
 import { AlchemyScreen } from '@/screens/main/AlchemyScreen';
 import { LeaderboardScreen } from '@/screens/main/LeaderboardScreen';
+import { CommunityPotScreen } from '@/screens/main/CommunityPotScreen';
+import { ProfileScreen } from '@/screens/main/ProfileScreen';
+import { InventoryScreen } from '@/screens/main/InventoryScreen';
+import { IchorShopScreen } from '@/screens/main/IchorShopScreen';
 import { useCourseStore } from '@/stores/courseStore';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
 
 export function MainStack() {
-  // Ensure mock data is loaded before determining initial screen
+  // Ensure mock data is loaded before rendering
   useCourseStore.getState().initializeMockData();
-
-  const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
-  const initialRoute = activeCourseIds.length > 0 ? 'DungeonHome' : 'CourseBrowser';
 
   return (
     <Stack.Navigator
-      initialRouteName={initialRoute}
+      initialRouteName="CourseBrowser"
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#0a0a0a' },
@@ -43,8 +44,8 @@ export function MainStack() {
         options={{ animation: 'fade' }}
       />
       <Stack.Screen
-        name="FlameDashboard"
-        component={FlameDashboardScreen}
+        name="StreakStatus"
+        component={StreakStatusScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
@@ -55,6 +56,26 @@ export function MainStack() {
       <Stack.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="CommunityPot"
+        component={CommunityPotScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="IchorShop"
+        component={IchorShopScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>

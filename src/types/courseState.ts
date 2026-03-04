@@ -26,11 +26,6 @@ export interface CourseGameState {
   ichorBalance: number;
   totalIchorProduced: number;
 
-  // Yield
-  yieldAccrued: number;
-  yieldForfeited: number;
-  apy: number;
-
   // Flame (visual state, derived from streak)
   flameState: FlameState;
   lightIntensity: number;
@@ -54,9 +49,6 @@ export const DEFAULT_COURSE_STATE: CourseGameState = {
   brewEndsAt: null,
   ichorBalance: 0,
   totalIchorProduced: 0,
-  yieldAccrued: 0,
-  yieldForfeited: 0,
-  apy: 8.0,
   flameState: 'COLD',
   lightIntensity: 0.05,
 };

@@ -18,10 +18,13 @@ export type MainStackParamList = {
   CourseBrowser: undefined;
   Lesson: { lessonId: string; courseId: string };
   LessonResult: { lessonId: string; courseId: string; score: number; totalQuestions: number };
-  FlameDashboard: undefined;
+  StreakStatus: undefined;
   Alchemy: undefined;
   Leaderboard: undefined;
-  ProfileMenu: undefined;
+  CommunityPot: undefined;
+  Profile: undefined;
+  Inventory: undefined;
+  IchorShop: undefined;
 };
 
 // --- Root ---
