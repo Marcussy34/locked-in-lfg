@@ -33,9 +33,16 @@ export function CourseBrowserScreen() {
   const courses = useCourseStore((s) => s.courses);
   const lessons = useCourseStore((s) => s.lessons);
   const lessonProgress = useCourseStore((s) => s.lessonProgress);
-  const enrolledCourseIds = useCourseStore((s) => s.enrolledCourseIds);
-  const enrollCourse = useCourseStore((s) => s.enrollCourse);
-  const unenrollCourse = useCourseStore((s) => s.unenrollCourse);
+  const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
+  const courseStates = useCourseStore((s) => s.courseStates);
+  const activateCourse = useCourseStore((s) => s.activateCourse);
+  const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
+  const deactivateCourse = useCourseStore((s) => s.deactivateCourse);
+
+  // Mode detection
+  const isMainMenu = activeCourseIds.length === 0;
+  const activeCourses = courses.filter((c) => activeCourseIds.includes(c.id));
+  const availableCourses = courses.filter((c) => !activeCourseIds.includes(c.id));
 
   const selectedCourse = selectedCourseId
     ? courses.find((c) => c.id === selectedCourseId) ?? null
@@ -44,8 +51,22 @@ export function CourseBrowserScreen() {
     ? (lessons[selectedCourseId] ?? [])
     : [];
 
+  // Handle dev-mode enroll: activate + navigate to dungeon
+  const handleEnroll = (courseId: string) => {
+    activateCourse(courseId, 100, 30); // mock $100, 30 days
+    navigation.navigate('DungeonHome');
+  };
+
+  // Handle tapping an active course card: switch + go to dungeon
+  const handleActiveCoursePress = (courseId: string) => {
+    setActiveCourse(courseId);
+    navigation.navigate('DungeonHome');
+  };
+
+  // ====== Detail View ======
   if (selectedCourse) {
-    const isEnrolled = enrolledCourseIds.includes(selectedCourse.id);
+    const isActive = activeCourseIds.includes(selectedCourse.id);
+    const state = courseStates[selectedCourse.id];
 
     return (
       <SafeAreaView className="flex-1 bg-neutral-950">
@@ -59,27 +80,39 @@ export function CourseBrowserScreen() {
             {selectedCourse.title}
           </Text>
 
-          {/* Enroll / Unenroll button */}
-          <Pressable
-            className={`mt-3 rounded-xl px-5 py-3 ${
-              isEnrolled
-                ? 'border border-amber-500 bg-amber-500/10'
-                : 'bg-amber-500'
-            } active:opacity-80`}
-            onPress={() =>
-              isEnrolled
-                ? unenrollCourse(selectedCourse.id)
-                : enrollCourse(selectedCourse.id)
-            }
-          >
-            <Text
-              className={`text-center font-semibold ${
-                isEnrolled ? 'text-amber-400' : 'text-black'
-              }`}
+          {/* Action button */}
+          {isActive ? (
+            <View className="mt-3 gap-2">
+              <Pressable
+                className="rounded-xl bg-purple-600 px-5 py-3 active:opacity-80"
+                onPress={() => handleActiveCoursePress(selectedCourse.id)}
+              >
+                <Text className="text-center font-bold text-white">
+                  DESCEND
+                </Text>
+              </Pressable>
+              <Pressable
+                className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-2.5 active:opacity-80"
+                onPress={() => {
+                  deactivateCourse(selectedCourse.id);
+                  setSelectedCourseId(null);
+                }}
+              >
+                <Text className="text-center text-sm font-semibold text-red-400">
+                  Exit Course
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              className="mt-3 rounded-xl bg-purple-600 px-5 py-3 active:opacity-80"
+              onPress={() => handleEnroll(selectedCourse.id)}
             >
-              {isEnrolled ? '\u2713 Enrolled' : 'Enroll'}
-            </Text>
-          </Pressable>
+              <Text className="text-center font-bold text-white">
+                DESCEND
+              </Text>
+            </Pressable>
+          )}
 
           {/* Progress summary */}
           <View className="mt-3 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
@@ -96,6 +129,16 @@ export function CourseBrowserScreen() {
               {selectedCourse.completedLessons}/{selectedCourse.totalLessons}{' '}
               lessons completed
             </Text>
+            {isActive && state && (
+              <View className="mt-2 flex-row gap-4">
+                <Text className="text-xs text-amber-400">
+                  {'\u2739'} Streak: {state.currentStreak}
+                </Text>
+                <Text className="text-xs text-purple-400">
+                  Day {state.gauntletDay}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Lesson list */}
@@ -159,29 +202,78 @@ export function CourseBrowserScreen() {
     );
   }
 
-  // State A: Course List
+  // ====== List View ======
   return (
     <SafeAreaView className="flex-1 bg-neutral-950">
       <ScrollView className="flex-1 px-6 pt-4">
-        <Text className="text-2xl font-bold text-white">Courses</Text>
+        {/* Header: mode-dependent */}
+        {isMainMenu ? (
+          <Text className="text-2xl font-bold text-white">Locked In</Text>
+        ) : (
+          <>
+            <Pressable onPress={() => navigation.goBack()}>
+              <Text className="text-neutral-400">{'\u2190'} Back</Text>
+            </Pressable>
+            <Text className="mt-4 text-2xl font-bold text-white">Courses</Text>
+          </>
+        )}
 
-        <View className="mt-6 gap-4 pb-8">
-          {courses.map((course) => {
-            const isEnrolled = enrolledCourseIds.includes(course.id);
-            return (
+        {/* Active Courses Section */}
+        {activeCourses.length > 0 && (
+          <View className="mt-6">
+            <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-500">
+              Active Courses
+            </Text>
+            <View className="gap-3">
+              {activeCourses.map((course) => {
+                const state = courseStates[course.id];
+                return (
+                  <Pressable
+                    key={course.id}
+                    className="flex-row items-center rounded-xl border border-purple-500/50 bg-purple-500/10 p-4 active:bg-purple-500/20"
+                    onPress={() => handleActiveCoursePress(course.id)}
+                  >
+                    <View className="flex-1">
+                      <Text className="text-base font-bold text-white">
+                        {course.title}
+                      </Text>
+                      <View className="mt-1 flex-row items-center gap-3">
+                        <Text className="text-xs text-amber-400">
+                          {'\u2739'} {state?.currentStreak ?? 0} streak
+                        </Text>
+                        <Text className="text-xs text-purple-400">
+                          Day {state?.gauntletDay ?? 1}
+                        </Text>
+                        <Text className="text-xs text-neutral-500">
+                          {course.completedLessons}/{course.totalLessons} lessons
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="text-neutral-500">{'\u203A'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Available Courses */}
+        <View className="mt-6">
+          {activeCourses.length > 0 && (
+            <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-500">
+              Available Courses
+            </Text>
+          )}
+          <View className="gap-4 pb-8">
+            {(activeCourses.length > 0 ? availableCourses : courses).map((course) => (
               <CourseCard
                 key={course.id}
                 course={course}
-                isEnrolled={isEnrolled}
                 onPress={() => setSelectedCourseId(course.id)}
-                onToggleEnroll={() =>
-                  isEnrolled
-                    ? unenrollCourse(course.id)
-                    : enrollCourse(course.id)
-                }
+                onEnroll={() => handleEnroll(course.id)}
               />
-            );
-          })}
+            ))}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -190,14 +282,12 @@ export function CourseBrowserScreen() {
 
 function CourseCard({
   course,
-  isEnrolled,
   onPress,
-  onToggleEnroll,
+  onEnroll,
 }: {
   course: Course;
-  isEnrolled: boolean;
   onPress: () => void;
-  onToggleEnroll: () => void;
+  onEnroll: () => void;
 }) {
   const progressPercent =
     course.totalLessons > 0
@@ -209,9 +299,7 @@ function CourseCard({
 
   return (
     <Pressable
-      className={`rounded-xl border bg-neutral-900 p-6 active:bg-neutral-800 ${
-        isEnrolled ? 'border-amber-500/50' : 'border-neutral-700'
-      }`}
+      className="rounded-xl border border-neutral-700 bg-neutral-900 p-6 active:bg-neutral-800"
       onPress={onPress}
     >
       {/* Pills row */}
@@ -226,11 +314,6 @@ function CourseCard({
             {course.difficulty}
           </Text>
         </View>
-        {isEnrolled && (
-          <View className="rounded-full bg-amber-500/20 px-3 py-1">
-            <Text className="text-xs font-medium text-amber-400">{'\u2713'} Enrolled</Text>
-          </View>
-        )}
       </View>
 
       {/* Title & description */}
@@ -252,22 +335,14 @@ function CourseCard({
 
       {/* Enroll button */}
       <Pressable
-        className={`mt-3 rounded-lg px-4 py-2 ${
-          isEnrolled
-            ? 'border border-neutral-600 bg-neutral-800'
-            : 'bg-amber-500'
-        } active:opacity-80`}
+        className="mt-3 rounded-lg bg-purple-600 px-4 py-2 active:opacity-80"
         onPress={(e) => {
           e.stopPropagation?.();
-          onToggleEnroll();
+          onEnroll();
         }}
       >
-        <Text
-          className={`text-center text-sm font-semibold ${
-            isEnrolled ? 'text-neutral-400' : 'text-black'
-          }`}
-        >
-          {isEnrolled ? 'Unenroll' : 'Enroll'}
+        <Text className="text-center text-sm font-bold text-white">
+          DESCEND
         </Text>
       </Pressable>
     </Pressable>

@@ -12,22 +12,16 @@ export type OnboardingStackParamList = {
   GauntletRoom: undefined;
 };
 
-// --- Main Tabs ---
-export type MainTabsParamList = {
-  Home: undefined;
-  Courses: undefined;
-  Dungeon: undefined;
-  Profile: undefined;
-};
-
-// --- Main Stack ---
+// --- Main Stack (flat, dungeon-first) ---
 export type MainStackParamList = {
-  MainTabs: NavigatorScreenParams<MainTabsParamList>;
+  DungeonHome: undefined;
+  CourseBrowser: undefined;
   Lesson: { lessonId: string; courseId: string };
   LessonResult: { lessonId: string; courseId: string; score: number; totalQuestions: number };
   FlameDashboard: undefined;
   Alchemy: undefined;
   Leaderboard: undefined;
+  ProfileMenu: undefined;
 };
 
 // --- Root ---

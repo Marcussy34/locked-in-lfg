@@ -1,29 +1,20 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, Pressable, Modal, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '@/navigation/types';
-import { useFlameStore, useSceneStore, useStreakStore, useTokenStore, useBrewStore } from '@/stores';
+import { useFlameStore, useSceneStore, useStreakStore, useTokenStore, useBrewStore, useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
 
 type HubNav = NativeStackNavigationProp<MainStackParamList>;
 
-/**
- * Bundled dungeon asset (from web/dungeon/dist/index.html).
- * Note: Metro config must allow .html assets.
- */
 const DUNGEON_ASSET = require('../../../web/dungeon/dist/index.html');
 
-/**
- * Dynamically extract the dev server host IP from Expo's manifest.
- * This is the IP your phone used to connect to Metro — so Vite on the same
- * machine is guaranteed reachable at this IP too.
- */
 function getDevHost(): string {
   try {
-    // Expo SDK 54+ — debuggerHost is "ip:port"
     const debuggerHost =
       Constants.expoConfig?.hostUri ??
       (Constants.manifest2 as any)?.extra?.expoGo?.debuggerHost ??
@@ -33,22 +24,20 @@ function getDevHost(): string {
       if (ip) return ip;
     }
   } catch {}
-  return '192.168.1.103'; // fallback
+  return '192.168.1.103';
 }
 
-/**
- * Dev mode: load from Vite dev server.
- * Prod: load the inlined single-file HTML built by vite-plugin-singlefile.
- */
 const DEV_URI = `http://${getDevHost()}:5173`;
 const IS_DEV = __DEV__;
 
 export function UndergroundHubScreen() {
   const navigation = useNavigation<HubNav>();
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [bookModalVisible, setBookModalVisible] = useState(false);
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
 
   // Store subscriptions
   const flameState = useFlameStore((s) => s.flameState);
@@ -57,8 +46,43 @@ export function UndergroundHubScreen() {
   const roomPhase = useSceneStore((s) => s.roomPhase);
   const currentStreak = useStreakStore((s) => s.currentStreak);
 
-  // Initialize mock data so course info is available
+  // Course store subscriptions
+  const courses = useCourseStore((s) => s.courses);
+  const activeCourseId = useCourseStore((s) => s.activeCourseId);
+  const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
+  const courseStates = useCourseStore((s) => s.courseStates);
+  const lessons = useCourseStore((s) => s.lessons);
+  const lessonProgress = useCourseStore((s) => s.lessonProgress);
+  const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
+
+  // Initialize mock data
   useCourseStore.getState().initializeMockData();
+
+  const deactivateCourse = useCourseStore((s) => s.deactivateCourse);
+
+  // Guard: if no active courses, redirect to CourseBrowser
+  useEffect(() => {
+    if (activeCourseIds.length === 0) {
+      navigation.replace('CourseBrowser');
+    }
+  }, [activeCourseIds.length, navigation]);
+
+  // Active course data
+  const activeCourse = activeCourseId
+    ? courses.find((c) => c.id === activeCourseId) ?? null
+    : null;
+  const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
+
+  // Find next lesson for active course
+  const activeLessons = activeCourseId
+    ? (lessons[activeCourseId] ?? []).sort((a, b) => a.order - b.order)
+    : [];
+  const nextLesson = activeLessons.find((l) => !lessonProgress[l.id]?.completed);
+
+  // CTA state
+  const todayCompleted = activeState?.todayCompleted ?? false;
+  const gauntletActive = activeState?.gauntletActive ?? false;
+  const gauntletDay = activeState?.gauntletDay ?? 1;
 
   // Helper: send message to WebView
   const sendToWebView = useCallback((type: string, payload: Record<string, any>) => {
@@ -86,7 +110,7 @@ export function UndergroundHubScreen() {
     sendToWebView('flameState', { state: flameState, intensity: lightIntensity });
   }, [flameState, lightIntensity, sceneReady, sendToWebView]);
 
-  // Sync viewpoint (when RN forces a viewpoint)
+  // Sync viewpoint
   useEffect(() => {
     if (!sceneReady) return;
     sendToWebView('setViewpoint', { viewpoint: currentViewpoint });
@@ -106,7 +130,6 @@ export function UndergroundHubScreen() {
 
         switch (data.type) {
           case 'console':
-            // Forward WebView console to RN logs
             console.log(`[WebView ${data.payload?.level}]`, data.payload?.message);
             break;
 
@@ -135,7 +158,7 @@ export function UndergroundHubScreen() {
                 navigation.navigate('Leaderboard');
                 break;
               case 'character':
-                navigation.navigate('MainTabs', { screen: 'Profile' });
+                setProfileMenuVisible(true);
                 break;
             }
             break;
@@ -199,7 +222,6 @@ export function UndergroundHubScreen() {
         onLoadStart={() => console.log('[Hub] WebView loadStart')}
         onLoadEnd={() => console.log('[Hub] WebView loadEnd')}
         mixedContentMode="always"
-        // Pipe console.log from WebView → RN logs for debugging
         injectedJavaScript={`
           (function() {
             var origLog = console.log;
@@ -239,6 +261,156 @@ export function UndergroundHubScreen() {
         </View>
       )}
 
+      {/* ====== OVERLAY UI ====== */}
+      {sceneReady && (
+        <>
+          {/* Course Switcher Tabs (top) */}
+          <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+            <View style={styles.courseTabsRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.courseTabsContent}
+              >
+                {activeCourseIds.map((courseId) => {
+                  const course = courses.find((c) => c.id === courseId);
+                  if (!course) return null;
+                  const isActive = courseId === activeCourseId;
+                  // Abbreviate course name
+                  const shortName = course.title.length > 12
+                    ? course.title.slice(0, 12) + '\u2026'
+                    : course.title;
+
+                  return (
+                    <Pressable
+                      key={courseId}
+                      style={[
+                        styles.courseTab,
+                        isActive && styles.courseTabActive,
+                      ]}
+                      onPress={() => setActiveCourse(courseId)}
+                    >
+                      <Text
+                        style={[
+                          styles.courseTabText,
+                          isActive && styles.courseTabTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {shortName}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+
+                {/* [+] Add course button */}
+                <Pressable
+                  style={styles.courseTabAdd}
+                  onPress={() => navigation.navigate('CourseBrowser')}
+                >
+                  <Text style={styles.courseTabAddText}>+</Text>
+                </Pressable>
+              </ScrollView>
+
+              {/* Profile button (top-right) */}
+              <Pressable
+                style={styles.profileBtn}
+                onPress={() => setProfileMenuVisible(true)}
+              >
+                <Text style={styles.profileBtnText}>{'\u2666'}</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Bottom Stats Bar */}
+          <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
+            {/* Stats row */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statIcon}>{'\u2739'}</Text>
+                <Text style={styles.statValue}>{activeState?.currentStreak ?? 0}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statIcon}>{'\u2697'}</Text>
+                <Text style={[styles.statValue, styles.statAmber]}>
+                  {Math.floor(activeState?.ichorBalance ?? 0).toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statIcon}>$</Text>
+                <Text style={[styles.statValue, styles.statGreen]}>
+                  {(activeState?.yieldAccrued ?? 0).toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statIcon}>{'\u26c8'}</Text>
+                <Text style={styles.statValue}>{activeState?.saverCount ?? 0}/3</Text>
+              </View>
+            </View>
+
+            {/* CTA Button */}
+            <Pressable
+              style={[
+                styles.ctaButton,
+                todayCompleted && styles.ctaButtonDone,
+                !activeCourseId && styles.ctaButtonEmpty,
+              ]}
+              onPress={() => {
+                if (!activeCourseId) {
+                  navigation.navigate('CourseBrowser');
+                  return;
+                }
+                if (todayCompleted) return;
+                if (nextLesson) {
+                  navigation.navigate('Lesson', {
+                    lessonId: nextLesson.id,
+                    courseId: activeCourseId,
+                  });
+                }
+              }}
+            >
+              <Text style={styles.ctaText}>
+                {!activeCourseId
+                  ? 'ENROLL IN A COURSE'
+                  : gauntletActive
+                    ? `DAY ${gauntletDay} OF 7`
+                    : todayCompleted
+                      ? 'Come back tomorrow'
+                      : nextLesson
+                        ? "BEGIN TODAY'S QUEST"
+                        : 'ALL LESSONS COMPLETE'}
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+
+      {/* Profile Menu Dropdown */}
+      <ProfileMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onNavigate={(screen) => {
+          setProfileMenuVisible(false);
+          if (screen === 'ExitCourse') {
+            if (activeCourseId) deactivateCourse(activeCourseId);
+            // Guard effect will redirect to CourseBrowser if no courses left
+            if (activeCourseIds.length <= 1) {
+              navigation.replace('CourseBrowser');
+            }
+          } else if (screen === 'CourseBrowser') {
+            navigation.navigate('CourseBrowser');
+          } else if (screen === 'Leaderboard') {
+            navigation.navigate('Leaderboard');
+          } else if (screen === 'Disconnect') {
+            useUserStore.getState().disconnect();
+          }
+        }}
+        topInset={insets.top}
+      />
+
       {/* Book modal */}
       <BookModal
         visible={bookModalVisible}
@@ -249,7 +421,7 @@ export function UndergroundHubScreen() {
         }}
         onBrowseCourses={() => {
           setBookModalVisible(false);
-          navigation.navigate('MainTabs', { screen: 'Courses' });
+          navigation.navigate('CourseBrowser');
         }}
       />
     </View>
@@ -257,7 +429,70 @@ export function UndergroundHubScreen() {
 }
 
 // ---------------------------------------------------------------------------
-// Book Modal — popup when tapping the book
+// Profile Menu Modal
+// ---------------------------------------------------------------------------
+function ProfileMenuModal({
+  visible,
+  onClose,
+  onNavigate,
+  topInset,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onNavigate: (screen: string) => void;
+  topInset: number;
+}) {
+  if (!visible) return null;
+
+  const menuItems = [
+    { label: 'Leaderboard', screen: 'Leaderboard', icon: '\u2694' },
+    { label: 'Ichor Shop', screen: '', icon: '\u2697', disabled: true },
+    { label: 'Community Pot', screen: '', icon: '\u26b2', disabled: true },
+    { label: 'Settings', screen: '', icon: '\u2699', disabled: true },
+    { label: 'Exit Course', screen: 'ExitCourse', icon: '\u2190' },
+    { label: 'Disconnect', screen: 'Disconnect', icon: '\u2717', danger: true },
+  ];
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.profileMenuBackdrop} onPress={onClose}>
+        <View style={[styles.profileMenuContainer, { top: topInset + 56 }]}>
+          {menuItems.map((item, i) => (
+            <Pressable
+              key={i}
+              style={[
+                styles.profileMenuItem,
+                item.disabled && styles.profileMenuItemDisabled,
+              ]}
+              onPress={() => {
+                if (item.disabled) return;
+                onNavigate(item.screen);
+              }}
+            >
+              <Text style={[
+                styles.profileMenuIcon,
+                item.danger && styles.profileMenuDanger,
+                item.disabled && styles.profileMenuTextDisabled,
+              ]}>
+                {item.icon}
+              </Text>
+              <Text style={[
+                styles.profileMenuLabel,
+                item.danger && styles.profileMenuDanger,
+                item.disabled && styles.profileMenuTextDisabled,
+              ]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Book Modal
 // ---------------------------------------------------------------------------
 function BookModal({
   visible,
@@ -270,17 +505,20 @@ function BookModal({
   onStartLesson: (lessonId: string, courseId: string) => void;
   onBrowseCourses: () => void;
 }) {
+  const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const courses = useCourseStore((s) => s.courses);
   const lessons = useCourseStore((s) => s.lessons);
   const lessonProgress = useCourseStore((s) => s.lessonProgress);
 
-  // Find the active course (first one for now)
-  const course = courses[0];
-  const courseLessons = course ? (lessons[course.id] ?? []).sort((a, b) => a.order - b.order) : [];
+  // Use active course instead of first course
+  const course = activeCourseId
+    ? courses.find((c) => c.id === activeCourseId) ?? null
+    : courses[0] ?? null;
+  const courseLessons = course
+    ? (lessons[course.id] ?? []).sort((a, b) => a.order - b.order)
+    : [];
 
-  // Find next incomplete lesson
   const nextLesson = courseLessons.find((l) => !lessonProgress[l.id]?.completed);
-  // Find last completed lesson
   const completedLessons = courseLessons.filter((l) => lessonProgress[l.id]?.completed);
   const lastCompleted = completedLessons.length > 0
     ? completedLessons[completedLessons.length - 1]
@@ -295,9 +533,8 @@ function BookModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.modalContent} onPress={() => { }}>
+        <Pressable style={styles.modalContent} onPress={() => {}}>
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Header */}
             <Text style={styles.modalTitle}>
               {course?.title ?? 'No Course'}
             </Text>
@@ -305,7 +542,6 @@ function BookModal({
               {course?.description ?? ''}
             </Text>
 
-            {/* Progress summary */}
             <View style={styles.modalCard}>
               <Text style={styles.cardLabel}>Progress</Text>
               <View style={styles.progressTrack}>
@@ -325,7 +561,6 @@ function BookModal({
               </Text>
             </View>
 
-            {/* Last learned */}
             <View style={styles.modalCard}>
               <Text style={styles.cardLabel}>Last Learned</Text>
               {lastCompleted ? (
@@ -340,27 +575,25 @@ function BookModal({
               )}
             </View>
 
-            {/* Action grid */}
             <View style={styles.actionGrid}>
-              <Pressable style={styles.actionBtn} onPress={() => { }}>
-                <Text style={styles.actionIcon}>{'🏋️'}</Text>
+              <Pressable style={styles.actionBtn} onPress={() => {}}>
+                <Text style={styles.actionIcon}>{'\u{1F3CB}\uFE0F'}</Text>
                 <Text style={styles.actionLabel}>Practice</Text>
               </Pressable>
-              <Pressable style={styles.actionBtn} onPress={() => { }}>
-                <Text style={styles.actionIcon}>{'🧩'}</Text>
+              <Pressable style={styles.actionBtn} onPress={() => {}}>
+                <Text style={styles.actionIcon}>{'\u{1F9E9}'}</Text>
                 <Text style={styles.actionLabel}>Puzzle</Text>
               </Pressable>
-              <Pressable style={styles.actionBtn} onPress={() => { }}>
-                <Text style={styles.actionIcon}>{'📖'}</Text>
+              <Pressable style={styles.actionBtn} onPress={() => {}}>
+                <Text style={styles.actionIcon}>{'\u{1F4D6}'}</Text>
                 <Text style={styles.actionLabel}>Dictionary</Text>
               </Pressable>
               <Pressable style={styles.actionBtn} onPress={onBrowseCourses}>
-                <Text style={styles.actionIcon}>{'📚'}</Text>
+                <Text style={styles.actionIcon}>{'\u{1F4DA}'}</Text>
                 <Text style={styles.actionLabel}>All Courses</Text>
               </Pressable>
             </View>
 
-            {/* Start Lesson button */}
             {nextLesson ? (
               <Pressable
                 style={styles.startBtn}
@@ -391,9 +624,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  hidden: {
-    opacity: 0,
-  },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#050508',
@@ -409,11 +639,191 @@ const styles = StyleSheet.create({
     color: '#f44',
     fontSize: 12,
     marginTop: 8,
-    textAlign: 'center' as const,
+    textAlign: 'center',
     paddingHorizontal: 20,
   },
 
-  // Modal
+  // ====== Top Bar (Course Tabs + Profile) ======
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+  },
+  courseTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  courseTabsContent: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  courseTab: {
+    backgroundColor: 'rgba(20, 20, 22, 0.85)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(60, 60, 64, 0.6)',
+  },
+  courseTabActive: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: '#f59e0b',
+  },
+  courseTabText: {
+    color: '#999',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  courseTabTextActive: {
+    color: '#f59e0b',
+  },
+  courseTabAdd: {
+    backgroundColor: 'rgba(20, 20, 22, 0.85)',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(60, 60, 64, 0.6)',
+  },
+  courseTabAddText: {
+    color: '#999',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  profileBtn: {
+    backgroundColor: 'rgba(20, 20, 22, 0.85)',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(60, 60, 64, 0.6)',
+    marginLeft: 'auto',
+  },
+  profileBtnText: {
+    color: '#f59e0b',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // ====== Bottom Stats Bar ======
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: 'rgba(5, 5, 8, 0.9)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(42, 42, 46, 0.6)',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statIcon: {
+    color: '#888',
+    fontSize: 14,
+  },
+  statValue: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statAmber: {
+    color: '#f59e0b',
+  },
+  statGreen: {
+    color: '#34d399',
+  },
+  statDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: 'rgba(60, 60, 64, 0.5)',
+  },
+  ctaButton: {
+    backgroundColor: '#7c3aed',
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  ctaButtonDone: {
+    backgroundColor: '#1c1c1e',
+  },
+  ctaButtonEmpty: {
+    backgroundColor: '#f59e0b',
+  },
+  ctaText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // ====== Profile Menu ======
+  profileMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  profileMenuContainer: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: '#1c1c1e',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2e',
+    paddingVertical: 8,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  profileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  profileMenuItemDisabled: {
+    opacity: 0.4,
+  },
+  profileMenuIcon: {
+    color: '#fff',
+    fontSize: 16,
+    width: 20,
+    textAlign: 'center',
+  },
+  profileMenuLabel: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  profileMenuDanger: {
+    color: '#ef4444',
+  },
+  profileMenuTextDisabled: {
+    color: '#666',
+  },
+
+  // ====== Book Modal ======
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -441,8 +851,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 20,
   },
-
-  // Cards
   modalCard: {
     backgroundColor: '#1c1c1e',
     borderRadius: 14,
@@ -469,8 +877,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
-
-  // Progress bar
   progressTrack: {
     height: 6,
     backgroundColor: '#2a2a2e',
@@ -483,8 +889,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f59e0b',
     borderRadius: 3,
   },
-
-  // Action grid
   actionGrid: {
     flexDirection: 'row',
     gap: 10,
@@ -508,8 +912,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: '500',
   },
-
-  // Start button
   startBtn: {
     backgroundColor: '#7c3aed',
     borderRadius: 14,

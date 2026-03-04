@@ -7,3 +7,4 @@ export * from './lesson';
 export * from './scene';
 export * from './yield';
 export * from './brew';
+export * from './courseState';

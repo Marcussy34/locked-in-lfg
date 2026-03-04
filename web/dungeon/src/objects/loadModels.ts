@@ -32,6 +32,9 @@ export interface TextureSet {
   bumpLevel?: number; // normal map intensity (default 1.5)
 }
 
+// Track per-model triangle/vertex counts for dev panel stats
+export const modelStats: Map<string, { tris: number; verts: number }> = new Map();
+
 // Track room materials so we can hot-swap textures
 const roomMaterials: { mat: StandardMaterial; uScale: number; vScale: number }[] = [];
 let activeScene: Scene;
@@ -664,6 +667,8 @@ async function loadModel(
     totalTris += (mesh.getTotalIndices() / 3) | 0;
     totalVerts += mesh.getTotalVertices();
   }
+
+  modelStats.set(name, { tris: totalTris, verts: totalVerts });
 
   console.log(
     `[model] ${name}: ${totalTris.toLocaleString()} tris, ${totalVerts.toLocaleString()} verts` +
