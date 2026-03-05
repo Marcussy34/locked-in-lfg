@@ -1,4 +1,16 @@
 export type QuestionType = 'mcq' | 'short_text';
+export type LessonBlockType = 'paragraph' | 'code' | 'callout' | 'image';
+
+export interface LessonBlock {
+  id: string;
+  type: LessonBlockType;
+  order: number;
+  text?: string;
+  language?: string;
+  calloutTone?: 'info' | 'warning' | 'tip';
+  caption?: string;
+  imageUrl?: string;
+}
 
 export interface Question {
   id: string;
@@ -11,10 +23,14 @@ export interface Question {
 export interface Lesson {
   id: string;
   courseId: string;
+  moduleId?: string;
   title: string;
   order: number;
   content: string;
+  blocks?: LessonBlock[];
   questions: Question[];
+  version?: number;
+  releaseId?: string;
 }
 
 export interface LessonProgress {
