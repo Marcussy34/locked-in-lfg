@@ -1,0 +1,385 @@
+openapi: 3.1.0
+info:
+  title: Locked In Lesson API
+  version: 1.0.0
+  description: Modular lesson delivery and progress API.
+servers:
+  - url: https://api.lockedin.app
+paths:
+  /v1/courses:
+    get:
+      summary: List published courses
+      responses:
+        '200':
+          description: Course list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourseCard'
+  /v1/courses/{courseId}/modules:
+    get:
+      summary: List modules for a course
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '200':
+          description: Module list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModuleCard'
+  /v1/modules/{moduleId}/lessons:
+    get:
+      summary: List lessons for a module
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+      responses:
+        '200':
+          description: Lesson list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LessonPayload'
+  /v1/lessons/{lessonId}:
+    get:
+      summary: Get a single lesson payload
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      responses:
+        '200':
+          description: Lesson payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonPayload'
+  /v1/content/version:
+    get:
+      summary: Current published content release
+      responses:
+        '200':
+          description: Content release metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentVersion'
+
+  /v1/auth/challenge:
+    post:
+      summary: Create wallet-sign challenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthChallengeRequest'
+      responses:
+        '200':
+          description: Challenge payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthChallengeResponse'
+  /v1/auth/verify:
+    post:
+      summary: Verify signed challenge and create session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthVerifyRequest'
+      responses:
+        '200':
+          description: Auth session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+  /v1/auth/refresh:
+    post:
+      summary: Rotate auth session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+      responses:
+        '200':
+          description: New auth session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+
+  /v1/progress/lessons/{lessonId}/start:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Mark lesson attempt started
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgressStartLessonRequest'
+      responses:
+        '204':
+          description: Started
+  /v1/progress/lessons/{lessonId}/submit:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Submit lesson completion
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgressSubmitLessonRequest'
+      responses:
+        '200':
+          description: Submission result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSubmitLessonResponse'
+  /v1/progress/courses/{courseId}:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Course progress snapshot
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '200':
+          description: Progress snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseProgressSnapshot'
+  /v1/progress/modules/{moduleId}:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Module progress snapshot
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+      responses:
+        '200':
+          description: Progress snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleProgressSnapshot'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema:
+        type: string
+    ModuleId:
+      name: moduleId
+      in: path
+      required: true
+      schema:
+        type: string
+    LessonId:
+      name: lessonId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    CourseCard:
+      type: object
+      required: [id, slug, title, description, difficulty, category, totalModules, totalLessons]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        category:
+          type: string
+          enum: [solana, web3, defi, security, rust]
+        imageUrl:
+          type: [string, 'null']
+        totalModules: { type: integer }
+        totalLessons: { type: integer }
+        publishedAt:
+          type: [string, 'null']
+          format: date-time
+    ModuleCard:
+      type: object
+      required: [id, courseId, slug, title, description, order, totalLessons, estimatedMinutes]
+      properties:
+        id: { type: string }
+        courseId: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        order: { type: integer }
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        totalLessons: { type: integer }
+        estimatedMinutes: { type: integer }
+    LessonPayload:
+      type: object
+      required: [id, courseId, moduleId, title, order, version, releaseId, blocks, questions]
+      properties:
+        id: { type: string }
+        courseId: { type: string }
+        moduleId: { type: string }
+        title: { type: string }
+        order: { type: integer }
+        version: { type: integer }
+        releaseId: { type: string }
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonBlock'
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+    LessonBlock:
+      type: object
+      required: [id, type, order]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [paragraph, code, callout, image]
+        order: { type: integer }
+        text: { type: string }
+        language: { type: string }
+        calloutTone:
+          type: string
+          enum: [info, warning, tip]
+        caption: { type: string }
+        imageUrl: { type: string }
+    Question:
+      type: object
+      required: [id, type, prompt, correctAnswer]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [mcq, short_text]
+        prompt: { type: string }
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionOption'
+        correctAnswer: { type: string }
+    QuestionOption:
+      type: object
+      required: [id, text]
+      properties:
+        id: { type: string }
+        text: { type: string }
+    ContentVersion:
+      type: object
+      required: [releaseId, publishedAt]
+      properties:
+        releaseId: { type: string }
+        publishedAt:
+          type: string
+          format: date-time
+    AuthChallengeRequest:
+      type: object
+      required: [walletAddress]
+      properties:
+        walletAddress: { type: string }
+    AuthChallengeResponse:
+      type: object
+      required: [challengeId, message, expiresAt]
+      properties:
+        challengeId: { type: string }
+        message: { type: string }
+        expiresAt:
+          type: string
+          format: date-time
+    AuthVerifyRequest:
+      type: object
+      required: [walletAddress, challengeId, signature]
+      properties:
+        walletAddress: { type: string }
+        challengeId: { type: string }
+        signature: { type: string }
+    AuthRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    AuthSession:
+      type: object
+      required: [accessToken, refreshToken, expiresAt]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresAt:
+          type: string
+          format: date-time
+    ProgressStartLessonRequest:
+      type: object
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+    ProgressSubmitLessonRequest:
+      type: object
+      required: [score, totalQuestions]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        totalQuestions: { type: integer, minimum: 1 }
+        completedAt:
+          type: string
+          format: date-time
+    ProgressSubmitLessonResponse:
+      type: object
+      required: [lessonId, accepted, score, completedAt]
+      properties:
+        lessonId: { type: string }
+        accepted: { type: boolean }
+        score: { type: integer }
+        completedAt:
+          type: string
+          format: date-time
+    CourseProgressSnapshot:
+      type: object
+      required: [courseId, completedLessons, totalLessons, completionRate]
+      properties:
+        courseId: { type: string }
+        completedLessons: { type: integer }
+        totalLessons: { type: integer }
+        completionRate: { type: number }
+    ModuleProgressSnapshot:
+      type: object
+      required: [moduleId, completedLessons, totalLessons, completionRate]
+      properties:
+        moduleId: { type: string }
+        completedLessons: { type: integer }
+        totalLessons: { type: integer }
+        completionRate: { type: number }
