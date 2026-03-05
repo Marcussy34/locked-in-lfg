@@ -27,6 +27,11 @@ export function WalletConnectScreen() {
             },
           ],
         );
+      } else if (code === 'ERROR_WALLET_ADAPTER_UNAVAILABLE') {
+        Alert.alert(
+          'Unsupported Runtime',
+          'This build does not include Solana Mobile Wallet Adapter. Use an Android custom dev build (EAS or local) instead of Expo Go/iOS runtime.',
+        );
       } else if (code === 'ERROR_AUTHORIZATION_FAILED') {
         // User rejected — do nothing, they can try again
       } else {
