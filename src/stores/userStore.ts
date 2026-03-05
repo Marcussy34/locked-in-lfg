@@ -5,6 +5,7 @@ import type { OnboardingPhase, UserProfile } from '@/types';
 
 interface UserStore extends UserProfile {
   setWallet: (address: string, authToken?: string) => void;
+  setAuthToken: (authToken: string | null) => void;
   disconnect: () => void;
   setOnboardingPhase: (phase: OnboardingPhase) => void;
   setDisplayName: (name: string) => void;
@@ -34,6 +35,8 @@ export const useUserStore = create<UserStore>()(
           onboardingPhase: 'onboarding',
           createdAt: new Date().toISOString(),
         }),
+
+      setAuthToken: (authToken) => set({ authToken }),
 
       disconnect: () => set(initialState),
 

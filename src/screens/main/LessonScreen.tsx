@@ -12,6 +12,7 @@ import { useUserStore } from '@/stores/userStore';
 import type { Question } from '@/types';
 import { getLessonReadableContent } from '@/utils/lessonContent';
 import { hasRemoteLessonApi, submitLesson } from '@/services/api';
+import { issueBackendAccessToken } from '@/services/api/auth/backendAuth';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'Lesson'>;
 type Route = RouteProp<MainStackParamList, 'Lesson'>;
@@ -25,7 +26,9 @@ export function LessonScreen() {
 
   const lesson = useCourseStore((s) => s.getLesson(lessonId));
   const lessons = useCourseStore((s) => s.getLessonsForCourse(courseId));
+  const walletAddress = useUserStore((s) => s.walletAddress);
   const authToken = useUserStore((s) => s.authToken);
+  const setAuthToken = useUserStore((s) => s.setAuthToken);
 
   const [phase, setPhase] = useState<Phase>('reading');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -72,16 +75,29 @@ export function LessonScreen() {
       useStreakStore.getState().completeDay();
       useTokenStore.getState().awardFragment(fragmentReward, 'lesson');
 
-      if (hasRemoteLessonApi() && authToken) {
-        submitLesson(
-          lessonId,
-          {
-            score,
-            totalQuestions,
-            completedAt: new Date().toISOString(),
-          },
-          authToken,
-        ).catch(() => {
+      if (hasRemoteLessonApi() && walletAddress) {
+        (async () => {
+          let token = authToken;
+
+          if (!token) {
+            token = await issueBackendAccessToken(walletAddress);
+            if (token) {
+              setAuthToken(token);
+            }
+          }
+
+          if (!token) return;
+
+          await submitLesson(
+            lessonId,
+            {
+              score,
+              totalQuestions,
+              completedAt: new Date().toISOString(),
+            },
+            token,
+          );
+        })().catch(() => {
           // Local progress is source-of-truth until backend sync is fully enforced.
         });
       }
@@ -105,7 +121,9 @@ export function LessonScreen() {
     totalQuestions,
     lessonId,
     courseId,
+    walletAddress,
     authToken,
+    setAuthToken,
     navigation,
   ]);
 

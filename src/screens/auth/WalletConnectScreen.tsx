@@ -3,6 +3,7 @@ import { View, Text, Pressable, Alert, Linking, ActivityIndicator } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUserStore } from '@/stores';
 import { connectWallet } from '@/services/solana';
+import { issueBackendAccessToken } from '@/services/api/auth/backendAuth';
 
 export function WalletConnectScreen() {
   const setWallet = useUserStore((s) => s.setWallet);
@@ -12,7 +13,16 @@ export function WalletConnectScreen() {
     setConnecting(true);
     try {
       const session = await connectWallet();
-      setWallet(session.publicKey, session.authToken);
+
+      let backendAccessToken: string | null = null;
+      try {
+        backendAccessToken = await issueBackendAccessToken(session.publicKey);
+      } catch (error) {
+        // Keep onboarding usable even when backend session bootstrap fails.
+        console.warn('Backend auth bootstrap failed:', error);
+      }
+
+      setWallet(session.publicKey, backendAccessToken ?? undefined);
     } catch (error: any) {
       const code = error?.code;
       if (code === 'ERROR_WALLET_NOT_FOUND') {
