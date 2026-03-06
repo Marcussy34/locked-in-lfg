@@ -43,9 +43,9 @@ export const useUserStore = create<UserStore>()(
           walletAuthToken: walletAuthToken ?? state.walletAuthToken ?? null,
           authToken: authToken ?? state.authToken ?? null,
           refreshToken: refreshToken ?? state.refreshToken ?? null,
-          // Preserve existing phase for returning users.
+          // Any successful wallet connect should leave auth gate.
           onboardingPhase:
-            state.walletAddress == null ? 'onboarding' : state.onboardingPhase,
+            state.onboardingPhase === 'auth' ? 'onboarding' : state.onboardingPhase,
           createdAt: state.createdAt ?? new Date().toISOString(),
         })),
 

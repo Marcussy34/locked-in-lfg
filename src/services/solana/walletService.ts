@@ -6,6 +6,7 @@ import { toByteArray } from 'base64-js';
 // App identity shown in wallet approval prompt
 const APP_IDENTITY = {
   name: 'Locked In',
+  uri: 'https://lockedin.app',
 };
 
 // MWA chain identifier for devnet
@@ -117,6 +118,21 @@ function extractDetachedSignature(
   }
 
   throw createSigningUnavailableError('Signed payload does not match challenge.');
+}
+
+function isNotSignedError(error: unknown): boolean {
+  const code = (error as { code?: unknown })?.code;
+  if (code === -3 || code === 'ERROR_NOT_SIGNED') return true;
+
+  const message = (error as { message?: unknown })?.message;
+  if (typeof message !== 'string') return false;
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('not signed') ||
+    normalized.includes('request declined') ||
+    normalized.includes('sign request declined')
+  );
 }
 
 async function loadTransact() {
@@ -277,31 +293,66 @@ export async function signAuthChallengeMessage(
   const messageBytes = new TextEncoder().encode(message);
 
   const signedPayload = await transact(async (wallet) => {
-    const authorization = walletAuthToken
-      ? await wallet.reauthorize({
-          auth_token: walletAuthToken,
-          identity: APP_IDENTITY,
-        })
-      : await wallet.authorize({
-          identity: APP_IDENTITY,
-          chain: CHAIN,
-        });
+    const resolveAccountAddress = (authorization: {
+      accounts: Array<{ address: string }>;
+    }): string => {
+      const matchingAccount = authorization.accounts.find((account) => {
+        const addressBytes = toByteArray(account.address);
+        return new PublicKey(addressBytes).toBase58() === walletAddress;
+      });
 
-    const matchingAccount = authorization.accounts.find((account) => {
-      const addressBytes = toByteArray(account.address);
-      return new PublicKey(addressBytes).toBase58() === walletAddress;
-    });
+      if (!matchingAccount) {
+        throw createSigningUnavailableError(
+          'Connected wallet account not found in authorization session.',
+        );
+      }
 
-    if (!matchingAccount) {
-      throw createSigningUnavailableError(
-        'Connected wallet account not found in authorization session.',
-      );
+      return matchingAccount.address;
+    };
+
+    const reauthorizeOrAuthorize = async () =>
+      (walletAuthToken
+        ? wallet.reauthorize({
+            auth_token: walletAuthToken,
+            identity: APP_IDENTITY,
+          })
+        : wallet.authorize({
+            identity: APP_IDENTITY,
+            chain: CHAIN,
+          }));
+
+    let authorization = await reauthorizeOrAuthorize();
+    let accountAddress = resolveAccountAddress(authorization);
+
+    let signedPayloads;
+    try {
+      signedPayloads = await wallet.signMessages({
+        addresses: [accountAddress],
+        payloads: [messageBytes],
+      });
+    } catch (error) {
+      // Some wallets can immediately return NOT_SIGNED after a fast reauthorize->sign flow.
+      // Retry once with an explicit authorize round-trip so users can see/approve the prompt.
+      if (!isNotSignedError(error)) {
+        throw error;
+      }
+
+      if (__DEV__) {
+        console.warn(
+          '[wallet] signMessages declined after reauthorize; retrying with full authorize',
+        );
+      }
+
+      authorization = await wallet.authorize({
+        identity: APP_IDENTITY,
+        chain: CHAIN,
+      });
+      accountAddress = resolveAccountAddress(authorization);
+      signedPayloads = await wallet.signMessages({
+        addresses: [accountAddress],
+        payloads: [messageBytes],
+      });
     }
-
-    const signedPayloads = await wallet.signMessages({
-      addresses: [matchingAccount.address],
-      payloads: [messageBytes],
-    });
 
     if (!signedPayloads[0]) {
       throw createSigningUnavailableError('Wallet did not return signed payload.');

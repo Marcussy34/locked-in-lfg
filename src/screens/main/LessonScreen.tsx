@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { fromByteArray } from 'base64-js';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -14,8 +13,6 @@ import type { Question } from '@/types';
 import { getLessonReadableContent } from '@/utils/lessonContent';
 import { hasRemoteLessonApi, startLesson, submitLesson } from '@/services/api';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { issueBackendSession } from '@/services/api/auth/backendAuth';
-import { signAuthChallengeMessage } from '@/services/solana';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'Lesson'>;
 type Route = RouteProp<MainStackParamList, 'Lesson'>;
@@ -30,11 +27,9 @@ export function LessonScreen() {
   const lesson = useCourseStore((s) => s.getLesson(lessonId));
   const lessons = useCourseStore((s) => s.getLessonsForCourse(courseId));
   const walletAddress = useUserStore((s) => s.walletAddress);
-  const walletAuthToken = useUserStore((s) => s.walletAuthToken);
   const authToken = useUserStore((s) => s.authToken);
   const refreshToken = useUserStore((s) => s.refreshToken);
   const setAuthSession = useUserStore((s) => s.setAuthSession);
-  const disconnect = useUserStore((s) => s.disconnect);
 
   const [phase, setPhase] = useState<Phase>('reading');
   const [startSynced, setStartSynced] = useState(false);
@@ -69,42 +64,16 @@ export function LessonScreen() {
       } catch (error) {
         if (__DEV__) {
           console.warn(
-            '[lesson-api] refresh session failed, falling back to wallet challenge:',
+            '[lesson-api] refresh session failed, forcing reconnect:',
             error,
           );
         }
+        return null;
       }
     }
 
-    let session = null;
-    try {
-      session = await issueBackendSession(walletAddress, async (message) => {
-        const signatureBytes = await signAuthChallengeMessage(
-          walletAddress,
-          message,
-          walletAuthToken,
-        );
-        return fromByteArray(signatureBytes);
-      });
-    } catch (error: any) {
-      const code = error?.code;
-      if (
-        code === 'ERROR_AUTHORIZATION_FAILED' ||
-        code === 'ERROR_WALLET_MESSAGE_SIGNING_UNAVAILABLE' ||
-        code === 'ERROR_WALLET_ADAPTER_UNAVAILABLE'
-      ) {
-        // Session is no longer valid on wallet side; route user back to Connect Wallet.
-        disconnect();
-      }
-      throw error;
-    }
-
-    if (session) {
-      setAuthSession(session.accessToken, session.refreshToken);
-    }
-
-    return session?.accessToken ?? null;
-  }, [walletAddress, walletAuthToken, authToken, refreshToken, setAuthSession, disconnect]);
+    return null;
+  }, [walletAddress, authToken, refreshToken, setAuthSession]);
 
   const syncLessonStart = useCallback(() => {
     if (startSynced || !hasRemoteLessonApi()) {

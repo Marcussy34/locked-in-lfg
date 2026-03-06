@@ -29,8 +29,11 @@ export function WalletConnectScreen() {
           },
         );
       } catch (error) {
-        // Keep onboarding usable even when backend session bootstrap fails.
         console.warn('Backend auth bootstrap failed:', error);
+        Alert.alert(
+          'Wallet Connected',
+          'Connected wallet, but backend sync was not authorized. You can continue; lesson sync stays local until backend auth succeeds.',
+        );
       }
 
       setWallet(

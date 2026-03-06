@@ -7,6 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from '@/navigation';
 import { DungeonProvider } from '@/components/DungeonProvider';
 import { useUserStore } from '@/stores';
+import { hasRemoteLessonApi } from '@/services/api';
+import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { reconnectWallet } from '@/services/solana';
 
 const theme = {
@@ -53,8 +55,45 @@ function useAutoReconnect() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+/**
+ * Ensure backend session is valid early in app startup.
+ * This prevents first auth-required action (e.g. lesson submit) from prompting wallet flow.
+ */
+function useBackendSessionBootstrap() {
+  const walletAddress = useUserStore((s) => s.walletAddress);
+  const walletAuthToken = useUserStore((s) => s.walletAuthToken);
+  const authToken = useUserStore((s) => s.authToken);
+  const refreshToken = useUserStore((s) => s.refreshToken);
+  const setAuthSession = useUserStore((s) => s.setAuthSession);
+
+  useEffect(() => {
+    if (!hasRemoteLessonApi()) return;
+    if (!walletAddress || !walletAuthToken) return;
+    if (authToken) return;
+
+    if (!refreshToken) {
+      if (__DEV__) {
+        console.warn('[lesson-api] missing refresh token; backend sync disabled until next auth');
+      }
+      return;
+    }
+
+    refreshAuthSession({ refreshToken })
+      .then((session) => {
+        setAuthSession(session.accessToken, session.refreshToken);
+      })
+      .catch((error) => {
+        if (__DEV__) {
+          console.warn('[lesson-api] startup refresh failed; backend sync disabled until next auth', error);
+        }
+        setAuthSession(null, null);
+      });
+  }, [walletAddress, walletAuthToken, authToken, refreshToken, setAuthSession]);
+}
+
 export default function App() {
   useAutoReconnect();
+  useBackendSessionBootstrap();
 
   return (
     <SafeAreaProvider>
