@@ -1,60 +1,76 @@
-# Answer Validator for Subjective Answers
+# Subjective Answer Validation Spec (v3.0)
 
-## What This Is
+## Scope
 
-A system for evaluating open-ended, subjective lesson answers that can't be graded with simple keyword matching or multiple choice comparison. When a lesson asks "Explain why Solana uses Proof of History" or "Describe how you would design an NFT marketplace," the answer validator determines whether the response demonstrates understanding.
+This validator grades open-ended lesson answers and decides whether a completion can be accepted by the progress pipeline.
 
-## Current State
+It is off-chain and feeds verified completion events.
 
-The app currently supports two question types: MCQ (compared against a correct index) and short text (substring/keyword matching against accepted patterns). There is no handling for longer, subjective responses. The answer validation service directory exists but is empty.
+## Supported Validation Modes
 
-## How It Should Work
+1. rubric scoring (deterministic)
+2. LLM-assisted scoring (structured output)
+3. hybrid mode (rubric floor + LLM feedback)
 
-### Validation Approaches
+Default mode:
 
-**Option A: AI-Powered Validation (Recommended)**
-1. User submits a written answer to a subjective question.
-2. The answer is sent to a backend API along with the question context, the lesson content, and grading criteria.
-3. The backend calls an LLM (like Claude) with a structured prompt: "Given this lesson about X, and this question, does the following answer demonstrate understanding? Score 0-100 and explain why."
-4. The LLM returns a score and explanation.
-5. The app displays the score and feedback to the user.
-6. If the score meets a threshold (e.g., 60+), the answer is accepted and the user earns their fragment reward.
+- rubric-first acceptance check
+- LLM feedback for explanatory guidance
 
-**Option B: Rubric-Based Validation**
-1. Each subjective question comes with a rubric: a list of key concepts that should be mentioned.
-2. The validator checks for the presence of these concepts (more sophisticated than simple keyword matching — uses semantic similarity or NLP).
-3. Score is based on how many rubric items are addressed.
-4. Less flexible but cheaper and more predictable than full AI grading.
+## Required Request Context
 
-**Option C: Peer Review (Future)**
-1. User submits an answer.
-2. Other users review and rate the answer.
-3. Consensus determines the score.
-4. Incentivize reviewers with Fuel fragments.
-5. This is complex and requires a critical mass of users.
+Validator input must include:
 
-### Feedback Quality
-- The validator should not just say "correct" or "incorrect."
-- It should explain what was good about the answer and what was missed.
-- This turns the validation step into a learning moment — the user understands their gaps.
+- question id
+- lesson id and version
+- prompt text
+- rubric criteria and weights
+- learner answer text
+- language and optional locale
 
-## Where Solana Fits In
+## Required Output Shape
 
-- Solana is not directly involved in answer validation — this is an off-chain AI/backend operation.
-- However, the result of validation (pass/fail, score) triggers backend effects: Fuel fragment credits, streak completion recording, and optionally a proof hash stored on-chain.
-- If answer integrity is important (preventing cheating for leaderboard purposes), a hash of the question + answer + score could be stored on-chain as a lightweight proof. But this adds cost and complexity for marginal benefit.
+- `accepted: boolean`
+- `score: 0..100`
+- `criteria_breakdown[]`
+- `feedback_summary`
+- `validator_version`
+- `decision_hash` (for auditability)
 
-## Key Considerations
+## Acceptance Policy
 
-- AI validation costs money per API call. Need to consider: batch processing, caching similar answers, or limiting subjective questions per lesson.
-- Latency: AI grading takes a few seconds. The UX should show a "grading your answer..." loading state.
-- Cheating prevention: users could paste AI-generated answers. Options to combat this: time limits on answers, requiring the app to be in foreground, comparing answer patterns across users, or simply accepting it (the goal is learning, and even reading an AI answer teaches something).
-- The validator should be configurable per question — some questions need strict accuracy (technical facts), others just need demonstrated thought (opinion/analysis).
-- Start with AI-powered validation (Option A) for quality, fall back to rubric-based (Option B) if costs become prohibitive.
+A submission is completion-eligible only when:
 
-## Related Files
+- `accepted == true`
+- score meets course/question threshold
+- no integrity flags are triggered
 
-- `src/screens/main/LessonScreen.tsx` — where answers are submitted
-- `src/types/lesson.ts` — Question type definition
-- `src/services/api/` — where the validation service should live
-- `src/data/mockCourses.ts` — current question format (MCQ + short text)
+Accepted submission then flows into the same verified completion event pipeline used by objective question types.
+
+## Integrity Controls
+
+1. idempotency key per attempt
+2. bounded retry policy
+3. audit trail for prompt, rubric, decision, and version
+4. abuse heuristics (copy/paste spam, impossible speed)
+5. model timeout fallback to rubric-only evaluation
+
+## Cost and Performance Controls
+
+- cache deterministic rubric results
+- throttle LLM calls for repeated near-identical answers
+- asynchronous grading allowed with interim `pending` status
+
+## User Experience Requirements
+
+Feedback must be instructive, not binary.
+At minimum, show:
+
+- what was correct
+- what key concept was missing
+- how to improve next attempt
+
+## On-chain Coupling Rule
+
+Validator never writes on-chain directly.
+Only verified completion events from backend workers may trigger on-chain Fuel/streak updates.

@@ -1,60 +1,87 @@
-# Hard Cap and In-App Currency Economics (Needs Revision)
+# Tokenomics and Economic Rules (v3.0)
 
-## What This Is
+## Core Economic Model
 
-The economic design of the in-app currency in a centralized backend model: how fast units are created, how fast they are burned, and whether the system stays sustainable long-term.
+Locked In uses commitment-based yield economics.
 
-## Current Design
+- Users lock stablecoin principal (`USDC` or `USDT`) for 30/60/90 days.
+- Principal is not arbitrarily confiscated.
+- Economic consequence is applied to yield, not principal.
+- Ichor is an internal redemption counter, not a market token.
 
-- **Earning rate:** 0.1–0.4 fragments per lesson, daily cap of 1 full unit per user.
-- **Burn rate:** 1 unit per day per active Flame.
-- **Wallet cap:** 7–14 units per user (prevents hoarding).
-- **Transferability:** No. Units are non-tradeable and non-transferable.
-- **Global cap:** Not currently defined.
+## Asset Roles
 
-## What Needs Revision
+### Principal stablecoin
 
-### 1. Global Supply Policy
-- Should there be a hard cap on total units issued, or a soft cap via emission decay?
-- Without any cap, burn rate is the only inflation control.
-- With a strict cap, we need a plan for what happens when issuance approaches limits.
+- on-chain token movement
+- locked for course duration
+- always returned at resurface (subject to lock timer/extension)
 
-### 2. Earning vs Burning Balance
-- Current baseline is roughly break-even for active users (earn ~1/day, burn 1/day).
-- Missed days create net loss pressure quickly.
-- Need to decide whether this pressure is intentionally strict or should be softened.
+### SKR catalyst
 
-### 3. Multi-User Dynamics
-- At scale, daily issuance can become very large.
-- Burn also scales with active usage, but behavior variance can skew supply.
-- Need simulations for active, inconsistent, and churned cohorts.
+- optional locked commitment alongside principal
+- tier snapshotted at lock time
+- tier fixed for lock duration
+- always returned in full at resurface
 
-### 4. Cosmetic Sink Tuning
-- Cosmetics are an additional unit sink.
-- If pricing is too aggressive, the system feels punitive.
-- If pricing is too low, sink is ineffective.
+### Fuel
 
-### 5. Saver Recovery Impact
-- Recovery mode pauses unit earning while burn continues.
-- This is intentional pressure but can snowball after misses.
-- Need guardrails so one bad stretch does not force permanent failure loops.
+- `u16` counter in `LockAccount`
+- powers Brewer cycles
 
-## Where Solana Fits In
+### Ichor
 
-- Solana remains the source of truth for real-money flows (USDC deposits, vault state, yield, community pot).
-- In-app currency economics are enforced by backend rules and ledger processing.
-- If needed later, periodic snapshots or proofs can be anchored on-chain for auditability.
+- `u64` counter in `LockAccount`
+- produced from eligible yield when Brewer is active
+- redeemed for stablecoin via Ichor Exchange
 
-## Open Questions
+## SKR Catalyst Tiers
 
-1. Hard cap, soft cap, or uncapped with dynamic emission?
-2. Should average earn rate exceed burn rate? By how much?
-3. How should wallet cap scale by user progression?
-4. Should cosmetic spend return any gameplay benefit or remain a pure sink?
-5. Should in-app currency balance influence yield multipliers directly, or stay independent?
+| Locked SKR | Ichor boost |
+| --- | --- |
+| 0-99 | +0% |
+| 100-999 | +2% |
+| 1,000-9,999 | +5% |
+| 10,000+ | +10% |
 
-## Related Files
+Boost applies multiplicatively to base Ichor output.
 
-- `src/stores/tokenStore.ts` — current earning and cap logic
-- `src/stores/flameStore.ts` — current burn logic
-- `src/types/token.ts` — in-app currency data structure
+## Ichor Conversion Tiers
+
+| Lifetime accumulated Ichor | Conversion rate |
+| --- | --- |
+| 0-9,999 | 1,000 Ichor = 0.90 USDC |
+| 10,000-49,999 | 1,000 Ichor = 1.00 USDC |
+| 50,000-99,999 | 1,000 Ichor = 1.10 USDC |
+| 100,000+ | 1,000 Ichor = 1.25 USDC |
+
+## Saver Penalty Curve
+
+| Saver event | Yield redirected to community pot |
+| --- | --- |
+| 1st saver consumed | 10% |
+| 2nd saver consumed | 20% |
+| 3rd saver consumed | 20% |
+| no savers left and missed day | 100% + lock extension |
+
+## Yield Split Policy
+
+At harvest, gross yield is partitioned into:
+
+1. user-eligible yield (converted to Ichor when Brewer is active)
+2. platform fee (10-20%)
+3. community pot share (penalties/forfeitures)
+
+## Community Pot Distribution
+
+- Pot accumulates redirected yield.
+- Distribution cadence: monthly.
+- Eligibility: active streakers.
+- Weighting inputs: streak length and locked deposit size.
+
+## Invariants
+
+1. Fuel and Ichor remain internal counters only.
+2. No secondary market exists for Fuel/Ichor.
+3. Principal and locked SKR are not consumed by penalty flow.
+4. Per-course economics are isolated across multiple simultaneous locks.

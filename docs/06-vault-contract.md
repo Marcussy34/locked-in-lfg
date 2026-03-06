@@ -1,66 +1,212 @@
-# Custom Vault Contract with Yield
+# LockVault Program Spec (v3.0)
 
-## What This Is
+## Scope
 
-The core on-chain program (smart contract) that holds user deposits, manages lockup periods, distributes yield, and enforces penalties. It contains two pots: a community pot (funded by penalized yield, distributed to active users) and an operational runway pot (platform revenue for upkeep and development).
+`LockVault` is the core custody and per-course state program.
+It owns lock lifecycle, principal/SKR custody, and Fuel/Ichor counter state.
 
-## Current State
+Companion programs in the same on-chain stack:
 
-No on-chain program exists yet. The vault logic is entirely mocked in local Zustand stores. The `yieldStore.ts` tracks locked amounts and yield calculations locally. The `src/services/solana/` directory is empty and waiting for implementation.
+- `YieldSplitter` for harvest partitioning and Ichor credit logic
+- `CommunityPot` for redirected-yield accounting and distribution settlement
 
-## How It Should Work
+## Responsibilities
 
-### Deposit and Locking
-1. User selects a course and chooses how much USDC to lock.
-2. The app builds a transaction that transfers USDC from the user's wallet into a vault PDA (Program Derived Address) controlled by the program.
-3. The program creates a user vault account (PDA) that stores: locked amount, lock start date, lock end date, yield accrued, penalty history.
-4. The USDC is now locked — the user cannot withdraw it until the lock period ends.
+1. Lock stablecoin principal and optional SKR in one course lock.
+2. Enforce lock duration and extension policy.
+3. Persist per-course game/economy counters.
+4. Authorize unlock/resurface only when timer conditions are met.
+5. Support atomic Ichor redemption settlement.
 
-### Yield Distribution
-1. Yield accrues daily based on the user's locked amount and the current APY.
-2. A backend crank (or on-chain automation like Clockwork) periodically runs to calculate and credit yield.
-3. Credited yield goes into the user's claimable balance within the vault.
-4. Users can claim their accrued yield at any time (or it auto-claims at lock expiry).
+## Canonical Instructions
 
-### Two Pots
+### `lock_funds(usdc_or_usdt_amount, skr_amount, lock_duration_days, course_id)`
 
-**Community Pot:**
-- Funded by penalized yield from users who miss streaks or use savers.
-- Distributed monthly to active streak holders, weighted by (streak length × deposit size).
-- Acts as a reward pool for consistent users — the penalty from one user becomes the bonus for another.
+Effects:
 
-**Operational Runway Pot:**
-- Funded by a platform fee (percentage of all yield, e.g., 10–20%).
-- Used for platform development, infrastructure costs, and operational expenses.
-- This is the business model — the platform takes a cut of yield to sustain itself.
+- transfers stablecoin from user ATA to vault ATA
+- transfers SKR to vault ATA when `skr_amount > 0`
+- derives and initializes per-course `LockAccount`
+- snapshots `skr_tier`
+- sets initial state:
+  - `fuel_counter = 0`
+  - `ichor_counter = 0`
+  - `savers_remaining = 0` during gauntlet
+  - `gauntlet_complete = false`
 
-### Extend Lockup Period
-- Users can choose to extend their lockup period beyond the original commitment.
-- Extending resets or extends the unlock date.
-- This may come with benefits: higher APY, bonus Fuel, or leaderboard multipliers.
-- Also used as a penalty mechanism: when a user breaks their streak with no savers left, the lockup is automatically extended.
+Validation:
 
-## Where Solana Fits In
+- supported stablecoin mint only
+- lock duration in allowed set (`30`, `60`, `90`)
+- one active lock per `(owner, course_id)` key
 
-This is the most Solana-heavy feature. The vault is an Anchor program deployed on Solana.
+### `apply_verified_completion(completion_event_id, completion_day, reward_units)`
 
-- **PDAs (Program Derived Addresses):** Each user's vault is a PDA derived from the program ID and the user's wallet address. The community pot and operational pot are also PDAs.
-- **SPL Token Integration:** The program interacts with the SPL Token program to transfer USDC from user wallets into vault PDAs and to distribute yield.
-- **Account Structure:** The program manages several account types: UserVault (per user), CommunityPot (global), OperationalPot (global), and ProgramConfig (global settings like APY, fee percentage).
-- **Instructions:** The program exposes instructions for: deposit, withdraw (after lock expiry), claim yield, extend lockup, update streak status (called by backend), distribute community pot.
-- **Security:** The program must validate that only authorized parties can trigger yield distribution and streak updates. Users can only interact with their own vaults.
+Authorized caller: backend/scheduler signer set.
 
-## Key Considerations
+Effects:
 
-- The yield source is critical: where does the USDC for yield come from? If it's from a DeFi strategy (lending, staking), the vault needs to integrate with that protocol. If it's subsidized, there needs to be a treasury.
-- Time-based calculations on Solana use `Clock::get()` for the current Unix timestamp. Lock periods and yield accrual are calculated from this.
-- Community pot distribution needs a fair algorithm — streak length × deposit size is the current plan, but this heavily favors large depositors.
-- The program should be upgradeable initially (Anchor's default) to allow bug fixes and parameter adjustments. Can be made immutable later.
-- Gas costs: each interaction is a Solana transaction. Batching yield distributions for multiple users in one transaction saves costs.
-- Consider rent exemption — vault PDAs need enough SOL to be rent-exempt.
+- validates idempotency (`completion_event_id`)
+- updates streak/gauntlet progression
+- credits Fuel within cap rules when eligible
+- drives saver recovery when applicable
 
-## Related Files
+### `consume_daily_fuel(cycle_id)`
 
-- `src/services/solana/` — empty, where vault service integration should live
-- `src/stores/yieldStore.ts` — current mocked yield logic
-- `src/screens/onboarding/DepositScreen.tsx` — deposit UI (currently mocked)
+Authorized caller: scheduler signer set.
+
+Effects:
+
+- idempotently consumes `1` Fuel per 24h cycle when available
+- updates brewer active/inactive derivation state
+
+### `consume_saver_or_apply_full_consequence(miss_event_id)`
+
+Authorized caller: scheduler signer set.
+
+Effects:
+
+- consumes saver and updates penalty tier when saver exists
+- otherwise applies full consequence:
+  - sets redirect to 100%
+  - extends lock by configured amount
+
+### `redeem_ichor(ichor_amount)`
+
+Authorized caller: lock owner.
+
+Preconditions:
+
+- gauntlet complete
+- `ichor_amount > 0`
+- `ichor_amount <= ichor_counter`
+
+Effects:
+
+- computes quote from conversion tier
+- debits `ichor_counter`
+- transfers stablecoin out from redemption/yield pool
+- emits redemption event
+
+### `unlock_funds()`
+
+Authorized caller: lock owner.
+
+Preconditions:
+
+- `now >= lock_end_ts` including extensions
+- lock status is unlockable
+
+Effects:
+
+- returns principal stablecoin in full
+- returns locked SKR in full
+- handles final residual yield settlement per policy
+- marks lock closed and releases rent where applicable
+
+## Account Topology
+
+Per course lock PDAs:
+
+- `LockAccount`
+- stablecoin vault ATA (program-owned authority)
+- SKR vault ATA (program-owned authority, optional)
+
+Global PDAs:
+
+- `ProtocolConfig`
+- authorized signer registry
+- idempotency/event receipt records
+
+## Access Control
+
+User-signed only:
+
+- `lock_funds`
+- `redeem_ichor`
+- `unlock_funds`
+- voluntary extension (if enabled as user action)
+
+Authorized worker only:
+
+- verified completion application
+- daily cycle burns
+- missed-day consequence application
+
+Admin/governance only:
+
+- protocol parameters
+- signer registry
+- emergency pause controls
+
+## Time Source
+
+Program time logic uses Solana clock sysvar unix timestamp.
+No client clock is trusted for settlement-critical decisions.
+
+## Safety Invariants
+
+1. Principal cannot be redirected to community pot via saver penalties.
+2. SKR cannot be spent by reward/penalty paths.
+3. Counter updates use checked arithmetic and bounded ranges.
+4. Every worker-driven mutation is idempotent.
+5. Lock extension can only increase lock end time.
+
+## Events (Required)
+
+- `LockCreated`
+- `FuelCredited`
+- `FuelBurned`
+- `SaverConsumed`
+- `FullConsequenceApplied`
+- `IchorRedeemed`
+- `LockUnlocked`
+
+Events are used for analytics, indexers, and reconciliation.
+
+## Companion Program Interfaces
+
+### `YieldSplitter` (required interface contract)
+
+Responsibilities:
+
+1. receive realized yield from strategy adapters
+2. split yield into user share, platform fee, and community redirect share
+3. apply saver penalty tier and SKR boost logic
+4. increment `LockAccount.ichor_counter` and `ichor_lifetime_total` only when Brewer is active
+
+Canonical instruction surface:
+
+- `harvest_and_split(harvest_id, lock_account, gross_yield_amount)`
+- `apply_harvest_result(lock_account, split_result)` (when two-step execution is needed)
+
+Required guards:
+
+- idempotent `harvest_id`
+- only authorized harvester/worker signers
+- checked arithmetic on split outputs
+
+### `CommunityPot` (required interface contract)
+
+Responsibilities:
+
+1. accumulate redirected yield from saver penalties and full-consequence events
+2. maintain monthly distribution windows
+3. settle distributions to eligible active streakers by weighting policy
+
+Canonical instruction surface:
+
+- `record_redirect(redirect_event_id, amount)` (or equivalent CPI entrypoint)
+- `close_distribution_window(window_id)`
+- `distribute_window(window_id, recipient_batch)`
+
+Distribution weighting inputs:
+
+- active streak length
+- locked deposit size
+
+Required guards:
+
+- idempotent window/event keys
+- deterministic snapshot cutoffs per window
+- no principal vault funds used for pot settlement

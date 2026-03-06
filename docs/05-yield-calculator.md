@@ -1,49 +1,90 @@
-# Yield Calculator
+# Yield Calculation and Display Spec (v3.0)
 
-## What This Is
+## Scope
 
-A component that calculates and displays how much yield (in USDC) a user is earning on their locked deposit. It shows real-time accrual, projected earnings, and the impact of penalties from missed streaks.
+This spec defines the canonical yield math shown to users and the on-chain accounting source of truth.
 
-## Current State
+Display values are projections unless backed by harvested on-chain data.
+Settlement is determined by on-chain program state.
 
-The yield store (`yieldStore.ts`) has basic calculation logic: daily yield = (locked amount × APY) / 365. It tracks total accrued yield, forfeited yield, and whether yield is currently active (Flame must be lit). The default APY is 8%. Penalty tiers exist (10%, 20%, 20%, 100% redirect) but aren't connected to real on-chain state.
+## Inputs
 
-## How It Should Work
+Per course lock:
 
-1. User deposits and locks USDC into the vault contract.
-2. Yield begins accruing immediately based on the locked amount and the current APY.
-3. The yield calculator shows:
-   - Daily yield rate (how much they earn per day)
-   - Total accrued yield so far
-   - Projected yield for the remaining lock period
-   - Any penalties applied (yield redirected to community pot due to saver usage)
-4. Yield only accrues while the Flame is active (LIT or BURNING state). If the Flame goes COLD, accrual pauses.
-5. When streaks are broken or savers are used, a percentage of yield is redirected to the community pot.
+- `principal_amount`
+- lock start/end timestamps
+- realized strategy yield from Kamino/Marginfi
+- `savers_remaining` and active penalty tier
+- `skr_tier`
+- Brewer active status (`gauntlet_complete && fuel_counter > 0`)
 
-### Penalty Escalation
-- 1st saver used: 10% of yield redirected to community pot
-- 2nd saver used: 20% redirected
-- 3rd saver used: 20% redirected
-- No savers left + miss a day: 100% yield redirected + lockup period extended
+Protocol inputs:
 
-## Where Solana Fits In
+- platform fee percentage (10-20%)
+- conversion tier table
 
-- The locked amount is stored on-chain in the vault program (PDA per user).
-- The yield calculation itself can be done off-chain (backend or client-side) based on the on-chain locked amount and timestamps.
-- Actual yield distribution happens on-chain — the vault program (or a crank/automation) periodically credits yield to the user's claimable balance.
-- Penalty enforcement should be on-chain to prevent manipulation — the program reads streak state and applies the correct redirect percentage.
-- The community pot is an on-chain account that receives redirected yield.
+## Harvest and Split Sequence
 
-## Key Considerations
+At each yield harvest interval:
 
-- APY source: where does the yield actually come from? Options include: platform treasury, DeFi strategies on locked deposits, or a fixed subsidy model. This affects whether APY is variable or fixed.
-- The calculator should clearly separate "earned yield" from "claimable yield" (yield you can actually withdraw).
-- Yield should be displayed in real-time with a ticking counter to create a dopamine effect — watching money grow.
-- Need to handle edge cases: what if APY changes mid-lockup? What if the user extends their lock?
-- The calculator is a display component — it reads state and does math. The actual yield logic lives in the vault contract and yield service.
+1. compute `gross_yield_harvested`
+2. apply platform fee
+3. apply saver penalty redirect share to community pot
+4. compute user share remainder
+5. if Brewer active, convert user share to Ichor counter increment
+6. if Brewer inactive, user share does not mint Ichor for that cycle
 
-## Related Files
+## Penalty Application
 
-- `src/stores/yieldStore.ts` — current yield tracking (mocked)
-- `src/types/yield.ts` — YieldData and PenaltyInfo types
-- `src/stores/streakStore.ts` — streak and saver state (determines penalties)
+Penalty is based on saver-consumption sequence.
+
+- first saver event: 10% redirect
+- second saver event: 20% redirect
+- third saver event: 20% redirect
+- no savers left miss: 100% redirect and lock extension
+
+## SKR Multiplier Application
+
+SKR boost applies to Ichor output for eligible user share:
+
+`ichor_output = base_ichor_from_user_share * skr_multiplier`
+
+Where `skr_multiplier` is one of:
+
+- `1.00`
+- `1.02`
+- `1.05`
+- `1.10`
+
+## UI Metrics
+
+Per course, UI should show:
+
+- gross yield accrued (historical)
+- redirected yield total (community penalties)
+- platform fee total
+- current Ichor balance (`ichor_counter`)
+- projected daily equivalent yield under current APY assumptions
+- active conversion tier and quote
+
+## Ichor Exchange Quote Logic
+
+Given requested `ichor_amount`:
+
+1. determine conversion tier from `ichor_lifetime_total`
+2. compute `usdc_out = ichor_amount / 1000 * tier_rate`
+3. enforce max redeemable `ichor_amount <= ichor_counter`
+4. execute atomic redeem (debit Ichor, release stablecoin)
+
+Ichor Exchange is available any time after gauntlet completion.
+
+## Timing and Interpolation
+
+Real yield may harvest at discrete intervals.
+UI may interpolate between harvest checkpoints for smooth display, but must label interpolated values as estimate.
+
+## Safety Rules
+
+1. Calculator display cannot be used as settlement authority.
+2. Any discrepancy resolves in favor of on-chain account state.
+3. Exchange preview must include exact tier rate used at quote time.

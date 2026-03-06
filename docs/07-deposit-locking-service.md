@@ -1,57 +1,95 @@
-# Deposit and Locking Service
+# Deposit and Locking Service Spec (v3.0)
 
-## What This Is
+## Scope
 
-The client-side service layer that handles depositing USDC into the vault contract and managing the lockup lifecycle. This is the bridge between the app's UI and the on-chain vault program.
+This service orchestrates user lock setup and lock lifecycle reads from the mobile client.
+It is the transaction builder/orchestration layer, not the settlement authority.
 
-## Current State
+## Required Inputs
 
-The deposit screen (`DepositScreen.tsx`) shows a hardcoded $100 USDC mock deposit. No actual transaction is built or sent. The `src/services/solana/` directory has placeholder files but no implementation. The yield store tracks a `lockedAmount` locally but it's not connected to any on-chain state.
+- connected wallet public key
+- selected course id
+- lock duration (`30 | 60 | 90` days)
+- principal amount (USDC/USDT)
+- optional SKR amount
 
-## How It Should Work
+## Canonical Deposit Flow
 
-### Deposit Flow
-1. User arrives at the deposit screen after selecting a course.
-2. The service reads the user's USDC balance from their wallet (SPL token account lookup).
-3. User enters the amount they want to lock (must meet a minimum deposit threshold).
-4. The service shows a yield projection: estimated earnings over the lock period at current APY.
-5. User confirms the deposit.
-6. The service builds an Anchor transaction that:
-   - Transfers USDC from the user's wallet to the vault PDA.
-   - Initializes the user's vault account with: locked amount, lock start date, lock end date.
-7. The transaction is sent to the user's wallet for signing.
-8. On confirmation, the app updates local state and navigates to the gauntlet.
+1. fetch wallet token balances (stablecoin and SKR)
+2. validate amount, mint support, and minimums
+3. derive required accounts:
+   - lock PDA
+   - user ATAs
+   - vault ATAs
+4. build transaction for `lock_funds(...)`
+5. request wallet signature
+6. submit and confirm transaction
+7. persist lock reference in app state
+8. route user to gauntlet flow
 
-### Lock Management
-- The service can query the user's vault account to get current lock status: locked amount, time remaining, yield accrued, penalty history.
-- It handles the "extend lockup" action — building and sending the extend transaction.
-- It handles early withdrawal attempts — the vault program may reject these or apply penalties.
+## Single-Transaction Requirement
 
-### Balance Checking
-- Read the user's USDC balance before deposit (to validate they have enough).
-- Read the user's Fuel balance from the backend ledger service.
-- Read the vault state for locked amount and claimable yield.
+User principal and optional SKR lock must execute atomically in one transaction path for lock creation.
+Partial lock creation is not permitted.
 
-## Where Solana Fits In
+## Lock State Read Model
 
-- **RPC Connection:** The service needs a Solana RPC endpoint (devnet for testing, mainnet-beta for production) to read account data and send transactions.
-- **Anchor Client:** Uses the Anchor TypeScript client to build typed instructions for the vault program. The program's IDL (Interface Definition Language) defines available instructions and account structures.
-- **Transaction Building:** Each deposit is a Solana transaction containing: the vault program's deposit instruction, SPL Token transfer instruction, and any necessary account references.
-- **Wallet Signing:** The Mobile Wallet Adapter handles transaction signing — the service builds the transaction, sends it to the wallet app for signing, then submits it to the network.
-- **Confirmation:** After submitting, the service waits for transaction confirmation (using `confirmTransaction` or commitment level checks).
+Service must expose per-course lock reads:
 
-## Key Considerations
+- principal amount and mint
+- lock start/end timestamps
+- extension total
+- saver state
+- Fuel counter
+- Ichor counter
+- SKR locked amount and snapshot tier
+- unlock eligibility
 
-- Need environment configuration: RPC endpoint URL, vault program ID, USDC mint address, and backend Fuel service URL/keys. These should be in environment variables.
-- Handle transaction failures gracefully: insufficient balance, network errors, user rejects signing, transaction timeout.
-- Consider transaction fees — the user pays SOL for gas. Make sure they have enough SOL in their wallet.
-- The deposit screen should clearly show: amount to lock, lock duration, projected yield, unlock date, and any penalties for breaking the streak.
-- Support for both USDC and USDT deposits, or pick one to simplify.
-- The service should cache vault state locally (Zustand) and sync with on-chain state periodically to avoid excessive RPC calls.
+## Extension Handling
 
-## Related Files
+Two extension types:
 
-- `src/screens/onboarding/DepositScreen.tsx` — deposit UI
-- `src/services/solana/` — where this service lives
-- `src/stores/yieldStore.ts` — local yield/lock tracking
-- `src/stores/userStore.ts` — user wallet address
+1. automatic extension (penalty path)
+2. optional user-initiated extension (if enabled by product policy)
+
+Both must use explicit on-chain instruction paths and event logs.
+
+## Resurface Flow
+
+When lock is unlockable:
+
+1. build and sign `unlock_funds`
+2. confirm return of principal stablecoin
+3. confirm return of locked SKR
+4. refresh all course lock state
+
+## Failure Handling
+
+Must handle and classify:
+
+- user rejected signing
+- insufficient token balance
+- insufficient SOL for fees
+- stale blockhash / transaction expiry
+- RPC timeout or confirmation failure
+- program-level validation errors
+
+## Environment Configuration
+
+Client/service config must include:
+
+- cluster + RPC endpoint
+- program IDs (`LockVault`, `YieldSplitter`, `CommunityPot`)
+- supported stablecoin mint addresses
+- SKR mint address
+- compute budget and priority fee policy
+
+## Non-goals
+
+This layer does not:
+
+- compute final reward settlement
+- decide penalty policy
+- trust local clocks for unlockability
+
+Those concerns remain in on-chain programs and backend schedulers.

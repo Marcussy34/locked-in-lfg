@@ -1,58 +1,94 @@
-# Timer and Yield Product
+# Timer, Brewer, and Yield Product State Machine (v3.0)
 
-## What This Is
+## Scope
 
-The user-facing yield product experience — a combination of the lockup timer (countdown to unlock), real-time yield display, and the ability to extend the lockup period. This is "the same as the OG one" (the original locked-in concept) plus the new extend lockup feature.
+This spec defines user-visible lifecycle behavior for lock timers, gauntlet progression, brewer activity, and extension outcomes.
 
-## Current State
+## Per-course Independence
 
-The yield store tracks locked amount, APY (8% default), and accrued yield locally. The profile screen shows wallet address, locked amount, and yield earned. There's no countdown timer, no real-time ticking yield display, and no extend lockup functionality.
+Each active course has isolated state:
 
-## How It Should Work
+- lock timer
+- gauntlet status
+- saver inventory
+- Fuel counter
+- Brewer cycle
+- Ichor accumulation
+- extension total
 
-### The Timer
-1. Shows a countdown to the user's unlock date (when their locked USDC becomes withdrawable).
-2. Displays days, hours, minutes remaining in the lock period.
-3. The timer is prominent — visible on the profile screen and potentially in the 3D hub (on the character or a clock object).
-4. When the timer reaches zero, the user can withdraw their principal plus accrued yield.
+No state is shared across courses.
 
-### The Yield Display
-1. A real-time ticking counter showing yield accruing in USDC.
-2. Updates every second (or visually interpolates between actual calculation intervals).
-3. Shows: current daily rate, total accrued, projected total at unlock, and any penalties applied.
-4. The ticking creates a satisfying "money growing" feeling — a key motivator to keep the Flame alive.
+## Lifecycle Phases
 
-### Extend Lockup Period
-1. Users can voluntarily extend their lockup beyond the original commitment date.
-2. Extending means: new unlock date is pushed further into the future.
-3. Benefits of extending could include: slightly higher APY, bonus Fuel, leaderboard score multiplier, or cosmetic rewards.
-4. Extending is also used as a penalty: when a user exhausts all savers and misses a day, the lockup is automatically extended (e.g., by 7 days).
-5. The user should see a clear comparison: current unlock date vs. new unlock date, and what benefits the extension provides.
+### Phase 1: Lock Start
 
-### Penalty-Triggered Extension
-- When all 3 savers are used and the user misses another day: streak breaks.
-- Consequence: 100% yield is redirected to community pot AND lockup period extends.
-- The extension length could be fixed (e.g., +7 days) or proportional to the severity.
-- The user is notified immediately and sees their timer reset with the new, later unlock date.
+- lock timestamp starts at `lock_funds` confirmation
+- countdown timer begins immediately
+- gauntlet is active (`Day 1`)
 
-## Where Solana Fits In
+### Phase 2: Gauntlet (Day 1-7)
 
-- The lock end date is stored on-chain in the user's vault PDA account. The timer reads this value.
-- Extending the lockup is an on-chain transaction — the user signs a transaction that updates their vault's lock end date.
-- Penalty-triggered extensions are initiated by the backend (authorized by the program to update vault state when streak conditions are met).
-- The yield display reads from the on-chain vault state (locked amount, lock start, APY) and calculates accrual client-side for real-time display.
-- Actual yield credits happen periodically on-chain (via crank), but the display interpolates between these for smooth UX.
+- no Ichor production
+- no saver usage
+- high consequence framing and disclosures
 
-## Key Considerations
+Gauntlet completion condition:
 
-- The timer and yield display are primarily UI/UX features — they read on-chain state and present it attractively.
-- The extend lockup feature needs clear UX: what are the benefits? Is it voluntary or forced? What does the user gain?
-- Penalty extensions could feel punishing. The messaging should frame it as "your deposit is still safe, you just need more time to prove commitment" rather than "you're being penalized."
-- Consider minimum and maximum extension periods (e.g., extend by at least 7 days, no more than 90 days total lockup).
-- The ticking yield counter should be visually prominent and satisfying — this is one of the main dopamine drivers.
+- seven required daily completions accepted by verification pipeline
 
-## Related Files
+### Phase 3: Post-gauntlet Activation (Day 8+)
 
-- `src/stores/yieldStore.ts` — yield calculation logic
-- `src/screens/main/ProfileScreen.tsx` — shows wallet and yield info
-- `src/stores/streakStore.ts` — streak/saver state that triggers penalties
+On Day 8 unlock event:
+
+- saver inventory is set to max (3)
+- Brewer is allowed to run when Fuel is available
+- Ichor production via yield harvesting becomes eligible
+- Ichor Exchange becomes available
+
+### Phase 4: Recovery and Consequences
+
+If a day is missed:
+
+- saver is consumed when available
+- penalty tier advances (10%, then 20%, then 20%)
+- saver recovery mode can activate
+- Fuel earning pauses in recovery mode until saver inventory is full again
+
+If no savers remain and another miss occurs:
+
+- 100% yield redirection
+- lock extension applied
+
+## Timer Rules
+
+Unlock timer is based on:
+
+`effective_unlock_ts = base_lock_end_ts + extension_seconds_total`
+
+User can resurface only when `now >= effective_unlock_ts`.
+
+## Brewer Cycle Rules
+
+- burn rate: `1 Fuel / 24h`
+- Brewer active condition: `gauntlet_complete && fuel_counter > 0`
+- if Fuel reaches zero, Brewer stops until Fuel is earned again
+
+## Display Requirements
+
+Per course UI must show:
+
+- remaining lock time
+- extension added so far
+- gauntlet day/progress or completion state
+- savers remaining (0..3)
+- Fuel balance and next burn checkpoint
+- current Ichor balance
+- current penalty redirect state
+
+## Messaging Requirements
+
+Penalty messaging must be explicit:
+
+- principal remains safe
+- consequence applies to yield and time, not principal seizure
+- extension reason and duration are shown in history/audit view

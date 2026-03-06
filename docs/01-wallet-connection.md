@@ -1,46 +1,83 @@
-# Wallet Connection (Onboarding)
+# Wallet Connection and Identity (v3.0)
 
-## What This Is
+## Scope
 
-The entry point to the app. Users connect a Solana wallet (Phantom, Solflare, or similar) to authenticate and start their journey. No email, no password — wallet-first, crypto-native onboarding.
+Wallet connection is the only user identity layer.
+No email/password auth is used for core flows.
 
-## Current State
+This module must support:
 
-Implemented with MWA `transact()` integration on native flows, with real connection currently enabled on Android native builds. Web platform uses a mock wallet for development. The flow goes: connect wallet → course selection → deposit → gauntlet. Auto-reconnect on app launch uses cached MWA auth tokens persisted in AsyncStorage. Cluster: devnet.
+- wallet session establishment
+- session reuse (reauthorize)
+- challenge signing for backend API auth
+- transaction signing for on-chain instructions
 
-As of March 5, 2026, this repo only enables real MWA connection on Android native builds where the `SolanaMobileWalletAdapter` native module is present. On Expo Go or iOS runtime, wallet connect now exits early with a clear unsupported-runtime error instead of crashing.
+## Supported Wallet Paths
 
-## How It Should Work
+1. Mobile native: Solana Mobile Wallet Adapter (MWA).
+2. Web runtime: wallet-standard compatible injected providers.
 
-1. User opens the app for the first time and sees the wallet connect screen.
-2. They tap "Connect Wallet" which triggers the Solana Mobile Wallet Adapter protocol.
-3. This opens their installed wallet app (Phantom, Solflare, etc.) for approval.
-4. On approval, the app receives the user's public key (wallet address).
-5. The public key becomes their identity — stored locally and used for all on-chain interactions.
-6. If they've connected before, the app should auto-reconnect on launch using the cached session.
+Primary user wallets:
 
-## Where Solana Fits In
+- Phantom
+- Solflare
+- compatible Solana wallets supporting message signing
 
-- **Solana Mobile Wallet Adapter** handles the connection flow on native mobile (currently enabled for Android in this setup).
-- **Wallet Standard** provides a unified interface for discovering and connecting wallets.
-- The connected wallet is needed for signing deposit transactions, reading USDC balances, and interacting with the vault program. Fuel is tracked by the backend service.
-- On web, the standard Solana wallet-adapter libraries handle connection via browser extension wallets.
+## Canonical Flow
 
-## Key Considerations
+1. User taps `Connect Wallet`.
+2. App requests wallet authorization.
+3. App stores:
+   - wallet public key
+   - wallet auth token/session handle
+4. App requests backend challenge (`/v1/auth/challenge`).
+5. Wallet signs challenge message.
+6. App verifies challenge (`/v1/auth/verify`) and receives access/refresh tokens.
+7. User proceeds to course selection and lock flow.
 
-- The wallet address is the user's identity. No separate auth system needed.
-- Need to handle disconnection gracefully (clear local state, return to auth screen).
-- Should support session persistence so users don't have to reconnect every app open.
-- Expo Go and iOS runtime do not include the Android-only native MWA module in this setup. Use a custom Android dev build for real wallet flows.
-- Consider a "seedless wallet" option in the future for non-crypto-native users who don't have a wallet yet.
-- Error handling for: no wallet installed, user rejects connection, network issues.
+## Session Management
 
-## Related Files
+Required behavior:
 
-- `src/screens/auth/WalletConnectScreen.tsx` — connect screen with MWA integration and error handling
-- `src/stores/userStore.ts` — stores wallet address, auth token, and onboarding phase
-- `src/services/solana/walletService.ts` — MWA wrapper: connectWallet, reconnectWallet, disconnectWallet
-- `src/services/solana/connection.ts` — shared devnet Connection instance
-- `src/services/solana/index.ts` — barrel exports
-- `App.tsx` — auto-reconnect hook on app launch
-- `src/components/wallet/` — empty, for future wallet UI components
+- cache wallet auth token for silent reauthorization
+- cache backend access/refresh token pair
+- rotate backend access token using refresh endpoint
+- clear all auth state on disconnect/deauth
+- fail closed if signature verification fails
+
+## Security Requirements
+
+1. Wallet address is authoritative identity key.
+2. Challenge must be nonce-based and short-lived.
+3. Challenge is single-use and cannot be replayed.
+4. Signature must verify against the provided wallet address using Ed25519.
+5. Authorization headers are redacted in logs.
+
+## Transaction Signing Responsibilities
+
+The same connected wallet must sign:
+
+- `lock_funds` (stablecoin + optional SKR lock)
+- voluntary lock extension instructions
+- Ichor redemption instructions
+- resurface/unlock transaction
+
+## Integration Boundary With On-chain Programs
+
+Wallet module does not embed business logic.
+It only provides:
+
+- active signer identity (public key)
+- signed transaction payloads
+- signed backend challenge payloads
+
+Business rules remain in:
+
+- on-chain programs (`LockVault`, `YieldSplitter`, `CommunityPot`)
+- backend lesson verification and scheduling workers
+
+## Environment and Network
+
+- Cluster selection is environment-configured (`devnet` for development, `mainnet-beta` for production).
+- RPC provider should be reliable and monitored.
+- Wallet runtime compatibility checks must fail with explicit user-facing errors.

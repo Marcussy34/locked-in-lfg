@@ -1,58 +1,68 @@
-# Leaderboard
+# Leaderboard and Community Pot View Spec (v3.0)
 
-## What This Is
+## Scope
 
-A ranked display of users competing on learning consistency. Shows streak duration, streak status (ongoing or broken), and supports filtering by current course or all courses. Accessed in the 3D dungeon by tapping the noticeboard object.
+Leaderboard is an off-chain ranking and analytics view backed by verified activity and on-chain financial data.
+It does not settle funds.
 
-## Current State
+## Core Ranking Dimensions
 
-The leaderboard screen exists but shows a "coming soon" placeholder. The leaderboard store is referenced in the README but not fully implemented. No backend data source exists yet.
+Primary ranking dimension:
 
-## How It Should Work
+- active streak length
 
-### Core Rankings
-1. Users are ranked primarily by streak duration (consecutive days of completed lessons).
-2. Each leaderboard entry shows: rank, user display name (or truncated wallet address), streak count, streak status (ongoing/broken), and optionally their deposit size or yield earned.
-3. The ranking algorithm weighs: streak duration as the primary factor. Secondary factors could include total lessons completed, Fuel earned, or deposit size.
+Secondary tie-break dimensions:
 
-### Streak Status
-- **Ongoing:** The user is currently on an active streak (completed today or within the allowed window).
-- **Broken:** The user's streak has been broken (missed a day with no savers left). They still appear on the leaderboard with their last streak count but are marked as broken.
-- The visual difference should be clear — ongoing streaks glow or have an active indicator, broken streaks are dimmed or crossed out.
+- locked principal size
+- verified completion consistency
+- recent activity freshness
 
-### Filters
-1. **By Course:** Filter the leaderboard to show only users taking the same course as you (e.g., "Solana Fundamentals" leaderboard). This creates smaller, more relevant competition pools.
-2. **All Courses:** Show global rankings across all courses. The default view.
-3. **Friends:** If a friends system exists, filter to show only friends.
-4. **Time Period:** Could filter by: all time, this month, this week.
+## Required Entry Fields
 
-### Community Pot Display
-- The leaderboard screen also shows the community pot status: total pot value, next distribution date, and the user's projected share based on their current rank/streak/deposit.
+Each leaderboard row should include:
 
-### Betting on Others (Low Priority / Explore Later)
-- The idea of letting users bet on whether another user will maintain their streak.
-- This is a social/gamification layer: "I bet user X will keep their 30-day streak going."
-- If the streak continues, the bettor wins. If it breaks, they lose.
-- This is complex (needs escrow, resolution logic, potential regulatory issues) and should be explored last if at all.
+- rank
+- display identity (alias or truncated wallet)
+- streak length
+- streak status (`active` or `broken`)
+- active course count
+- locked principal aggregate (or privacy-safe band)
+- projected community pot share
 
-## Where Solana Fits In
+## Community Pot Integration
 
-- Leaderboard data can be served from a backend database (off-chain) for speed and flexibility. Querying on-chain accounts for rankings would be slow and expensive.
-- However, the underlying data (streak counts, deposit sizes, completion records) can be verified on-chain for integrity. The backend aggregates and caches this.
-- If betting is implemented, it would need on-chain escrow — users lock SOL or USDC into a bet PDA, and resolution logic releases funds based on streak outcomes. This is essentially a prediction market and is a significant Solana program in itself.
-- Community pot distribution is on-chain (vault program handles it), and the leaderboard displays the pot status by reading on-chain state.
+Leaderboard must show:
 
-## Key Considerations
+- current community pot size
+- next distribution timestamp
+- user projection using distribution weighting policy
 
-- Leaderboard needs a backend API — fetching and ranking all users' streak data is a server-side operation.
-- Consider privacy: some users may not want their deposit size publicly visible. Make deposit display opt-in or show ranges instead of exact amounts.
-- The "betting on others" feature has regulatory implications (gambling/prediction markets). Research jurisdiction requirements before implementing. This should be the last thing built, if at all.
-- Leaderboard should update in near-real-time but doesn't need to be instant — a few minutes of lag is acceptable.
-- Pagination for large user bases — don't try to render thousands of entries at once.
-- Show the current user's rank pinned at the bottom of the screen so they can always see where they stand.
+Distribution policy basis:
 
-## Related Files
+- eligible users with active streaks
+- weighting by streak length and deposit size
 
-- `src/screens/main/LeaderboardScreen.tsx` — leaderboard UI (currently placeholder)
-- `src/stores/streakStore.ts` — streak data that feeds rankings
-- `src/services/api/` — where leaderboard API service should live
+## Data Sources
+
+- on-chain: pot balances, lock balances, yield redirects
+- backend: streak snapshots, lesson verification history, ranking materialization
+
+Backend should maintain precomputed ranking snapshots for responsive mobile queries.
+
+## Refresh and Latency Targets
+
+- ranking refresh: near real-time batch cadence (for example every few minutes)
+- pot and projection refresh: on balance/index updates
+- user rank pinning: always show signed-in user rank even outside current page window
+
+## Privacy and Fairness
+
+1. support display-name or abbreviated wallet mode
+2. support hiding exact deposit amount in favor of ranges if required
+3. provide transparent ranking formula documentation in app help
+
+## Explicit Out of Scope (v3.0)
+
+- peer betting on user streak outcomes
+- prediction-market style side pools
+- any gambling-like escrow features
