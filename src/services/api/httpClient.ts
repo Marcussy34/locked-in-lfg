@@ -1,4 +1,9 @@
-import { LESSON_API_BASE_URL, LESSON_API_TIMEOUT_MS } from './config';
+import {
+  getLessonApiBaseUrl,
+  getLessonApiFallbackBaseUrls,
+  LESSON_API_TIMEOUT_MS,
+  setLessonApiBaseUrl,
+} from './config';
 import { ApiError } from './errors';
 
 interface RequestOptions {
@@ -13,20 +18,23 @@ interface ErrorPayload {
   code?: string;
 }
 
-function joinPath(path: string): string {
+function joinPath(path: string, baseUrl: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  if (!LESSON_API_BASE_URL) {
+  if (!baseUrl) {
     throw new Error('Missing EXPO_PUBLIC_LESSON_API_BASE_URL');
   }
-  return `${LESSON_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 export async function httpRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
+  const method = options.method ?? 'GET';
+  const startedAt = Date.now();
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LESSON_API_TIMEOUT_MS);
 
@@ -42,35 +50,119 @@ export async function httpRequest<T>(
     headers.Authorization = `Bearer ${options.token}`;
   }
 
+  const primaryBaseUrl = getLessonApiBaseUrl();
+  const candidateBaseUrls = path.startsWith('http://') || path.startsWith('https://')
+    ? ['']
+    : [primaryBaseUrl, ...getLessonApiFallbackBaseUrls(primaryBaseUrl)];
+
+  let lastError: unknown = null;
+
   try {
-    const response = await fetch(joinPath(path), {
-      method: options.method ?? 'GET',
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal ?? controller.signal,
-    });
+    for (let index = 0; index < candidateBaseUrls.length; index += 1) {
+      const baseUrl = candidateBaseUrls[index] ?? '';
+      const url = joinPath(path, baseUrl);
+      const isLastCandidate = index === candidateBaseUrls.length - 1;
 
-    const text = await response.text();
-    const data = text ? (JSON.parse(text) as unknown) : null;
+      if (__DEV__) {
+        console.info(`[lesson-api] -> ${method} ${url}`);
+      }
 
-    if (!response.ok) {
-      const errorPayload = (data ?? {}) as ErrorPayload;
-      throw new ApiError(
-        errorPayload.message ?? `Request failed with status ${response.status}`,
-        response.status,
-        errorPayload.code,
-      );
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          signal: options.signal ?? controller.signal,
+        });
+
+        const text = await response.text();
+        let data: unknown = null;
+        if (text) {
+          try {
+            data = JSON.parse(text) as unknown;
+          } catch {
+            data = text;
+          }
+        }
+
+        if (__DEV__) {
+          console.info(
+            `[lesson-api] <- ${response.status} ${method} ${url} (${Date.now() - startedAt}ms)`,
+          );
+        }
+
+        if (!response.ok) {
+          const errorPayload = (data ?? {}) as ErrorPayload;
+          throw new ApiError(
+            errorPayload.message ??
+              (typeof data === 'string' && data.trim().length > 0
+                ? data
+                : `Request failed with status ${response.status}`),
+            response.status,
+            errorPayload.code,
+          );
+        }
+
+        if (!path.startsWith('http://') && !path.startsWith('https://') && baseUrl) {
+          if (baseUrl !== primaryBaseUrl) {
+            setLessonApiBaseUrl(baseUrl);
+            if (__DEV__) {
+              console.info(`[lesson-api] switched active baseUrl=${baseUrl}`);
+            }
+          }
+        }
+
+        return data as T;
+      } catch (error) {
+        lastError = error;
+
+        if (error instanceof ApiError) {
+          if (__DEV__) {
+            console.warn(
+              `[lesson-api] !! ${method} ${url} -> ${error.status} ${error.code ?? ''} ${error.message}`,
+            );
+          }
+          throw error;
+        }
+
+        // Retry network failures across candidate hosts only for idempotent reads.
+        const shouldTryNextHost = method === 'GET' && !isLastCandidate;
+        if (shouldTryNextHost) {
+          if (__DEV__) {
+            console.warn(`[lesson-api] retry host after network error: ${url}`);
+          }
+          continue;
+        }
+
+        if (error instanceof Error && error.name === 'AbortError') {
+          if (__DEV__) {
+            console.warn(
+              `[lesson-api] !! ${method} ${url} -> timeout after ${LESSON_API_TIMEOUT_MS}ms`,
+            );
+          }
+          throw new ApiError('Request timed out', 408, 'REQUEST_TIMEOUT');
+        }
+
+        if (error instanceof Error) {
+          const message = `Network request failed (${method} ${url}): ${error.message}`;
+          if (__DEV__) {
+            console.warn(`[lesson-api] !! ${message}`);
+          }
+          throw new ApiError(message, 0, 'NETWORK_ERROR');
+        }
+
+        throw new ApiError(
+          `Network request failed (${method} ${url})`,
+          0,
+          'NETWORK_ERROR',
+        );
+      }
     }
 
-    return data as T;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
+    if (lastError instanceof ApiError) {
+      throw lastError;
     }
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiError('Request timed out', 408, 'REQUEST_TIMEOUT');
-    }
-    throw error;
+    throw new ApiError('Network request failed', 0, 'NETWORK_ERROR');
   } finally {
     clearTimeout(timeout);
   }

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { asyncStorageAdapter } from './storage';
 import { MOCK_COURSES, MOCK_LESSONS } from '@/data/mockCourses';
+import { hasRemoteLessonApi } from '@/services/api';
 import type {
   Course,
   CourseModule,
@@ -66,7 +67,7 @@ interface CourseStore {
   isEnrolled: (courseId: string) => boolean;
   getEnrolledCourses: () => Course[];
   initializeContent: (force?: boolean) => Promise<void>;
-  initializeMockData: () => void;
+  initializeMockData: (errorMessage?: string | null) => void;
   reset: () => void;
 }
 
@@ -412,12 +413,42 @@ export const useCourseStore = create<CourseStore>()(
 
       initializeContent: async (force = false) => {
         const state = get();
-        if (!force && (state.contentInitialized || state.contentLoading)) return;
+        if (state.contentLoading) {
+          if (__DEV__) {
+            console.info('[content-sync] skip: already loading');
+          }
+          return;
+        }
+
+        const remoteConfigured = hasRemoteLessonApi();
+        const needsRemoteUpgrade =
+          remoteConfigured &&
+          (state.contentReleaseId === 'local-mock-release' || !state.contentReleaseId);
+
+        if (!force && state.contentInitialized && !needsRemoteUpgrade) {
+          if (__DEV__) {
+            console.info(
+              `[content-sync] skip: initialized=true releaseId=${state.contentReleaseId ?? '(none)'} remoteConfigured=${remoteConfigured} needsRemoteUpgrade=${needsRemoteUpgrade}`,
+            );
+          }
+          return;
+        }
+
+        if (__DEV__) {
+          console.info(
+            `[content-sync] start: force=${force} releaseId=${state.contentReleaseId ?? '(none)'} remoteConfigured=${remoteConfigured} needsRemoteUpgrade=${needsRemoteUpgrade}`,
+          );
+        }
 
         set({ contentLoading: true, contentError: null });
 
         try {
           const snapshot = await loadHydratedContentSnapshot();
+          if (__DEV__) {
+            console.info(
+              `[content-sync] success: releaseId=${snapshot.releaseId} publishedAt=${snapshot.publishedAt}`,
+            );
+          }
           set({
             courses: snapshot.courses,
             modules: snapshot.modulesByCourse,
@@ -433,6 +464,9 @@ export const useCourseStore = create<CourseStore>()(
             error instanceof Error
               ? error.message
               : 'Unable to load lesson catalog';
+          if (__DEV__) {
+            console.warn(`[content-sync] error: ${message}`);
+          }
           set({
             contentLoading: false,
             contentError: message,
@@ -440,11 +474,11 @@ export const useCourseStore = create<CourseStore>()(
           });
 
           // Keep the app usable while backend wiring is in progress.
-          get().initializeMockData();
+          get().initializeMockData(message);
         }
       },
 
-      initializeMockData: () => {
+      initializeMockData: (errorMessage = null) => {
         const state = get();
         if (state.courses.length > 0) return;
         set({
@@ -453,7 +487,7 @@ export const useCourseStore = create<CourseStore>()(
           lessons: MOCK_LESSONS,
           contentReleaseId: 'local-mock-release',
           contentPublishedAt: new Date().toISOString(),
-          contentError: null,
+          contentError: errorMessage,
           contentInitialized: true,
         });
       },

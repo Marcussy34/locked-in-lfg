@@ -20,7 +20,9 @@ export function MainStack() {
   const initializeContent = useCourseStore((s) => s.initializeContent);
 
   useEffect(() => {
-    initializeContent().catch(() => {
+    // In dev, always re-fetch once when entering main flow so backend wiring
+    // issues are visible immediately in logs.
+    initializeContent(__DEV__).catch(() => {
       // Course store handles fallback and error state.
     });
   }, [initializeContent]);
