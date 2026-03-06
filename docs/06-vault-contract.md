@@ -11,7 +11,12 @@ Current implementation checkpoint:
 - `initialize_protocol` and canonical `lock_funds` are now implemented
 - `lock_funds` validates configured USDC + SKR mints, creates the lock PDA, creates stable/SKR vault ATAs, transfers funds atomically, and snapshots `skr_tier`
 - worker-only `apply_verified_completion`, `consume_daily_fuel`, and `consume_saver_or_apply_full_consequence` are implemented with receipt-PDA idempotency
+- backend now has a real verified-completion relay path:
+  - `POST /v1/internal/lock-vault/completions/publish`
+  - completion outbox rows move through `pending -> publishing -> published|failed`
+  - successful publish stores the devnet transaction signature on the event row
 - Rust tests now cover deposit snapshotting, SKR tier thresholds, Fuel credit, gauntlet unlock, saver recovery, and full-consequence extension logic
+- devnet inspection is now supported through `scripts/inspect-lock-vault.mjs`
 - token exit paths (`unlock_funds`, `redeem_ichor`) remain the next on-chain slice
 
 Companion programs in the same on-chain stack:

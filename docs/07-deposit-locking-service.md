@@ -9,8 +9,9 @@ Current implementation checkpoint:
 
 - on-chain `lock_funds` now exists under `programs/lock_vault`
 - the mobile app now builds a real `lock_funds` transaction from `src/screens/onboarding/DepositScreen.tsx`
-- the client derives lock/vault PDAs, fetches wallet token balances, and submits the transaction through MWA `signAndSendTransactions`
+- the client derives lock/vault PDAs, fetches wallet token balances, signs through MWA, and submits the raw transaction from the app for confirmation
 - the flow still depends on configured program/mint env vars and a deployed `LockVault` program on the selected cluster
+- live lock inspection is now available through `scripts/inspect-lock-vault.mjs`
 
 ## Required Inputs
 

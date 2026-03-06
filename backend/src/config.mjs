@@ -62,6 +62,26 @@ export const appConfig = {
   refreshTokenTtl: process.env.REFRESH_TOKEN_TTL ?? '30d',
   schedulerSecret: required('SCHEDULER_SECRET', 'dev-only-scheduler-secret'),
   missExtensionDays: optionalInt('MISS_EXTENSION_DAYS', 7),
+  solanaRpcUrl:
+    process.env.SOLANA_RPC_URL ??
+    process.env.EXPO_PUBLIC_SOLANA_RPC_URL ??
+    'https://api.devnet.solana.com',
+  lockVaultProgramId:
+    process.env.LOCK_VAULT_PROGRAM_ID ??
+    process.env.EXPO_PUBLIC_LOCK_VAULT_PROGRAM_ID ??
+    '',
+  lockVaultUsdcMint:
+    process.env.LOCK_VAULT_USDC_MINT ??
+    process.env.EXPO_PUBLIC_LOCK_VAULT_USDC_MINT ??
+    '',
+  lockVaultSkrMint:
+    process.env.LOCK_VAULT_SKR_MINT ??
+    process.env.EXPO_PUBLIC_LOCK_VAULT_SKR_MINT ??
+    '',
+  lockVaultWorkerPrivateKey:
+    process.env.LOCK_VAULT_WORKER_PRIVATE_KEY ??
+    process.env.DEPLOYER_PRIVATE_KEY ??
+    '',
   corsAllowedOrigins:
     configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins,
 };

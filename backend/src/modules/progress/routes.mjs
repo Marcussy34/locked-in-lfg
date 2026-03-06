@@ -7,6 +7,7 @@ import {
   getCourseRuntimeSnapshot,
   getCourseProgress,
   getModuleProgress,
+  publishVerifiedCompletionEvent,
   startLessonAttempt,
   submitLessonAttempt,
 } from './repository.mjs';
@@ -99,6 +100,15 @@ export async function progressRoutes(app) {
     }
 
     return consumeDailyFuel(walletAddress, courseId, cycleId, burnedAt);
+  });
+
+  app.post('/v1/internal/lock-vault/completions/publish', async (request) => {
+    requireSchedulerAuth(request);
+
+    const eventId = assertBodyField(request.body?.eventId, 'eventId');
+    const retryFailed = request.body?.retryFailed === true;
+
+    return publishVerifiedCompletionEvent(eventId, retryFailed);
   });
 
   app.post('/v1/internal/consequences/miss', async (request) => {

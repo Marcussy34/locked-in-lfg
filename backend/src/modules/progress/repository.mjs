@@ -2,9 +2,14 @@ import { badRequest, notFound } from '../../lib/errors.mjs';
 import { appConfig } from '../../config.mjs';
 import {
   hasDatabase,
+  query,
   queryAsWallet,
   withTransactionAsWallet,
 } from '../../lib/db.mjs';
+import {
+  hasLockVaultRelayConfig,
+  publishVerifiedCompletionToLockVault,
+} from '../../lib/lockVault.mjs';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -587,6 +592,141 @@ async function readVerifiedCompletionEvent(client, lessonAttemptId) {
   return result.rows[0] ?? null;
 }
 
+async function claimVerifiedCompletionEvent(eventId = null, retryFailed = false) {
+  const claimableStatuses = retryFailed ? ['pending', 'failed'] : ['pending'];
+  const selectionArgs = [claimableStatuses];
+  let result;
+
+  if (eventId) {
+    selectionArgs.push(eventId);
+    result = await query(
+      `
+        update lesson.verified_completion_events
+        set status = 'publishing',
+            last_error = null
+        where event_id = $2::uuid
+          and status = any($1::text[])
+        returning
+          event_id::text as "eventId",
+          wallet_address as "walletAddress",
+          course_id as "courseId",
+          completion_day::text as "completionDay",
+          reward_units as "rewardUnits",
+          status
+      `,
+      selectionArgs,
+    );
+  } else {
+    result = await query(
+      `
+        with next_event as (
+          select event_id
+          from lesson.verified_completion_events
+          where status = any($1::text[])
+          order by created_at asc
+          for update skip locked
+          limit 1
+        )
+        update lesson.verified_completion_events events
+        set status = 'publishing',
+            last_error = null
+        from next_event
+        where events.event_id = next_event.event_id
+        returning
+          events.event_id::text as "eventId",
+          events.wallet_address as "walletAddress",
+          events.course_id as "courseId",
+          events.completion_day::text as "completionDay",
+          events.reward_units as "rewardUnits",
+          events.status
+      `,
+      selectionArgs,
+    );
+  }
+
+  if (result.rowCount > 0) {
+    return {
+      event: result.rows[0],
+      reason: 'CLAIMED',
+    };
+  }
+
+  if (!eventId) {
+    return {
+      event: null,
+      reason: 'NO_PENDING_EVENT',
+    };
+  }
+
+  const current = await query(
+    `
+      select
+        event_id::text as "eventId",
+        status,
+        last_error as "lastError",
+        published_at as "publishedAt",
+        transaction_signature as "transactionSignature"
+      from lesson.verified_completion_events
+      where event_id = $1::uuid
+      limit 1
+    `,
+    [eventId],
+  );
+
+  if (current.rowCount === 0) {
+    return {
+      event: null,
+      reason: 'EVENT_NOT_FOUND',
+    };
+  }
+
+  const existing = current.rows[0];
+  if (existing.status === 'published') {
+    return {
+      event: existing,
+      reason: 'ALREADY_PUBLISHED',
+    };
+  }
+
+  if (existing.status === 'publishing') {
+    return {
+      event: existing,
+      reason: 'ALREADY_PUBLISHING',
+    };
+  }
+
+  return {
+    event: existing,
+    reason: 'RETRY_REQUIRED',
+  };
+}
+
+async function markVerifiedCompletionEventPublished(eventId, signature) {
+  await query(
+    `
+      update lesson.verified_completion_events
+      set status = 'published',
+          published_at = now(),
+          last_error = null,
+          transaction_signature = $2
+      where event_id = $1::uuid
+    `,
+    [eventId, signature],
+  );
+}
+
+async function markVerifiedCompletionEventFailed(eventId, error) {
+  await query(
+    `
+      update lesson.verified_completion_events
+      set status = 'failed',
+          last_error = $2
+      where event_id = $1::uuid
+    `,
+    [eventId, error],
+  );
+}
+
 export async function readCourseRuntimeState(client, walletAddress, courseId) {
   const state = await ensureCourseRuntimeState(client, walletAddress, courseId);
   const referenceDay =
@@ -637,6 +777,75 @@ export async function getCourseRuntimeSnapshot(walletAddress, courseId) {
   return withTransactionAsWallet(walletAddress, async (client) =>
     readCourseRuntimeState(client, walletAddress, courseId),
   );
+}
+
+export async function publishVerifiedCompletionEvent(
+  eventId = null,
+  retryFailed = false,
+) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasLockVaultRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'LOCK_VAULT_RELAY_DISABLED',
+    };
+  }
+
+  const claim = await claimVerifiedCompletionEvent(eventId, retryFailed);
+  if (!claim.event) {
+    return {
+      processed: false,
+      reason: claim.reason,
+    };
+  }
+
+  if (claim.reason !== 'CLAIMED') {
+    return {
+      processed: false,
+      reason: claim.reason,
+      event: claim.event,
+    };
+  }
+
+  try {
+    const publishResult = await publishVerifiedCompletionToLockVault(claim.event);
+    await markVerifiedCompletionEventPublished(
+      claim.event.eventId,
+      publishResult.signature,
+    );
+
+    return {
+      processed: true,
+      reason: 'PUBLISHED',
+      eventId: claim.event.eventId,
+      courseId: claim.event.courseId,
+      walletAddress: claim.event.walletAddress,
+      completionDay: claim.event.completionDay,
+      rewardUnits: claim.event.rewardUnits,
+      signature: publishResult.signature,
+      authority: publishResult.authority,
+      lockAccount: publishResult.lockAccount,
+      receiptAccount: publishResult.receiptAccount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await markVerifiedCompletionEventFailed(claim.event.eventId, message);
+
+    return {
+      processed: false,
+      reason: 'PUBLISH_FAILED',
+      eventId: claim.event.eventId,
+      courseId: claim.event.courseId,
+      walletAddress: claim.event.walletAddress,
+      error: message,
+    };
+  }
 }
 
 async function readFuelBurnReceipt(client, walletAddress, courseId, cycleId) {
