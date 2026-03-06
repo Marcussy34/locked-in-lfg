@@ -7,11 +7,36 @@ import { contentRoutes } from './modules/content/routes.mjs';
 import { authRoutes } from './modules/auth/routes.mjs';
 import { progressRoutes } from './modules/progress/routes.mjs';
 
+function buildLoggerConfig() {
+  const loggerConfig = {
+    level: appConfig.logLevel,
+    redact: {
+      paths: ['req.headers.authorization', 'req.headers.cookie'],
+      censor: '[REDACTED]',
+    },
+  };
+
+  // Pretty logs are easier to read in local terminal sessions.
+  if (appConfig.logPretty && process.stdout.isTTY) {
+    loggerConfig.transport = {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
+        ignore: 'pid,hostname',
+        singleLine: appConfig.logSingleLine,
+      },
+    };
+  }
+
+  return loggerConfig;
+}
+
 function buildServer() {
   const app = Fastify({
-    logger: {
-      level: appConfig.logLevel,
-    },
+    logger: buildLoggerConfig(),
+    // We emit our own concise request lifecycle logs below.
+    disableRequestLogging: true,
   });
 
   const corsAllowlist = new Set(appConfig.corsAllowedOrigins);
@@ -31,6 +56,30 @@ function buildServer() {
   });
 
   app.decorateRequest('auth', null);
+
+  app.addHook('onRequest', async (request) => {
+    request.log.info(
+      {
+        method: request.method,
+        url: request.url,
+        ip: request.ip,
+        origin: request.headers.origin ?? null,
+      },
+      'request.start',
+    );
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    request.log.info(
+      {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode,
+        durationMs: Number(reply.elapsedTime?.toFixed?.(2) ?? 0),
+      },
+      'request.end',
+    );
+  });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof HttpError) {

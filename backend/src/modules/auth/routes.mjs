@@ -4,6 +4,7 @@ import {
   signRefreshToken,
   verifyToken,
 } from '../../lib/jwt.mjs';
+import { verifySolanaChallengeSignature } from '../../lib/solanaAuth.mjs';
 import { consumeChallenge, createChallenge } from './state.mjs';
 
 function assertWalletAddress(value) {
@@ -52,10 +53,19 @@ export async function authRoutes(app) {
       throw unauthorized('Invalid or expired challenge', 'INVALID_CHALLENGE');
     }
 
-    // TODO: Replace this placeholder with real wallet signature verification
-    // using tweetnacl/ed25519 against challenge.message bytes.
-    if (signature.length < 16) {
-      throw unauthorized('Signature is too short', 'INVALID_SIGNATURE');
+    let signatureIsValid = false;
+    try {
+      signatureIsValid = verifySolanaChallengeSignature({
+        walletAddress,
+        message: challenge.message,
+        signature,
+      });
+    } catch (error) {
+      throw badRequest(error.message, 'INVALID_SIGNATURE_FORMAT');
+    }
+
+    if (!signatureIsValid) {
+      throw unauthorized('Signature verification failed', 'INVALID_SIGNATURE');
     }
 
     return buildSession(walletAddress);

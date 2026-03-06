@@ -36,6 +36,7 @@ cp .env.example .env
 - `JWT_SECRET` (required)
 - `DATABASE_URL` (optional for first boot; required for real data)
 - `CORS_ALLOWED_ORIGINS` (comma-separated browser origins, optional but recommended)
+- `LOG_PRETTY=true` (recommended in local dev for readable logs)
 
 4. Run API:
 
@@ -72,12 +73,13 @@ Server default: `http://localhost:3001`
 ## Important Starter Notes
 
 - If `DATABASE_URL` is missing, content/progress endpoints run in safe starter mode (empty reads, in-memory auth challenges).
-- `POST /v1/auth/verify` currently includes a placeholder signature check. Replace with real Solana signature verification before production.
+- `POST /v1/auth/verify` now verifies Ed25519 signatures for the issued challenge message.
+  Accepts detached signatures (64-byte base58/base64/base64url/hex) and MWA signed-payload format (`message || signature`).
 - Progress endpoints are wired for idempotent lesson completion upsert when DB is configured.
 
 ## Next Hardening Tasks
 
-1. Replace placeholder signature verification with ed25519 wallet verification.
+1. Add SIWS-style challenge constraints (domain, URI, chain, nonce replay window).
 2. Persist auth challenges and refresh tokens in Postgres.
 3. Add schema validation (Zod) and structured response typing from OpenAPI.
 4. Add tests for each route module.

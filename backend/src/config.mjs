@@ -18,6 +18,15 @@ function optionalInt(name, fallback) {
   return parsed;
 }
 
+function optionalBool(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
 function csvList(value) {
   if (!value) return [];
   return value
@@ -43,6 +52,8 @@ export const appConfig = {
   port: optionalInt('PORT', 3001),
   host: process.env.HOST ?? '0.0.0.0',
   logLevel: process.env.LOG_LEVEL ?? 'info',
+  logPretty: optionalBool('LOG_PRETTY', process.env.NODE_ENV !== 'production'),
+  logSingleLine: optionalBool('LOG_SINGLE_LINE', true),
   databaseUrl: process.env.DATABASE_URL ?? '',
   jwtSecret: required('JWT_SECRET', 'dev-only-please-change'),
   jwtIssuer: process.env.JWT_ISSUER ?? 'lockedin-api',
