@@ -42,6 +42,10 @@ backend/.env
 web/dungeon/node_modules/
 web/dungeon/dist/
 
+# Rust / Anchor
+/target
+/Cargo.lock
+
 # generated native folders
 /ios
 /android

@@ -16,6 +16,7 @@ interface UserStore extends UserProfile {
   disconnect: () => void;
   setOnboardingPhase: (phase: OnboardingPhase) => void;
   setDisplayName: (name: string) => void;
+  startGauntlet: () => void;
   completeGauntlet: () => void;
 }
 
@@ -58,6 +59,12 @@ export const useUserStore = create<UserStore>()(
       setOnboardingPhase: (phase) => set({ onboardingPhase: phase }),
 
       setDisplayName: (name) => set({ displayName: name }),
+
+      startGauntlet: () =>
+        set((state) => ({
+          onboardingPhase: 'gauntlet',
+          gauntletStartDate: state.gauntletStartDate ?? new Date().toISOString(),
+        })),
 
       completeGauntlet: () =>
         set({ gauntletCompleted: true, onboardingPhase: 'main' }),

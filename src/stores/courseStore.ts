@@ -49,7 +49,16 @@ interface CourseStore {
 
   // Mutations
   setActiveCourse: (courseId: string) => void;
-  activateCourse: (courseId: string, lockAmount: number, lockDuration: 30 | 60 | 90) => void;
+  activateCourse: (
+    courseId: string,
+    lock: {
+      amount: number;
+      duration: 30 | 60 | 90;
+      lockAccountAddress?: string | null;
+      stableMintAddress?: string | null;
+      skrAmount?: number;
+    },
+  ) => void;
   deactivateCourse: (courseId: string) => void;
 
   // Per-course actions
@@ -211,12 +220,15 @@ export const useCourseStore = create<CourseStore>()(
       // --- Mutations ---
       setActiveCourse: (courseId) => set({ activeCourseId: courseId }),
 
-      activateCourse: (courseId, lockAmount, lockDuration) => {
+      activateCourse: (courseId, lock) => {
         const { courseStates, activeCourseIds, enrolledCourseIds } = get();
         const newState: CourseGameState = normalizeCourseGameState({
-          lockAmount,
-          lockDuration,
+          lockAmount: lock.amount,
+          lockDuration: lock.duration,
           lockStartDate: new Date().toISOString(),
+          lockAccountAddress: lock.lockAccountAddress ?? null,
+          stableMintAddress: lock.stableMintAddress ?? null,
+          skrLockedAmount: lock.skrAmount ?? 0,
         });
         set({
           courseStates: { ...courseStates, [courseId]: newState },

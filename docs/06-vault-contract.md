@@ -5,6 +5,15 @@
 `LockVault` is the core custody and per-course state program.
 It owns lock lifecycle, principal/SKR custody, and Fuel/Ichor counter state.
 
+Current implementation checkpoint:
+
+- Anchor workspace scaffold now exists under `programs/lock_vault`
+- `initialize_protocol` and canonical `lock_funds` are now implemented
+- `lock_funds` validates configured USDC + SKR mints, creates the lock PDA, creates stable/SKR vault ATAs, transfers funds atomically, and snapshots `skr_tier`
+- worker-only `apply_verified_completion`, `consume_daily_fuel`, and `consume_saver_or_apply_full_consequence` are implemented with receipt-PDA idempotency
+- Rust tests now cover deposit snapshotting, SKR tier thresholds, Fuel credit, gauntlet unlock, saver recovery, and full-consequence extension logic
+- token exit paths (`unlock_funds`, `redeem_ichor`) remain the next on-chain slice
+
 Companion programs in the same on-chain stack:
 
 - `YieldSplitter` for harvest partitioning and Ichor credit logic
@@ -20,7 +29,7 @@ Companion programs in the same on-chain stack:
 
 ## Canonical Instructions
 
-### `lock_funds(usdc_or_usdt_amount, skr_amount, lock_duration_days, course_id)`
+### `lock_funds(usdc_amount, skr_amount, lock_duration_days, course_id)`
 
 Effects:
 
@@ -40,6 +49,10 @@ Validation:
 - lock duration in allowed set (`30`, `60`, `90`)
 - one active lock per `(owner, course_id)` key
 
+Current scaffold note:
+
+- the current scaffold always initializes the SKR vault ATA so the lock account topology stays deterministic, even when `skr_amount = 0`
+
 ### `apply_verified_completion(completion_event_id, completion_day, reward_units)`
 
 Authorized caller: backend/scheduler signer set.
@@ -51,6 +64,10 @@ Effects:
 - credits Fuel within cap rules when eligible
 - drives saver recovery when applicable
 
+Current scaffold note:
+
+- receipt keys are passed as `32-byte` deterministic hashes for PDA-safe idempotency
+
 ### `consume_daily_fuel(cycle_id)`
 
 Authorized caller: scheduler signer set.
@@ -59,6 +76,10 @@ Effects:
 
 - idempotently consumes `1` Fuel per 24h cycle when available
 - updates brewer active/inactive derivation state
+
+Current scaffold note:
+
+- the first scaffold records one receipt PDA per burn cycle and returns a no-op outcome while gauntlet is still active
 
 ### `consume_saver_or_apply_full_consequence(miss_event_id)`
 
@@ -70,6 +91,10 @@ Effects:
 - otherwise applies full consequence:
   - sets redirect to 100%
   - extends lock by configured amount
+
+Current scaffold note:
+
+- the first scaffold stores canonical `savers_remaining` on-chain, even though the current backend runtime still uses a consumed-saver counter
 
 ### `redeem_ichor(ichor_amount)`
 

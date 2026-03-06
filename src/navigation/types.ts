@@ -8,7 +8,7 @@ export type AuthStackParamList = {
 // --- Onboarding Stack ---
 export type OnboardingStackParamList = {
   CourseSelection: undefined;
-  Deposit: undefined;
+  Deposit: { courseId: string };
   GauntletRoom: undefined;
 };
 

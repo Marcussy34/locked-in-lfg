@@ -4,7 +4,7 @@
 
 Locked In uses commitment-based yield economics.
 
-- Users lock stablecoin principal (`USDC` or `USDT`) for 30/60/90 days.
+- Users lock stablecoin principal (`USDC`) for 30/60/90 days.
 - Principal is not arbitrarily confiscated.
 - Economic consequence is applied to yield, not principal.
 - Ichor is an internal redemption counter, not a market token.

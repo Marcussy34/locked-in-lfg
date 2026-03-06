@@ -5,12 +5,19 @@
 This service orchestrates user lock setup and lock lifecycle reads from the mobile client.
 It is the transaction builder/orchestration layer, not the settlement authority.
 
+Current implementation checkpoint:
+
+- on-chain `lock_funds` now exists under `programs/lock_vault`
+- the mobile app now builds a real `lock_funds` transaction from `src/screens/onboarding/DepositScreen.tsx`
+- the client derives lock/vault PDAs, fetches wallet token balances, and submits the transaction through MWA `signAndSendTransactions`
+- the flow still depends on configured program/mint env vars and a deployed `LockVault` program on the selected cluster
+
 ## Required Inputs
 
 - connected wallet public key
 - selected course id
 - lock duration (`30 | 60 | 90` days)
-- principal amount (USDC/USDT)
+- principal amount (USDC)
 - optional SKR amount
 
 ## Canonical Deposit Flow

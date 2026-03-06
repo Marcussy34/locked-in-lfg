@@ -5,7 +5,7 @@ export interface YieldData {
   forfeited: number;
   /** Current APY percentage */
   apy: number;
-  /** Amount of USDC/USDT locked */
+  /** Amount of USDC locked */
   lockedAmount: number;
   /** Whether yield is actively accruing (flame must be lit) */
   isActive: boolean;

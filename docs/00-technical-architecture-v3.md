@@ -41,7 +41,7 @@ Minimum required fields:
 
 - `owner: Pubkey`
 - `course_id_hash: [u8; 32]`
-- `stable_mint: Pubkey` (`USDC` or `USDT`)
+- `stable_mint: Pubkey` (`USDC`)
 - `principal_amount: u64`
 - `lock_start_ts: i64`
 - `lock_end_ts: i64`
@@ -108,7 +108,7 @@ Token vault accounts:
 ## Lifecycle State Machine
 
 1. **Onboarding lock**
-   - User locks stablecoin principal (USDC/USDT), optional SKR.
+   - User locks stablecoin principal (USDC), optional SKR.
    - SKR tier snapshot is fixed for lock duration.
 2. **Gauntlet (Day 1-7)**
    - No brewer output.

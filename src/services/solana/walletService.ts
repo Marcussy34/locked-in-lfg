@@ -1,6 +1,7 @@
 // src/services/solana/walletService.ts
+import '@/polyfills/buffer';
 import { NativeModules, Platform, TurboModuleRegistry } from 'react-native';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { toByteArray } from 'base64-js';
 
 // App identity shown in wallet approval prompt
@@ -200,6 +201,35 @@ async function signWithWebWallet(
   return signatureBytes;
 }
 
+async function signTransactionWithWebWallet(
+  walletAddress: string,
+  transaction: Transaction | VersionedTransaction,
+): Promise<Transaction | VersionedTransaction> {
+  const provider = (globalThis as any)?.solana;
+  if (!provider) {
+    throw createMWAUnavailableError('No injected web wallet provider.');
+  }
+
+  if (!provider.publicKey && typeof provider.connect === 'function') {
+    try {
+      await provider.connect({ onlyIfTrusted: true });
+    } catch {
+      await provider.connect();
+    }
+  }
+
+  const connectedAddress = provider.publicKey?.toBase58?.();
+  if (!connectedAddress || connectedAddress !== walletAddress) {
+    throw createMWAUnavailableError('Injected wallet does not match connected address.');
+  }
+
+  if (typeof provider.signTransaction !== 'function') {
+    throw createMWAUnavailableError('Wallet does not expose signTransaction().');
+  }
+
+  return provider.signTransaction(transaction);
+}
+
 /**
  * Connect to a wallet via MWA. Opens the user's wallet app for approval.
  */
@@ -362,4 +392,89 @@ export async function signAuthChallengeMessage(
   });
 
   return extractDetachedSignature(messageBytes, signedPayload);
+}
+
+export async function signTransaction(
+  walletAddress: string,
+  transaction: Transaction | VersionedTransaction,
+  walletAuthToken?: string | null,
+): Promise<Transaction | VersionedTransaction> {
+  if (!walletAddress) {
+    throw createMWAUnavailableError('walletAddress is required.');
+  }
+
+  if (Platform.OS === 'web') {
+    return signTransactionWithWebWallet(walletAddress, transaction);
+  }
+
+  const transact = await loadTransact();
+
+  return transact(async (wallet) => {
+    const resolveAccountAddress = (authorization: {
+      accounts: Array<{ address: string }>;
+    }): string => {
+      const matchingAccount = authorization.accounts.find((account) => {
+        const addressBytes = toByteArray(account.address);
+        return new PublicKey(addressBytes).toBase58() === walletAddress;
+      });
+
+      if (!matchingAccount) {
+        throw createMWAUnavailableError(
+          'Connected wallet account not found in authorization session.',
+        );
+      }
+
+      return matchingAccount.address;
+    };
+
+    const reauthorizeOrAuthorize = async () =>
+      (walletAuthToken
+        ? wallet.reauthorize({
+            auth_token: walletAuthToken,
+            identity: APP_IDENTITY,
+          })
+        : wallet.authorize({
+            identity: APP_IDENTITY,
+            chain: CHAIN,
+          }));
+
+    let authorization = await reauthorizeOrAuthorize();
+    resolveAccountAddress(authorization);
+
+    try {
+      const signedTransactions = await wallet.signTransactions({
+        transactions: [transaction],
+      });
+      const signedTransaction = signedTransactions[0];
+      if (!signedTransaction) {
+        throw createMWAUnavailableError('Wallet did not return a signed transaction.');
+      }
+      return signedTransaction;
+    } catch (error) {
+      if (!isNotSignedError(error)) {
+        throw error;
+      }
+
+      if (__DEV__) {
+        console.warn(
+          '[wallet] signTransactions declined after reauthorize; retrying with full authorize',
+        );
+      }
+
+      authorization = await wallet.authorize({
+        identity: APP_IDENTITY,
+        chain: CHAIN,
+      });
+      resolveAccountAddress(authorization);
+
+      const signedTransactions = await wallet.signTransactions({
+        transactions: [transaction],
+      });
+      const signedTransaction = signedTransactions[0];
+      if (!signedTransaction) {
+        throw createMWAUnavailableError('Wallet did not return a signed transaction.');
+      }
+      return signedTransaction;
+    }
+  });
 }

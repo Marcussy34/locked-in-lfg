@@ -11,6 +11,9 @@ export interface CourseGameState {
   lockAmount: number;
   lockDuration: 30 | 60 | 90;
   lockStartDate: string | null;
+  lockAccountAddress: string | null;
+  stableMintAddress: string | null;
+  skrLockedAmount: number;
   extensionDays: number;
 
   // Gauntlet
@@ -50,6 +53,9 @@ export const DEFAULT_COURSE_STATE: CourseGameState = {
   lockAmount: 0,
   lockDuration: 30,
   lockStartDate: null,
+  lockAccountAddress: null,
+  stableMintAddress: null,
+  skrLockedAmount: 0,
   extensionDays: 0,
   gauntletActive: true,
   gauntletDay: 1,

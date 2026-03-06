@@ -89,10 +89,19 @@ This repo contains working app and backend scaffolding, plus legacy prototype na
 
 For all new implementation work, follow v3 docs in `docs/` even when legacy prototype code still uses older terminology.
 
+Current implementation checkpoint:
+
+- app + backend cover wallet auth, lesson verification, verified completion events, Fuel runtime, burn cycles, and saver consequences
+- the first on-chain `LockVault` scaffold now exists under `programs/lock_vault`
+- `LockVault` now includes canonical `lock_funds` plus the worker-driven Fuel/saver instructions
+- the onboarding deposit screen now builds and submits `lock_funds` transactions when LockVault env config is present
+- current on-chain scope still does not include `unlock_funds` or `redeem_ichor`
+
 ## Monorepo Layout
 
 - `src/` — mobile app
 - `backend/` — lesson API and auth/progress services
+- `programs/` — Anchor on-chain programs
 - `docs/` — canonical v3 technical specs
 - `assets/`, `models/`, `textures/` — client visuals/resources
 
@@ -122,6 +131,19 @@ npm run dev
 ```
 
 Default backend URL: `http://localhost:3001`
+
+### On-chain programs
+
+```bash
+cargo test -p lock-vault
+```
+
+Current note:
+
+- `anchor build` currently depends on matching local Anchor CLI / SBF toolchain versions
+- this repo currently has `@coral-xyz/anchor` `0.32.1` in JavaScript, while the installed CLI is `0.31.1`
+
+Client deposit env config now lives in `.env.example`.
 
 ## Backend API Surface (current)
 

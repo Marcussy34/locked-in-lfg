@@ -53,7 +53,7 @@ export function CourseBrowserScreen() {
 
   // Handle dev-mode enroll: activate + navigate to dungeon
   const handleEnroll = (courseId: string) => {
-    activateCourse(courseId, 100, 30); // mock $100, 30 days
+    activateCourse(courseId, { amount: 100, duration: 30 }); // mock $100, 30 days
     navigation.navigate('DungeonHome');
   };
 

@@ -5,5 +5,16 @@ export {
   reconnectWallet,
   disconnectWallet,
   signAuthChallengeMessage,
+  signTransaction,
   type WalletSession,
 } from './walletService';
+export {
+  buildLockFundsTransaction,
+  fetchWalletDepositBalances,
+  formatDepositAmountUi,
+  getLockVaultConfig,
+  getStableMintAddress,
+  hasLockVaultConfig,
+  parseUiTokenAmount,
+  type LockDurationDays,
+} from './lockVault';
