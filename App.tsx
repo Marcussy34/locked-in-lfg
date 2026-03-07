@@ -8,6 +8,7 @@ import { fromByteArray } from 'base64-js';
 import { AppNavigator } from '@/navigation';
 import { DungeonProvider } from '@/components/DungeonProvider';
 import { useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores/courseStore';
 import { hasRemoteLessonApi } from '@/services/api';
 import { issueBackendSession } from '@/services/api/auth/backendAuth';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
@@ -117,9 +118,19 @@ function useBackendSessionBootstrap() {
   }, [walletAddress, walletAuthToken, refreshToken, setAuthSession]);
 }
 
+function useWalletScopedCourseState() {
+  const walletAddress = useUserStore((s) => s.walletAddress);
+  const bindToWallet = useCourseStore((s) => s.bindToWallet);
+
+  useEffect(() => {
+    bindToWallet(walletAddress);
+  }, [bindToWallet, walletAddress]);
+}
+
 export default function App() {
   useAutoReconnect();
   useBackendSessionBootstrap();
+  useWalletScopedCourseState();
 
   return (
     <SafeAreaProvider>

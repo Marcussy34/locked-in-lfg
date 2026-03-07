@@ -1301,6 +1301,7 @@ export async function listRuntimeSchedulerCandidates(limit = 10) {
         order by harvested_at desc
         limit 1
       ) latest_harvest on true
+      where runtime.lock_account_address is not null
       order by updated_at asc
       limit $1
     `,

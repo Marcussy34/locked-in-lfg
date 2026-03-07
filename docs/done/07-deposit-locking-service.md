@@ -41,6 +41,27 @@ It now also treats each course as its own lock path instead of a global/shared d
 - Inactive course detail pages no longer let users open lessons before that specific course has been locked.
 - The main app now treats only real locked courses as active/descendable.
 
+### Wallet-scoped state isolation
+
+- Persisted course/lesson state is now bound to the connected wallet address.
+- When a different wallet signs in on the same device, the app clears the previous wallet's:
+  - active course ids
+  - enrolled course ids
+  - course runtime state
+  - lesson completion state
+- This prevents a new wallet from incorrectly inheriting another wallet's locked course flow.
+
+### Rich starter lesson release
+
+- The live starter lessons were deepened again after the catalog expansion.
+- The currently richer starter lessons are:
+  - `sf-1`
+  - `sf-2`
+  - `ad-1`
+  - `rs-1`
+  - `dp-1`
+- These now have fuller lesson bodies and extra questions instead of the earlier one-question starter stubs.
+
 ### Live catalog expansion
 
 - The live backend catalog now includes four lockable courses:
@@ -138,6 +159,7 @@ It now also treats each course as its own lock path instead of a global/shared d
 - `Profile` now shows the live resurface card with the correct principal, SKR, and unlock time.
 - Available courses in the main browser now route into the real deposit screen instead of a mock enroll action.
 - The current live catalog is no longer a thin stub; it now publishes four real course entries with their own lesson lists.
+- Switching to a different wallet on the same device no longer leaks the previous wallet's active course state.
 
 ## Remaining Follow-up
 

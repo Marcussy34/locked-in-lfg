@@ -30,6 +30,7 @@ interface CourseStore {
   contentLoading: boolean;
   contentError: string | null;
   contentInitialized: boolean;
+  boundWalletAddress: string | null;
 
   // Per-course game state
   activeCourseId: string | null;
@@ -72,6 +73,7 @@ interface CourseStore {
 
   // Existing helpers
   setCourses: (courses: Course[]) => void;
+  bindToWallet: (walletAddress: string | null) => void;
   setModules: (modules: Record<string, CourseModule[]>) => void;
   setLessons: (lessons: Record<string, Lesson[]>) => void;
   getLessonProgress: (lessonId: string) => LessonProgress | null;
@@ -106,6 +108,7 @@ const initialState = {
   contentLoading: false,
   contentError: null as string | null,
   contentInitialized: false,
+  boundWalletAddress: null as string | null,
 };
 
 function normalizeCourseGameState(
@@ -405,6 +408,40 @@ export const useCourseStore = create<CourseStore>()(
 
       // --- Existing methods ---
       setCourses: (courses) => set({ courses }),
+
+      bindToWallet: (walletAddress) =>
+        set((state) => {
+          if (!walletAddress) {
+            return {};
+          }
+
+          const hasWalletScopedState =
+            state.activeCourseIds.length > 0 ||
+            state.enrolledCourseIds.length > 0 ||
+            Object.keys(state.courseStates).length > 0 ||
+            Object.keys(state.lessonProgress).length > 0;
+
+          if (state.boundWalletAddress === walletAddress) {
+            return {};
+          }
+
+          if (!hasWalletScopedState && !state.boundWalletAddress) {
+            return { boundWalletAddress: walletAddress };
+          }
+
+          return {
+            boundWalletAddress: walletAddress,
+            activeCourseId: null,
+            activeCourseIds: [],
+            enrolledCourseIds: [],
+            courseStates: {},
+            lessonProgress: {},
+            courses: state.courses.map((course) => ({
+              ...course,
+              completedLessons: 0,
+            })),
+          };
+        }),
 
       setModules: (modules) => set({ modules }),
 

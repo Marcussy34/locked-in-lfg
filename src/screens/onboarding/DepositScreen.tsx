@@ -59,7 +59,9 @@ export function DepositScreen() {
   const startGauntlet = useUserStore((s) => s.startGauntlet);
   const completeGauntlet = useUserStore((s) => s.completeGauntlet);
   const activateCourse = useCourseStore((s) => s.activateCourse);
+  const deactivateCourse = useCourseStore((s) => s.deactivateCourse);
   const syncLockSnapshot = useCourseStore((s) => s.syncLockSnapshot);
+  const courseStates = useCourseStore((s) => s.courseStates);
   const courses = useCourseStore((s) => s.courses);
   const course = useMemo(
     () => courses.find((entry) => entry.id === route.params.courseId) ?? null,
@@ -253,6 +255,9 @@ export function DepositScreen() {
           error instanceof Error ? error.message : 'Unable to read the lock account.';
 
         if (message.includes('No LockVault account was found')) {
+          if (courseStates[route.params.courseId]?.lockAccountAddress) {
+            deactivateCourse(route.params.courseId);
+          }
           setStatusMessage(null);
           return;
         }
@@ -269,7 +274,9 @@ export function DepositScreen() {
     };
   }, [
     activateCourse,
+    courseStates,
     completeGauntlet,
+    deactivateCourse,
     navigation,
     route.params.courseId,
     startGauntlet,
@@ -398,15 +405,31 @@ export function DepositScreen() {
       });
 
       setStatusMessage('Confirming transaction on-chain...');
-      await connection.confirmTransaction(signature, 'confirmed');
+      const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+      if (confirmation.value.err) {
+        throw new Error(
+          `Deposit transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`,
+        );
+      }
+
+      const confirmedLockSnapshot = await fetchLockAccountSnapshot({
+        ownerAddress: walletAddress,
+        courseId: route.params.courseId,
+      });
+      const confirmedDuration = inferLockDurationDays({
+        lockStartDate: confirmedLockSnapshot.lockStartDate,
+        lockEndDate: confirmedLockSnapshot.lockEndDate,
+        extensionDays: confirmedLockSnapshot.extensionDays,
+      });
 
       activateCourse(route.params.courseId, {
-        amount: Number(principalAmount),
-        duration: lockDuration,
-        lockAccountAddress: buildResult.lockAccountAddress,
+        amount: Number(confirmedLockSnapshot.principalAmountUi),
+        duration: confirmedDuration,
+        lockAccountAddress: confirmedLockSnapshot.lockAccountAddress,
         stableMintAddress: buildResult.stableMintAddress,
-        skrAmount: Number(skrAmount),
+        skrAmount: Number(confirmedLockSnapshot.skrLockedAmountUi),
       });
+      syncLockSnapshot(route.params.courseId, confirmedLockSnapshot);
       startGauntlet();
 
       setStatusMessage(`Lock created: ${signature.slice(0, 8)}...`);

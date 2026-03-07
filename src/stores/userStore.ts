@@ -40,14 +40,34 @@ export const useUserStore = create<UserStore>()(
 
       setWallet: (address, walletAuthToken, authToken, refreshToken) =>
         set((state) => ({
+          ...(state.walletAddress && state.walletAddress !== address
+            ? {
+                onboardingPhase: 'onboarding',
+                gauntletCompleted: false,
+                gauntletStartDate: null,
+                displayName: null,
+                avatarUrl: null,
+                createdAt: new Date().toISOString(),
+              }
+            : {
+                // Any successful wallet connect should leave auth gate.
+                onboardingPhase:
+                  state.onboardingPhase === 'auth' ? 'onboarding' : state.onboardingPhase,
+                createdAt: state.createdAt ?? new Date().toISOString(),
+              }),
           walletAddress: address,
-          walletAuthToken: walletAuthToken ?? state.walletAuthToken ?? null,
-          authToken: authToken ?? state.authToken ?? null,
-          refreshToken: refreshToken ?? state.refreshToken ?? null,
-          // Any successful wallet connect should leave auth gate.
-          onboardingPhase:
-            state.onboardingPhase === 'auth' ? 'onboarding' : state.onboardingPhase,
-          createdAt: state.createdAt ?? new Date().toISOString(),
+          walletAuthToken:
+            state.walletAddress && state.walletAddress !== address
+              ? walletAuthToken ?? null
+              : walletAuthToken ?? state.walletAuthToken ?? null,
+          authToken:
+            state.walletAddress && state.walletAddress !== address
+              ? authToken ?? null
+              : authToken ?? state.authToken ?? null,
+          refreshToken:
+            state.walletAddress && state.walletAddress !== address
+              ? refreshToken ?? null
+              : refreshToken ?? state.refreshToken ?? null,
         })),
 
       setAuthToken: (authToken) => set({ authToken }),
