@@ -173,3 +173,37 @@ export interface ModuleProgressSnapshot {
   totalLessons: number;
   completionRate: number;
 }
+
+export type CommunityPotWindowStatus = 'OPEN' | 'CLOSED' | 'DISTRIBUTED';
+export type CommunityPotRecipientStatus =
+  | 'NONE'
+  | 'PENDING'
+  | 'PUBLISHING'
+  | 'DISTRIBUTED'
+  | 'FAILED';
+
+export interface CommunityPotHistoryWindow {
+  windowId: number;
+  windowLabel: string;
+  totalRedirectedAmount: string;
+  totalRedirectedAmountUi: string;
+  distributedAmount: string;
+  distributedAmountUi: string;
+  remainingAmount: string;
+  remainingAmountUi: string;
+  redirectCount: number;
+  eligibleRecipientCount: number;
+  distributionCount: number;
+  status: CommunityPotWindowStatus;
+  closedAt: string | null;
+  userPayoutAmount: string | null;
+  userPayoutAmountUi: string | null;
+  userStatus: CommunityPotRecipientStatus;
+  userDistributedAt: string | null;
+  userTransactionSignature: string | null;
+  userLastError: string | null;
+}
+
+export interface CommunityPotHistoryResponse {
+  windows: CommunityPotHistoryWindow[];
+}

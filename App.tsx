@@ -61,9 +61,8 @@ function useBackendSessionBootstrap() {
   useEffect(() => {
     if (!hasRemoteLessonApi()) return;
     if (!walletAddress || !walletAuthToken) return;
-    if (authToken) return;
 
-    const attemptKey = `${walletAddress}:${walletAuthToken}:${refreshToken ?? 'no-refresh'}`;
+    const attemptKey = `${walletAddress}:${walletAuthToken}`;
     if (attemptedKeyRef.current === attemptKey) return;
     attemptedKeyRef.current = attemptKey;
 
@@ -115,7 +114,7 @@ function useBackendSessionBootstrap() {
     }
 
     void bootstrapWithWalletSignature();
-  }, [walletAddress, walletAuthToken, authToken, refreshToken, setAuthSession]);
+  }, [walletAddress, walletAuthToken, refreshToken, setAuthSession]);
 }
 
 export default function App() {

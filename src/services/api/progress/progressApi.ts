@@ -2,6 +2,7 @@ import { httpRequest } from '../httpClient';
 import type {
   CourseRuntimeSnapshot,
   CourseProgressSnapshot,
+  CommunityPotHistoryResponse,
   ModuleProgressSnapshot,
   ProgressStartLessonRequest,
   ProgressStartLessonResponse,
@@ -65,6 +66,12 @@ export function getModuleProgress(
   token: string,
 ): Promise<ModuleProgressSnapshot> {
   return httpRequest<ModuleProgressSnapshot>(`/v1/progress/modules/${moduleId}`, {
+    token,
+  });
+}
+
+export function getCommunityPotHistory(token: string): Promise<CommunityPotHistoryResponse> {
+  return httpRequest<CommunityPotHistoryResponse>('/v1/progress/community-pot/history', {
     token,
   });
 }

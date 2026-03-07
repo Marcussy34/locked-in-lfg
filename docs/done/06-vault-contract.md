@@ -44,6 +44,9 @@ This checkpoint established the first working `LockVault` program on devnet and 
 - `CommunityPot` now exists as a separate on-chain program on devnet.
 - It stores redirected yield in monthly UTC `YYYYMM` windows.
 - Harvest receipts can now relay their redirected share into the live pot with separate idempotent status tracking.
+- `close_distribution_window(window_id)` now exists as the first monthly settlement instruction.
+- Closed windows can now carry total redirected amount, total weight, and eligible recipient count on-chain.
+- `distribute_window(...)` now exists and transfers USDC out of the CommunityPot vault to eligible recipients.
 
 ### Worker-side runtime instructions
 
@@ -118,9 +121,10 @@ This checkpoint established the first working `LockVault` program on devnet and 
 - The mobile app now reads live lock and redemption-vault state from chain.
 - The mobile `Ichor Shop` can execute the real `redeem_ichor` path against the live program.
 - The live CommunityPot window now holds the redirected `0.1 USDC` share from `manual-harvest-002`.
+- A fresh `202604` CommunityPot window was closed with one eligible recipient snapshot and a `50000` atomic payout plan.
+- The live `202604` batch payout succeeded and marked the snapshot row `distributed`.
 
 ## Remaining Follow-up
 
 - Replace manual harvest seeding with a real `YieldSplitter` or strategy adapter path.
-- Add monthly/community-pot close and distribution instructions.
 - Live-test `unlock_funds` once a real lock reaches its unlock timestamp.

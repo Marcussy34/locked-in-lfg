@@ -16,9 +16,14 @@ import {
   readLockAccountTiming,
 } from '../../lib/lockVault.mjs';
 import {
+  closeCommunityPotDistributionWindow,
   deriveCommunityPotWindowId,
+  distributeCommunityPotWindow,
   hasCommunityPotRelayConfig,
   publishRedirectToCommunityPot,
+  readCommunityPotVaultBalance,
+  readCommunityPotDistributionWindow,
+  readCommunityPotWindow,
 } from '../../lib/communityPot.mjs';
 
 const UUID_RE =
@@ -88,6 +93,42 @@ function unixTimestampSecondsToIso(value) {
   }
 
   return new Date(Number(value) * 1000).toISOString();
+}
+
+function formatAtomicUsdcUi(value) {
+  const amount = BigInt(value ?? 0);
+  const whole = amount / 1_000_000n;
+  const fraction = (amount % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
+  return fraction ? `${whole.toString()}.${fraction}` : whole.toString();
+}
+
+function formatCommunityPotWindowLabel(windowId) {
+  const numeric = Number(windowId);
+  const year = Math.floor(numeric / 100);
+  const monthIndex = (numeric % 100) - 1;
+  if (monthIndex < 0 || monthIndex > 11) {
+    return String(windowId);
+  }
+
+  return new Date(Date.UTC(year, monthIndex, 1)).toLocaleString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function mapDistributionWindowStatus(rawStatus) {
+  if (Number(rawStatus) === 2) return 'DISTRIBUTED';
+  if (Number(rawStatus) === 1) return 'CLOSED';
+  return 'OPEN';
+}
+
+function mapRecipientStatus(rawStatus) {
+  if (rawStatus === 'distributed') return 'DISTRIBUTED';
+  if (rawStatus === 'failed') return 'FAILED';
+  if (rawStatus === 'publishing') return 'PUBLISHING';
+  if (rawStatus === 'pending') return 'PENDING';
+  return 'NONE';
 }
 
 function assertAnswers(answers) {
@@ -1646,6 +1687,198 @@ async function markHarvestRedirectFailed(walletAddress, courseId, harvestId, err
   );
 }
 
+function computeWeightedPayouts(totalAmount, entries) {
+  if (entries.length === 0 || totalAmount <= 0n) {
+    return entries.map((entry) => ({
+      ...entry,
+      payoutAmount: 0n,
+      remainder: 0n,
+    }));
+  }
+
+  const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0n);
+  if (totalWeight <= 0n) {
+    return entries.map((entry) => ({
+      ...entry,
+      payoutAmount: 0n,
+      remainder: 0n,
+    }));
+  }
+
+  const provisional = entries.map((entry) => {
+    const numerator = totalAmount * entry.weight;
+    return {
+      ...entry,
+      payoutAmount: numerator / totalWeight,
+      remainder: numerator % totalWeight,
+    };
+  });
+
+  const allocated = provisional.reduce((sum, entry) => sum + entry.payoutAmount, 0n);
+  let leftover = totalAmount - allocated;
+  const ranked = [...provisional].sort((left, right) => {
+    if (left.remainder === right.remainder) {
+      return `${left.walletAddress}:${left.courseId}`.localeCompare(
+        `${right.walletAddress}:${right.courseId}`,
+      );
+    }
+    return left.remainder > right.remainder ? -1 : 1;
+  });
+
+  for (const entry of ranked) {
+    if (leftover <= 0n) {
+      break;
+    }
+    entry.payoutAmount += 1n;
+    leftover -= 1n;
+  }
+
+  return provisional;
+}
+
+async function readDistributionSnapshotRows(windowId) {
+  const result = await query(
+    `
+      select
+        window_id as "windowId",
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        current_streak as "currentStreak",
+        principal_amount as "principalAmount",
+        weight,
+        payout_amount as "payoutAmount",
+        status,
+        distribution_transaction_signature as "distributionTransactionSignature",
+        distribution_last_error as "distributionLastError",
+        distributed_at as "distributedAt",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      from lesson.community_pot_distribution_snapshots
+      where window_id = $1
+      order by payout_amount desc, wallet_address asc, course_id asc
+    `,
+    [windowId],
+  );
+
+  return result.rows;
+}
+
+async function claimDistributionSnapshotRows(windowId, batchSize = 10, retryFailed = false) {
+  const claimableStatuses = retryFailed ? ['pending', 'failed'] : ['pending'];
+  const result = await query(
+    `
+      with next_rows as (
+        select ctid
+        from lesson.community_pot_distribution_snapshots
+        where window_id = $1
+          and status = any($2::text[])
+        order by payout_amount desc, wallet_address asc, course_id asc
+        limit $3
+        for update skip locked
+      )
+      update lesson.community_pot_distribution_snapshots snapshots
+      set status = 'publishing',
+          distribution_last_error = null,
+          updated_at = now()
+      from next_rows
+      where snapshots.ctid = next_rows.ctid
+      returning
+        window_id as "windowId",
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        current_streak as "currentStreak",
+        principal_amount as "principalAmount",
+        weight,
+        payout_amount as "payoutAmount",
+        status
+    `,
+    [windowId, claimableStatuses, batchSize],
+  );
+
+  return result.rows;
+}
+
+async function markDistributionSnapshotDistributed(
+  windowId,
+  walletAddress,
+  courseId,
+  signature,
+) {
+  await query(
+    `
+      update lesson.community_pot_distribution_snapshots
+      set status = 'distributed',
+          distribution_transaction_signature = $4,
+          distribution_last_error = null,
+          distributed_at = now(),
+          updated_at = now()
+      where window_id = $1
+        and wallet_address = $2
+        and course_id = $3
+    `,
+    [windowId, walletAddress, courseId, signature],
+  );
+}
+
+async function markDistributionSnapshotFailed(windowId, walletAddress, courseId, error) {
+  await query(
+    `
+      update lesson.community_pot_distribution_snapshots
+      set status = 'failed',
+          distribution_last_error = $4,
+          updated_at = now()
+      where window_id = $1
+        and wallet_address = $2
+        and course_id = $3
+    `,
+    [windowId, walletAddress, courseId, error],
+  );
+}
+
+async function seedDistributionSnapshotRows(windowId, entries) {
+  if (entries.length === 0) {
+    return [];
+  }
+
+  const values = [];
+  const params = [];
+  let index = 1;
+
+  for (const entry of entries) {
+    values.push(
+      `($${index++}, $${index++}, $${index++}, $${index++}, $${index++}::bigint, $${index++}::bigint, $${index++}::bigint)`,
+    );
+    params.push(
+      windowId,
+      entry.walletAddress,
+      entry.courseId,
+      entry.currentStreak,
+      entry.principalAmount.toString(),
+      entry.weight.toString(),
+      entry.payoutAmount.toString(),
+    );
+  }
+
+  await query(
+    `
+      insert into lesson.community_pot_distribution_snapshots (
+        window_id,
+        wallet_address,
+        course_id,
+        current_streak,
+        principal_amount,
+        weight,
+        payout_amount
+      )
+      values ${values.join(', ')}
+      on conflict (window_id, wallet_address, course_id) do nothing
+    `,
+    params,
+  );
+
+  return readDistributionSnapshotRows(windowId);
+}
+
 export async function publishHarvestRedirectToCommunityPot(
   walletAddress,
   courseId,
@@ -1745,6 +1978,297 @@ export async function publishHarvestRedirectToCommunityPot(
       error: message,
     };
   }
+}
+
+export async function closeCommunityPotWindowAndSnapshot(windowId, closedAt = null) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasCommunityPotRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'COMMUNITY_POT_RELAY_DISABLED',
+    };
+  }
+
+  const existingDistributionWindow = await readCommunityPotDistributionWindow(windowId);
+  const existingRows = await readDistributionSnapshotRows(windowId);
+  const repairableEmptyWindow =
+    existingDistributionWindow &&
+    Number(existingDistributionWindow.totalWeight) === 0 &&
+    Number(existingDistributionWindow.eligibleRecipientCount) === 0 &&
+    Number(existingDistributionWindow.distributionCount) === 0 &&
+    existingRows.length === 0;
+
+  if (existingDistributionWindow && !repairableEmptyWindow) {
+    return {
+      processed: false,
+      reason: 'ALREADY_CLOSED',
+      distributionWindow: existingDistributionWindow,
+      recipients: existingRows,
+    };
+  }
+
+  const potWindow = await readCommunityPotWindow(windowId);
+  if (!potWindow) {
+    return {
+      processed: false,
+      reason: 'WINDOW_NOT_FOUND',
+    };
+  }
+
+  const runtimeResult = await query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId"
+      from lesson.user_course_runtime_state
+      order by wallet_address asc, course_id asc
+    `,
+  );
+
+  const eligible = [];
+  for (const row of runtimeResult.rows) {
+    try {
+      const snapshot = await readLockAccountSnapshot(row.walletAddress, row.courseId);
+      if (snapshot.status !== 0) {
+        continue;
+      }
+
+      const currentStreak = Number(snapshot.currentStreak ?? 0);
+      if (currentStreak <= 0) {
+        continue;
+      }
+
+      const principalAmount = BigInt(snapshot.principalAmount);
+      const weight = principalAmount * BigInt(currentStreak);
+      if (weight <= 0n) {
+        continue;
+      }
+
+      eligible.push({
+        walletAddress: row.walletAddress,
+        courseId: row.courseId,
+        currentStreak,
+        principalAmount,
+        weight,
+      });
+    } catch {
+      // Skip locks that no longer exist or cannot be read.
+    }
+  }
+
+  const payouts = computeWeightedPayouts(BigInt(potWindow.totalRedirectedAmount), eligible);
+  const rows = await seedDistributionSnapshotRows(windowId, payouts);
+  const totalWeight = payouts.reduce((sum, entry) => sum + entry.weight, 0n);
+  const closedAtValue = closedAt ?? new Date().toISOString();
+  const closeResult = await closeCommunityPotDistributionWindow({
+    windowId,
+    totalWeight: totalWeight.toString(),
+    eligibleRecipientCount: payouts.length,
+    closedAt: closedAtValue,
+  });
+  const distributionWindow = await readCommunityPotDistributionWindow(windowId);
+
+  return {
+    processed: true,
+    reason: 'CLOSED',
+    windowId,
+    potWindow,
+    distributionWindow,
+    signature: closeResult.signature,
+    recipients: rows,
+  };
+}
+
+export async function distributeCommunityPotWindowBatch(
+  windowId,
+  batchSize = 10,
+  retryFailed = false,
+) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasCommunityPotRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'COMMUNITY_POT_RELAY_DISABLED',
+    };
+  }
+
+  const distributionWindow = await readCommunityPotDistributionWindow(windowId);
+  if (!distributionWindow) {
+    return {
+      processed: false,
+      reason: 'WINDOW_NOT_CLOSED',
+    };
+  }
+
+  const claimedRows = await claimDistributionSnapshotRows(windowId, batchSize, retryFailed);
+  if (claimedRows.length === 0) {
+    return {
+      processed: false,
+      reason: 'NO_PENDING_RECIPIENTS',
+      distributionWindow,
+      recipients: await readDistributionSnapshotRows(windowId),
+    };
+  }
+
+  const potVaultBefore = await readCommunityPotVaultBalance();
+  const results = [];
+
+  for (const row of claimedRows) {
+    try {
+      const publishResult = await distributeCommunityPotWindow({
+        windowId,
+        walletAddress: row.walletAddress,
+        courseId: row.courseId,
+        amount: row.payoutAmount,
+        distributedAt: new Date().toISOString(),
+      });
+
+      await markDistributionSnapshotDistributed(
+        windowId,
+        row.walletAddress,
+        row.courseId,
+        publishResult.signature,
+      );
+
+      results.push({
+        walletAddress: row.walletAddress,
+        courseId: row.courseId,
+        payoutAmount: row.payoutAmount,
+        status: 'distributed',
+        signature: publishResult.signature,
+        recipientStableTokenAccount: publishResult.recipientStableTokenAccount,
+        potVault: publishResult.potVault,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await markDistributionSnapshotFailed(windowId, row.walletAddress, row.courseId, message);
+      results.push({
+        walletAddress: row.walletAddress,
+        courseId: row.courseId,
+        payoutAmount: row.payoutAmount,
+        status: 'failed',
+        error: message,
+      });
+    }
+  }
+
+  return {
+    processed: true,
+    reason: 'DISTRIBUTION_BATCH_PROCESSED',
+    windowId,
+    potVaultBefore,
+    potVaultAfter: await readCommunityPotVaultBalance(),
+    distributionWindow: await readCommunityPotDistributionWindow(windowId),
+    recipients: await readDistributionSnapshotRows(windowId),
+    results,
+  };
+}
+
+export async function getCommunityPotHistory(walletAddress, limit = 6) {
+  if (!hasDatabase()) {
+    return {
+      windows: [],
+    };
+  }
+
+  const idsResult = await query(
+    `
+      with window_ids as (
+        select distinct community_pot_window_id as window_id
+        from lesson.harvest_result_receipts
+        where community_pot_window_id is not null
+        union
+        select distinct window_id
+        from lesson.community_pot_distribution_snapshots
+      )
+      select window_id
+      from window_ids
+      where window_id is not null
+      order by window_id desc
+      limit $1
+    `,
+    [limit],
+  );
+
+  const walletRowsResult = await query(
+    `
+      select
+        window_id as "windowId",
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        current_streak as "currentStreak",
+        principal_amount as "principalAmount",
+        weight,
+        payout_amount as "payoutAmount",
+        status,
+        distribution_transaction_signature as "distributionTransactionSignature",
+        distribution_last_error as "distributionLastError",
+        distributed_at as "distributedAt"
+      from lesson.community_pot_distribution_snapshots
+      where wallet_address = $1
+    `,
+    [walletAddress],
+  );
+
+  const walletRowsByWindow = new Map(
+    walletRowsResult.rows.map((row) => [Number(row.windowId), row]),
+  );
+
+  const windows = await Promise.all(
+    idsResult.rows.map(async (row) => {
+      const windowId = Number(row.window_id);
+      const [potWindow, distributionWindow] = await Promise.all([
+        readCommunityPotWindow(windowId),
+        readCommunityPotDistributionWindow(windowId),
+      ]);
+      const walletRow = walletRowsByWindow.get(windowId) ?? null;
+      const totalRedirectedAmount = BigInt(potWindow?.totalRedirectedAmount ?? 0);
+      const distributedAmount = BigInt(distributionWindow?.distributedAmount ?? 0);
+      const remainingAmount = totalRedirectedAmount - distributedAmount;
+
+      return {
+        windowId,
+        windowLabel: formatCommunityPotWindowLabel(windowId),
+        totalRedirectedAmount: totalRedirectedAmount.toString(),
+        totalRedirectedAmountUi: formatAtomicUsdcUi(totalRedirectedAmount),
+        distributedAmount: distributedAmount.toString(),
+        distributedAmountUi: formatAtomicUsdcUi(distributedAmount),
+        remainingAmount: (remainingAmount > 0n ? remainingAmount : 0n).toString(),
+        remainingAmountUi: formatAtomicUsdcUi(remainingAmount > 0n ? remainingAmount : 0n),
+        redirectCount: Number(potWindow?.redirectCount ?? 0),
+        eligibleRecipientCount: Number(distributionWindow?.eligibleRecipientCount ?? 0),
+        distributionCount: Number(distributionWindow?.distributionCount ?? 0),
+        status: mapDistributionWindowStatus(distributionWindow?.status ?? 0),
+        closedAt: unixTimestampSecondsToIso(distributionWindow?.closedAtTs ?? null),
+        userPayoutAmount:
+          walletRow?.payoutAmount != null ? String(walletRow.payoutAmount) : null,
+        userPayoutAmountUi:
+          walletRow?.payoutAmount != null
+            ? formatAtomicUsdcUi(walletRow.payoutAmount)
+            : null,
+        userStatus: mapRecipientStatus(walletRow?.status ?? null),
+        userDistributedAt: walletRow?.distributedAt ?? null,
+        userTransactionSignature: walletRow?.distributionTransactionSignature ?? null,
+        userLastError: walletRow?.distributionLastError ?? null,
+      };
+    }),
+  );
+
+  return {
+    windows,
+  };
 }
 
 async function readFuelBurnReceipt(client, walletAddress, courseId, cycleId) {

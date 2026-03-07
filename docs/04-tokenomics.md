@@ -84,7 +84,11 @@ Current implementation checkpoint:
 - redirected yield from published harvest receipts can now be recorded into the on-chain `CommunityPot`
 - the current monthly window is keyed by UTC `YYYYMM`
 - the mobile `Community Pot` screen now reads the live on-chain window balance instead of using a local proxy
-- monthly close/distribution logic is still pending
+- `close_distribution_window(window_id)` now exists as the first monthly settlement checkpoint
+- backend can now snapshot eligible recipients and deterministic payouts for a closed window
+- `distribute_window(window_id, recipient_batch)` now exists in worker-driven per-recipient form
+- funded CommunityPot vault balance can now be distributed to eligible streakers in batches
+- the mobile `Community Pot` screen now shows current window balance, closed window history, and this wallet's payout history
 
 ## Invariants
 

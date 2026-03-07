@@ -3,7 +3,10 @@ import { appConfig } from '../../config.mjs';
 import { requireAccessAuth } from '../../plugins/auth.mjs';
 import {
   consumeDailyFuel,
+  closeCommunityPotWindowAndSnapshot,
+  distributeCommunityPotWindowBatch,
   consumeSaverOrApplyFullConsequence,
+  getCommunityPotHistory,
   getCourseRuntimeSnapshot,
   getCourseProgress,
   getModuleProgress,
@@ -172,6 +175,34 @@ export async function progressRoutes(app) {
     );
   });
 
+  app.post('/v1/internal/community-pot/windows/close', async (request) => {
+    requireSchedulerAuth(request);
+
+    const rawWindowId = request.body?.windowId;
+    const windowId = Number.parseInt(String(rawWindowId), 10);
+    if (!Number.isFinite(windowId)) {
+      throw badRequest('windowId is required', 'MISSING_WINDOW_ID');
+    }
+
+    const closedAt = request.body?.closedAt ?? null;
+    return closeCommunityPotWindowAndSnapshot(windowId, closedAt);
+  });
+
+  app.post('/v1/internal/community-pot/windows/distribute', async (request) => {
+    requireSchedulerAuth(request);
+
+    const rawWindowId = request.body?.windowId;
+    const windowId = Number.parseInt(String(rawWindowId), 10);
+    if (!Number.isFinite(windowId)) {
+      throw badRequest('windowId is required', 'MISSING_WINDOW_ID');
+    }
+
+    const batchSize = Number.parseInt(String(request.body?.batchSize ?? 10), 10);
+    const retryFailed = request.body?.retryFailed === true;
+
+    return distributeCommunityPotWindowBatch(windowId, batchSize, retryFailed);
+  });
+
   app.post('/v1/internal/consequences/miss', async (request) => {
     requireSchedulerAuth(request);
 
@@ -211,6 +242,12 @@ export async function progressRoutes(app) {
       retryFailed,
     );
   });
+
+  app.get(
+    '/v1/progress/community-pot/history',
+    { preHandler: requireAccessAuth },
+    async (request) => getCommunityPotHistory(request.auth.walletAddress),
+  );
 
   app.get(
     '/v1/progress/runtime/courses/:courseId',

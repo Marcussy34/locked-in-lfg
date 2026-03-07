@@ -274,3 +274,7 @@ Current implementation checkpoint:
 - `record_redirect(redirect_event_id, amount)` now exists as the first live instruction
 - redirects are stored against a monthly UTC `YYYYMM` window PDA
 - backend harvest receipts now track CommunityPot relay status separately from LockVault relay status
+- `close_distribution_window(window_id)` now exists and stores the first distribution snapshot on-chain
+- backend can now compute and persist eligible recipient payout rows for a closed monthly window
+- `distribute_window(window_id, recipient_batch)` now exists as the first live payout instruction
+- CommunityPot now uses a program-owned USDC vault for actual payout settlement
