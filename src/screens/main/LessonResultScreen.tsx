@@ -12,7 +12,7 @@ type Route = RouteProp<MainStackParamList, 'LessonResult'>;
 export function LessonResultScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { score, totalQuestions } = route.params;
+  const { score, totalQuestions, accepted = true, questionResults = [] } = route.params;
 
   const currentStreak = useStreakStore((s) => s.currentStreak);
 
@@ -24,6 +24,9 @@ export function LessonResultScreen() {
       : score >= 50
         ? 'text-amber-400'
         : 'text-red-400';
+  const subjectiveResults = questionResults.filter(
+    (question) => typeof question.feedbackSummary === 'string' && question.feedbackSummary.length > 0,
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-neutral-950">
@@ -39,8 +42,12 @@ export function LessonResultScreen() {
           {/* Verification status */}
           <View className="rounded-xl border border-neutral-700 bg-neutral-900 p-5">
             <Text className="text-sm text-neutral-500">Lesson Status</Text>
-            <Text className="mt-1 text-2xl font-bold text-emerald-400">
-              Verified
+            <Text
+              className={`mt-1 text-2xl font-bold ${
+                accepted ? 'text-emerald-400' : 'text-amber-400'
+              }`}
+            >
+              {accepted ? 'Verified' : 'Needs Improvement'}
             </Text>
           </View>
 
@@ -52,6 +59,30 @@ export function LessonResultScreen() {
             </Text>
           </View>
         </View>
+
+        {subjectiveResults.length > 0 && (
+          <View className="mt-6 w-full gap-3">
+            {subjectiveResults.map((question) => (
+              <View
+                key={question.questionId}
+                className="rounded-xl border border-neutral-700 bg-neutral-900 p-4"
+              >
+                <Text className="text-xs uppercase text-neutral-500">Answer Feedback</Text>
+                <Text className="mt-2 text-sm font-semibold text-white">
+                  {question.prompt}
+                </Text>
+                <Text className="mt-2 text-xs text-neutral-500">
+                  Score: {question.score}
+                  {' \u00B7 '}
+                  {question.accepted ? 'Accepted' : 'Not accepted yet'}
+                </Text>
+                <Text className="mt-3 text-sm leading-5 text-neutral-300">
+                  {question.feedbackSummary}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Return button */}
         <Pressable

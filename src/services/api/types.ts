@@ -124,6 +124,16 @@ export interface ProgressSubmitLessonRequest {
   completedAt?: string;
 }
 
+export interface QuestionValidationResult {
+  questionId: string;
+  prompt: string;
+  accepted: boolean;
+  score: number;
+  feedbackSummary: string;
+  validatorVersion: string;
+  decisionHash: string;
+}
+
 export type ApiFuelEarnStatus =
   | 'PAUSED_RECOVERY'
   | 'AT_CAP'
@@ -158,6 +168,7 @@ export interface ProgressSubmitLessonResponse {
   completedAt: string;
   completionEventId?: string;
   courseRuntime?: CourseRuntimeSnapshot;
+  questionResults?: QuestionValidationResult[];
 }
 
 export interface CourseProgressSnapshot {

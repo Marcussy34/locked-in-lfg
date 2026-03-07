@@ -424,6 +424,22 @@ components:
           format: uuid
         courseRuntime:
           $ref: '#/components/schemas/CourseRuntimeSnapshot'
+        questionResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionValidationResult'
+    QuestionValidationResult:
+      type: object
+      required:
+        [questionId, prompt, accepted, score, feedbackSummary, validatorVersion, decisionHash]
+      properties:
+        questionId: { type: string }
+        prompt: { type: string }
+        accepted: { type: boolean }
+        score: { type: integer }
+        feedbackSummary: { type: string }
+        validatorVersion: { type: string }
+        decisionHash: { type: string }
     CourseRuntimeSnapshot:
       type: object
       required:

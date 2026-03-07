@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { badRequest, notFound } from '../../lib/errors.mjs';
 import { appConfig } from '../../config.mjs';
 import {
@@ -36,6 +37,8 @@ const SAVER_REDIRECT_BPS_BY_COUNT = {
   2: 2000,
   3: 2000,
 };
+const SUBJECTIVE_VALIDATOR_VERSION = 'rubric-v1';
+const LESSON_ACCEPTANCE_THRESHOLD = 70;
 
 function assertAttemptId(attemptId) {
   if (!attemptId || typeof attemptId !== 'string' || !UUID_RE.test(attemptId)) {
@@ -50,6 +53,17 @@ function normalizeAnswerText(value) {
   }
 
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeKeyword(value) {
+  return normalizeAnswerText(value).replace(/[^a-z0-9 ]/g, '').trim();
+}
+
+function tokenizeNormalized(value) {
+  return normalizeKeyword(value)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter(Boolean);
 }
 
 function diffDays(fromDay, toDay) {
@@ -260,7 +274,9 @@ async function listLessonQuestions(client, lessonVersionId) {
       select
         q.id,
         q.question_type as "questionType",
+        q.prompt,
         q.correct_answer as "correctAnswer",
+        q.metadata,
         coalesce(
           json_agg(
             jsonb_build_object(
@@ -274,7 +290,7 @@ async function listLessonQuestions(client, lessonVersionId) {
       from lesson.questions q
       left join lesson.question_options qo on qo.question_id = q.id
       where q.lesson_version_id = $1::uuid
-      group by q.id, q.question_type, q.correct_answer, q.question_order
+      group by q.id, q.question_type, q.prompt, q.correct_answer, q.metadata, q.question_order
       order by q.question_order asc
     `,
     [lessonVersionId],
@@ -466,7 +482,212 @@ async function applyVerifiedCompletionToCourseRuntime(
   };
 }
 
-function gradeAnswers(questions, submittedAnswers) {
+function extractRubricConfig(question) {
+  const validator = question.metadata?.validator;
+  if (
+    validator &&
+    validator.mode === 'rubric_v1' &&
+    Array.isArray(validator.criteria) &&
+    validator.criteria.length > 0
+  ) {
+    return {
+      mode: 'rubric_v1',
+      acceptThreshold: Number(validator.acceptThreshold ?? 70),
+      criteria: validator.criteria.map((criterion, index) => ({
+        id: criterion.id ?? `criterion-${index + 1}`,
+        label: criterion.label ?? `Criterion ${index + 1}`,
+        kind: criterion.kind === 'exact' ? 'exact' : 'keywords',
+        keywords: Array.isArray(criterion.keywords) ? criterion.keywords : [],
+        expected: typeof criterion.expected === 'string' ? criterion.expected : null,
+        weight: Number(criterion.weight ?? 0),
+        required: criterion.required !== false,
+        feedbackPass:
+          typeof criterion.feedbackPass === 'string' ? criterion.feedbackPass : null,
+        feedbackMiss:
+          typeof criterion.feedbackMiss === 'string' ? criterion.feedbackMiss : null,
+      })),
+    };
+  }
+
+  const tokens = tokenizeNormalized(question.correctAnswer);
+  if (tokens.length <= 1) {
+    return {
+      mode: 'rubric_v1',
+      acceptThreshold: 100,
+      criteria: [
+        {
+          id: 'exact-answer',
+          label: 'Exact answer match',
+          kind: 'exact',
+          expected: question.correctAnswer,
+          keywords: [],
+          weight: 100,
+          required: true,
+          feedbackPass: 'Matched the expected answer.',
+          feedbackMiss: `Use the exact expected answer: ${question.correctAnswer}.`,
+        },
+      ],
+    };
+  }
+
+  return {
+    mode: 'rubric_v1',
+    acceptThreshold: 100,
+    criteria: [
+      {
+        id: 'key-concepts',
+        label: 'Includes all key concepts',
+        kind: 'keywords',
+        expected: null,
+        keywords: tokens,
+        weight: 100,
+        required: true,
+        feedbackPass: 'Covered the expected key concepts.',
+        feedbackMiss: `Include these key concepts: ${tokens.join(', ')}.`,
+      },
+    ],
+  };
+}
+
+function buildIntegrityFlags(answerText, startedAt, completedAt) {
+  const flags = [];
+  const trimmed = answerText.trim();
+
+  if (trimmed.length > 1000) {
+    flags.push({
+      code: 'ANSWER_TOO_LONG',
+      severity: 'block',
+      message: 'Answer exceeded the allowed validator length.',
+    });
+  }
+
+  if (startedAt && completedAt) {
+    const started = new Date(startedAt).getTime();
+    const completed = new Date(completedAt).getTime();
+    const durationMs = completed - started;
+    if (Number.isFinite(durationMs) && durationMs >= 0 && durationMs < 2000 && trimmed.length > 40) {
+      flags.push({
+        code: 'IMPOSSIBLE_SPEED',
+        severity: 'block',
+        message: 'Answer arrived too quickly for its length.',
+      });
+    }
+  }
+
+  return flags;
+}
+
+function evaluateRubricCriterion(criterion, answerText) {
+  const normalizedAnswer = normalizeKeyword(answerText);
+  if (criterion.kind === 'exact') {
+    const expected = normalizeKeyword(criterion.expected ?? '');
+    const passed = expected.length > 0 && normalizedAnswer === expected;
+    return {
+      criterionId: criterion.id,
+      label: criterion.label,
+      weight: criterion.weight,
+      passed,
+      matched: passed ? [criterion.expected] : [],
+      feedback:
+        passed
+          ? criterion.feedbackPass ?? `Correctly satisfied ${criterion.label}.`
+          : criterion.feedbackMiss ?? `Missing ${criterion.label}.`,
+    };
+  }
+
+  const answerTokens = new Set(tokenizeNormalized(answerText));
+  const matched = criterion.keywords.filter((keyword) => answerTokens.has(normalizeKeyword(keyword)));
+  const passed =
+    criterion.keywords.length > 0 &&
+    matched.length === criterion.keywords.length;
+  return {
+    criterionId: criterion.id,
+    label: criterion.label,
+    weight: criterion.weight,
+    passed,
+    matched,
+    feedback:
+      passed
+        ? criterion.feedbackPass ?? `Correctly satisfied ${criterion.label}.`
+        : criterion.feedbackMiss ?? `Missing ${criterion.label}.`,
+  };
+}
+
+function buildFeedbackSummary(criteriaBreakdown, accepted, integrityFlags) {
+  const passed = criteriaBreakdown.filter((criterion) => criterion.passed).map((criterion) => criterion.label);
+  const missed = criteriaBreakdown.filter((criterion) => !criterion.passed).map((criterion) => criterion.label);
+
+  const parts = [];
+  if (passed.length > 0) {
+    parts.push(`What was correct: ${passed.join(', ')}.`);
+  }
+  if (missed.length > 0) {
+    parts.push(`Key concept missing: ${missed.join(', ')}.`);
+  }
+  if (integrityFlags.length > 0) {
+    parts.push(`Integrity flag: ${integrityFlags.map((flag) => flag.message).join(' ')}`);
+  }
+  if (accepted) {
+    parts.push('How to improve: keep the same core concept coverage and add one precise example next time.');
+  } else {
+    parts.push('How to improve: answer in one short sentence using the missing key concept words.');
+  }
+
+  return parts.join(' ');
+}
+
+function evaluateSubjectiveAnswer(question, answerText, startedAt, completedAt) {
+  const rubric = extractRubricConfig(question);
+  const integrityFlags = buildIntegrityFlags(answerText, startedAt, completedAt);
+  const criteriaBreakdown = rubric.criteria.map((criterion) =>
+    evaluateRubricCriterion(criterion, answerText),
+  );
+  const totalWeight = rubric.criteria.reduce((sum, criterion) => sum + criterion.weight, 0);
+  const achievedWeight = criteriaBreakdown.reduce(
+    (sum, criterion) => sum + (criterion.passed ? criterion.weight : 0),
+    0,
+  );
+  const score = totalWeight > 0 ? Math.round((achievedWeight / totalWeight) * 100) : 0;
+  const requiredCriteriaMet = rubric.criteria
+    .filter((criterion) => criterion.required)
+    .every((criterion) =>
+      criteriaBreakdown.find((result) => result.criterionId === criterion.id)?.passed === true,
+    );
+  const hasBlockingIntegrityFlag = integrityFlags.some((flag) => flag.severity === 'block');
+  const accepted =
+    answerText.trim().length > 0 &&
+    !hasBlockingIntegrityFlag &&
+    requiredCriteriaMet &&
+    score >= rubric.acceptThreshold;
+  const feedbackSummary = buildFeedbackSummary(criteriaBreakdown, accepted, integrityFlags);
+  const decisionHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        questionId: question.id,
+        answerText,
+        accepted,
+        score,
+        validatorVersion: SUBJECTIVE_VALIDATOR_VERSION,
+        criteriaBreakdown,
+        integrityFlags,
+      }),
+    )
+    .digest('hex');
+
+  return {
+    accepted,
+    score,
+    criteriaBreakdown,
+    feedbackSummary,
+    validatorVersion: SUBJECTIVE_VALIDATOR_VERSION,
+    validatorMode: rubric.mode,
+    rubricSnapshot: rubric,
+    integrityFlags,
+    decisionHash,
+  };
+}
+
+function gradeAnswers(questions, submittedAnswers, startedAt = null, completedAt = null) {
   const questionIds = new Set(questions.map((question) => question.id));
   for (const questionId of submittedAnswers.keys()) {
     if (!questionIds.has(questionId)) {
@@ -479,15 +700,30 @@ function gradeAnswers(questions, submittedAnswers) {
 
   const attempts = questions.map((question) => {
     const answerText = submittedAnswers.get(question.id) ?? '';
-    const normalizedAnswer = normalizeAnswerText(answerText);
-    const normalizedCorrectAnswer = normalizeAnswerText(question.correctAnswer);
-    const isCorrect =
-      normalizedAnswer.length > 0 && normalizedAnswer === normalizedCorrectAnswer;
+    let validatorResult = null;
+    let isCorrect = false;
+
+    if (question.questionType === 'short_text') {
+      validatorResult = evaluateSubjectiveAnswer(
+        question,
+        answerText,
+        startedAt,
+        completedAt,
+      );
+      isCorrect = validatorResult.accepted;
+    } else {
+      const normalizedAnswer = normalizeAnswerText(answerText);
+      const normalizedCorrectAnswer = normalizeAnswerText(question.correctAnswer);
+      isCorrect =
+        normalizedAnswer.length > 0 && normalizedAnswer === normalizedCorrectAnswer;
+    }
 
     return {
       questionId: question.id,
+      prompt: question.prompt,
       answerText: answerText.trim().length > 0 ? answerText.trim() : null,
       isCorrect,
+      validatorResult,
     };
   });
 
@@ -502,6 +738,101 @@ function gradeAnswers(questions, submittedAnswers) {
     totalQuestions,
     score,
   };
+}
+
+async function persistAnswerValidationDecisions(client, attemptId, questionAttempts) {
+  for (const attempt of questionAttempts) {
+    if (!attempt.validatorResult) {
+      continue;
+    }
+
+    await client.query(
+      `
+        insert into lesson.answer_validation_decisions (
+          lesson_attempt_id,
+          question_id,
+          validator_mode,
+          validator_version,
+          accepted,
+          score,
+          prompt_snapshot,
+          learner_answer,
+          rubric_snapshot,
+          criteria_breakdown,
+          integrity_flags,
+          feedback_summary,
+          decision_hash,
+          updated_at
+        )
+        values (
+          $1::uuid,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9::jsonb,
+          $10::jsonb,
+          $11::jsonb,
+          $12,
+          $13,
+          now()
+        )
+        on conflict (lesson_attempt_id, question_id)
+        do update set
+          validator_mode = excluded.validator_mode,
+          validator_version = excluded.validator_version,
+          accepted = excluded.accepted,
+          score = excluded.score,
+          prompt_snapshot = excluded.prompt_snapshot,
+          learner_answer = excluded.learner_answer,
+          rubric_snapshot = excluded.rubric_snapshot,
+          criteria_breakdown = excluded.criteria_breakdown,
+          integrity_flags = excluded.integrity_flags,
+          feedback_summary = excluded.feedback_summary,
+          decision_hash = excluded.decision_hash,
+          updated_at = now()
+      `,
+      [
+        attemptId,
+        attempt.questionId,
+        attempt.validatorResult.validatorMode,
+        attempt.validatorResult.validatorVersion,
+        attempt.validatorResult.accepted,
+        attempt.validatorResult.score,
+        attempt.prompt,
+        attempt.answerText,
+        JSON.stringify(attempt.validatorResult.rubricSnapshot),
+        JSON.stringify(attempt.validatorResult.criteriaBreakdown),
+        JSON.stringify(attempt.validatorResult.integrityFlags),
+        attempt.validatorResult.feedbackSummary,
+        attempt.validatorResult.decisionHash,
+      ],
+    );
+  }
+}
+
+async function readAnswerValidationDecisions(client, attemptId) {
+  const result = await client.query(
+    `
+      select
+        question_id as "questionId",
+        accepted,
+        score,
+        prompt_snapshot as "prompt",
+        feedback_summary as "feedbackSummary",
+        validator_version as "validatorVersion",
+        decision_hash as "decisionHash"
+      from lesson.answer_validation_decisions
+      where lesson_attempt_id = $1::uuid
+      order by question_id asc
+    `,
+    [attemptId],
+  );
+
+  return result.rows;
 }
 
 async function persistQuestionAttempts(client, attemptId, questionAttempts) {
@@ -3103,6 +3434,7 @@ export async function submitLessonAttempt(
         walletAddress,
         courseId,
       );
+      const questionResults = await readAnswerValidationDecisions(client, attempt.attemptId);
 
       return {
         lessonId,
@@ -3114,60 +3446,81 @@ export async function submitLessonAttempt(
         completedAt: attempt.submittedAt,
         completionEventId: completionEvent?.eventId ?? attempt.attemptId,
         courseRuntime,
+        questionResults,
       };
     }
 
     const questions = await listLessonQuestions(client, attempt.lessonVersionId);
-    const grading = gradeAnswers(questions, submittedAnswers);
+    const grading = gradeAnswers(questions, submittedAnswers, attempt.startedAt, timestamp);
 
     await persistQuestionAttempts(client, normalizedAttemptId, grading.attempts);
+    await persistAnswerValidationDecisions(client, normalizedAttemptId, grading.attempts);
+
+    const accepted = grading.score >= LESSON_ACCEPTANCE_THRESHOLD;
 
     await client.query(
       `
         update lesson.user_lesson_attempts
         set submitted_at = $2::timestamptz,
             score = $3,
-            accepted = true
+            accepted = $4
         where id = $1::uuid
       `,
-      [normalizedAttemptId, timestamp, grading.score],
+      [normalizedAttemptId, timestamp, grading.score, accepted],
     );
 
-    await persistLessonProgress(
-      client,
-      walletAddress,
-      lessonId,
-      grading.score,
-      timestamp,
-    );
+    let completionEvent = null;
+    let courseRuntime = null;
+    if (accepted) {
+      await persistLessonProgress(
+        client,
+        walletAddress,
+        lessonId,
+        grading.score,
+        timestamp,
+      );
 
-    const completionEvent = await persistVerifiedCompletionEvent(
-      client,
-      walletAddress,
-      lessonId,
-      attempt.lessonVersionId,
-      normalizedAttemptId,
-      grading,
-      timestamp,
-    );
-    const courseRuntime = await applyVerifiedCompletionToCourseRuntime(
-      client,
-      walletAddress,
-      completionEvent.courseId,
-      completionEvent.completionDay,
-      completionEvent.rewardUnits,
-    );
+      completionEvent = await persistVerifiedCompletionEvent(
+        client,
+        walletAddress,
+        lessonId,
+        attempt.lessonVersionId,
+        normalizedAttemptId,
+        grading,
+        timestamp,
+      );
+      courseRuntime = await applyVerifiedCompletionToCourseRuntime(
+        client,
+        walletAddress,
+        completionEvent.courseId,
+        completionEvent.completionDay,
+        completionEvent.rewardUnits,
+      );
+    }
+
+    const questionResults = grading.attempts
+      .filter((attemptResult) => attemptResult.validatorResult)
+      .map((attemptResult) => ({
+        questionId: attemptResult.questionId,
+        prompt: attemptResult.prompt,
+        accepted: attemptResult.validatorResult.accepted,
+        score: attemptResult.validatorResult.score,
+        feedbackSummary: attemptResult.validatorResult.feedbackSummary,
+        validatorVersion: attemptResult.validatorResult.validatorVersion,
+        decisionHash: attemptResult.validatorResult.decisionHash,
+      }));
 
     return {
       lessonId,
       attemptId: normalizedAttemptId,
-      accepted: true,
+      accepted,
       score: grading.score,
       correctAnswers: grading.correctAnswers,
       totalQuestions: grading.totalQuestions,
       completedAt: timestamp,
-      completionEventId: completionEvent.eventId,
+      completionEventId: completionEvent?.eventId,
       courseRuntime,
+      questionResults,
     };
   });
 }

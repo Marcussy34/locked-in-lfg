@@ -17,6 +17,19 @@ Default mode:
 - rubric-first acceptance check
 - LLM feedback for explanatory guidance
 
+Current implementation checkpoint:
+
+- backend now supports deterministic rubric-first validation for `short_text` questions
+- rubric config is stored in `lesson.questions.metadata`
+- accepted subjective answers flow into the same verified completion pipeline
+- rejected subjective answers do not create completion events or course-runtime progression
+- validator decisions are stored in an audit table with:
+  - criteria breakdown
+  - feedback summary
+  - validator version
+  - decision hash
+- the mobile result screen can now show backend feedback for subjective answers
+
 ## Required Request Context
 
 Validator input must include:

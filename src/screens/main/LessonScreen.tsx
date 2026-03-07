@@ -228,12 +228,22 @@ export function LessonScreen() {
               .getState()
               .syncCourseRuntime(courseId, result.courseRuntime);
           }
-          applyLessonCompletion(result.score);
+          if (result.accepted) {
+            applyLessonCompletion(result.score);
+          }
           navigation.navigate('LessonResult', {
             lessonId,
             courseId,
             score: result.score,
             totalQuestions: result.totalQuestions,
+            accepted: result.accepted,
+            questionResults: result.questionResults?.map((question) => ({
+              questionId: question.questionId,
+              prompt: question.prompt,
+              accepted: question.accepted,
+              score: question.score,
+              feedbackSummary: question.feedbackSummary,
+            })),
           });
         } catch (error) {
           if (__DEV__) {

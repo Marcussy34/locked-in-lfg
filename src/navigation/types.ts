@@ -17,7 +17,20 @@ export type MainStackParamList = {
   DungeonHome: undefined;
   CourseBrowser: undefined;
   Lesson: { lessonId: string; courseId: string };
-  LessonResult: { lessonId: string; courseId: string; score: number; totalQuestions: number };
+  LessonResult: {
+    lessonId: string;
+    courseId: string;
+    score: number;
+    totalQuestions: number;
+    accepted?: boolean;
+    questionResults?: Array<{
+      questionId: string;
+      prompt: string;
+      accepted: boolean;
+      score: number;
+      feedbackSummary: string;
+    }>;
+  };
   StreakStatus: undefined;
   Alchemy: undefined;
   Leaderboard: undefined;
