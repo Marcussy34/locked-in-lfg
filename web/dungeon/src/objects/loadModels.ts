@@ -526,7 +526,7 @@ function createTiledMaterial(
   m.diffuseTexture = tex;
   m.specularColor = new Color3(0.1, 0.1, 0.1);
   m.backFaceCulling = false;
-  m.maxSimultaneousLights = isMobile ? 8 : 16;
+  m.maxSimultaneousLights = 16;
   roomMaterials.push({ mat: m, uScale, vScale });
   return m;
 }
@@ -621,7 +621,7 @@ async function loadModel(
     if (mesh.material) {
       const mat = mesh.material as any;
       if ('maxSimultaneousLights' in mat) {
-        mat.maxSimultaneousLights = isMobile ? 8 : 16;
+        mat.maxSimultaneousLights = 16;
       }
       // Fix unlit / emissive-only GLB models so they respond to scene lights.
       // Skip for alchemy_yield — its baked emissive texture IS the visual.
