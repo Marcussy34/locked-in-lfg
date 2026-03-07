@@ -73,6 +73,7 @@ Current implementation checkpoint:
 
 Current operator path:
 
+- leaderboard snapshots can now refresh automatically through a backend worker
 - scheduler/admin can trigger a refresh through:
   - `POST /v1/internal/leaderboard/refresh`
 

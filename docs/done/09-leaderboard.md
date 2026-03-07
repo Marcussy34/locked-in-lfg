@@ -32,6 +32,7 @@ This checkpoint replaced the placeholder leaderboard screen with a real off-chai
 ### Snapshot layer
 
 - Added a persisted leaderboard snapshot store in Postgres.
+- Added a polling backend worker so snapshots can refresh automatically.
 - Internal refresh path:
   - `POST /v1/internal/leaderboard/refresh`
 - Public leaderboard reads the latest snapshot when present.

@@ -107,6 +107,9 @@ export const appConfig = {
     process.env.REDEMPTION_VAULT_MINIMUM_BALANCE_UI ?? '1',
   redemptionVaultTargetBalanceUi:
     process.env.REDEMPTION_VAULT_TARGET_BALANCE_UI ?? '5',
+  leaderboardSnapshotEnabled: optionalBool('LEADERBOARD_SNAPSHOT_ENABLED', false),
+  leaderboardSnapshotIntervalMs: optionalInt('LEADERBOARD_SNAPSHOT_INTERVAL_MS', 60_000),
+  leaderboardSnapshotPageSize: optionalInt('LEADERBOARD_SNAPSHOT_PAGE_SIZE', 25),
   unlockIndexerEnabled: optionalBool('UNLOCK_INDEXER_ENABLED', false),
   unlockIndexerIntervalMs: optionalInt('UNLOCK_INDEXER_INTERVAL_MS', 15_000),
   unlockIndexerScanLimit: optionalInt('UNLOCK_INDEXER_SCAN_LIMIT', 25),
