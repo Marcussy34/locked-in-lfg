@@ -7,6 +7,7 @@ import { contentRoutes } from './modules/content/routes.mjs';
 import { authRoutes } from './modules/auth/routes.mjs';
 import { progressRoutes } from './modules/progress/routes.mjs';
 import { registerLockVaultRelayWorker } from './workers/lockVaultRelayWorker.mjs';
+import { registerRedemptionVaultAutofundWorker } from './workers/redemptionVaultAutofundWorker.mjs';
 import { registerRuntimeSchedulerWorker } from './workers/runtimeSchedulerWorker.mjs';
 import { registerUnlockIndexerWorker } from './workers/unlockIndexerWorker.mjs';
 
@@ -110,6 +111,7 @@ function buildServer() {
   app.register(authRoutes);
   app.register(progressRoutes);
   registerLockVaultRelayWorker(app);
+  registerRedemptionVaultAutofundWorker(app);
   registerRuntimeSchedulerWorker(app);
   registerUnlockIndexerWorker(app);
 

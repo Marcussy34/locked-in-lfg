@@ -12,6 +12,7 @@ The backend now also supports a second adapter kind, `kamino_klend_reserve_v1`, 
 That Kamino adapter can read from a separate configured RPC path, so devnet lock testing can still reference a live mainnet reserve APY.
 The backend now also supports one-line yield profiles, so operators can switch between the fixed dev adapter and live Kamino USDC APY without touching code.
 Profile mode now takes precedence over the raw `YIELD_*` strategy fields, so the switch behaves predictably even when older env values are still present.
+The backend can now also keep the devnet redemption vault topped up automatically when liquidity falls below a configured threshold.
 
 ## What Was Implemented
 
@@ -50,6 +51,7 @@ Profile mode now takes precedence over the raw `YIELD_*` strategy fields, so the
 - Added a reusable script to fund the protocol redemption vault:
   - `scripts/fund-redemption-vault.mjs`
 - Funded the live redemption vault with `5 USDC` on devnet.
+- Added a backend auto-top-up path and worker so devnet redemption liquidity no longer depends only on manual script runs.
 
 ### Mobile Ichor Shop
 

@@ -1,5 +1,6 @@
 import { badRequest, unauthorized } from '../../lib/errors.mjs';
 import { appConfig } from '../../config.mjs';
+import { ensureRedemptionVaultLiquidity } from '../../lib/redemptionVault.mjs';
 import { requireAccessAuth } from '../../plugins/auth.mjs';
 import {
   consumeDailyFuel,
@@ -270,6 +271,11 @@ export async function progressRoutes(app) {
         ? Number(request.body?.limit)
         : 25;
     return refreshLeaderboardSnapshot(limit);
+  });
+
+  app.post('/v1/internal/redemption-vault/top-up', async (request) => {
+    requireSchedulerAuth(request);
+    return ensureRedemptionVaultLiquidity();
   });
 
   app.post('/v1/internal/unlocks/index/sync', async (request) => {

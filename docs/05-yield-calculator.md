@@ -29,6 +29,7 @@ Current implementation checkpoint:
 - a positive devnet harvest has already credited real `ichor_counter` and `ichor_lifetime_total`
 - the mobile `Ichor Shop` now reads live on-chain Ichor state and redemption tier
 - the mobile `Ichor Shop` now also reads backend harvest history and summary totals
+- backend now also supports automatic redemption-vault top-up on devnet when liquidity drops below a configured minimum
 - the redirected-yield share from a published harvest can now be relayed into the live `CommunityPot` program
 - the mobile `Community Pot` screen now reads the live current-month pot balance on-chain
 - full-redirect harvest math now uses the canonical rule:

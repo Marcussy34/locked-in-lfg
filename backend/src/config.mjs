@@ -95,6 +95,18 @@ export const appConfig = {
   lockVaultRelayEnabled: optionalBool('LOCK_VAULT_RELAY_ENABLED', false),
   lockVaultRelayIntervalMs: optionalInt('LOCK_VAULT_RELAY_INTERVAL_MS', 15_000),
   lockVaultRelayBatchSize: optionalInt('LOCK_VAULT_RELAY_BATCH_SIZE', 5),
+  redemptionVaultAutofundEnabled: optionalBool(
+    'REDEMPTION_VAULT_AUTOFUND_ENABLED',
+    false,
+  ),
+  redemptionVaultAutofundIntervalMs: optionalInt(
+    'REDEMPTION_VAULT_AUTOFUND_INTERVAL_MS',
+    30_000,
+  ),
+  redemptionVaultMinimumBalanceUi:
+    process.env.REDEMPTION_VAULT_MINIMUM_BALANCE_UI ?? '1',
+  redemptionVaultTargetBalanceUi:
+    process.env.REDEMPTION_VAULT_TARGET_BALANCE_UI ?? '5',
   unlockIndexerEnabled: optionalBool('UNLOCK_INDEXER_ENABLED', false),
   unlockIndexerIntervalMs: optionalInt('UNLOCK_INDEXER_INTERVAL_MS', 15_000),
   unlockIndexerScanLimit: optionalInt('UNLOCK_INDEXER_SCAN_LIMIT', 25),
