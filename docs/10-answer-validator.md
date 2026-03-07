@@ -16,11 +16,13 @@ Default mode:
 
 - rubric-first acceptance check
 - LLM feedback for explanatory guidance
+- rubric-only fallback when the model call is disabled, fails, or times out
 
 Current implementation checkpoint:
 
 - backend now supports deterministic rubric-first validation for `short_text` questions
 - rubric config is stored in `lesson.questions.metadata`
+- optional hybrid mode can call OpenAI Responses for better feedback wording
 - accepted subjective answers flow into the same verified completion pipeline
 - rejected subjective answers do not create completion events or course-runtime progression
 - validator decisions are stored in an audit table with:
@@ -29,6 +31,7 @@ Current implementation checkpoint:
   - validator version
   - decision hash
 - the mobile result screen can now show backend feedback for subjective answers
+- hybrid feedback never changes acceptance; rubric stays the source of truth
 
 ## Required Request Context
 

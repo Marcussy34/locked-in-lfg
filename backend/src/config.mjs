@@ -68,6 +68,11 @@ export const appConfig = {
   runtimeSchedulerEnabled: optionalBool('RUNTIME_SCHEDULER_ENABLED', false),
   runtimeSchedulerIntervalMs: optionalInt('RUNTIME_SCHEDULER_INTERVAL_MS', 15_000),
   runtimeSchedulerBatchSize: optionalInt('RUNTIME_SCHEDULER_BATCH_SIZE', 5),
+  answerValidatorHybridEnabled: optionalBool('ANSWER_VALIDATOR_HYBRID_ENABLED', false),
+  openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+  openaiResponsesBaseUrl: process.env.OPENAI_RESPONSES_BASE_URL ?? 'https://api.openai.com/v1',
+  openaiValidatorModel: process.env.OPENAI_VALIDATOR_MODEL ?? 'gpt-4o-mini',
+  openaiValidatorTimeoutMs: optionalInt('OPENAI_VALIDATOR_TIMEOUT_MS', 4000),
   solanaRpcUrl:
     process.env.SOLANA_RPC_URL ??
     process.env.EXPO_PUBLIC_SOLANA_RPC_URL ??

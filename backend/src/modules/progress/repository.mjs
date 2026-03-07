@@ -26,6 +26,7 @@ import {
   readCommunityPotDistributionWindow,
   readCommunityPotWindow,
 } from '../../lib/communityPot.mjs';
+import { enhanceValidatorFeedback } from '../../lib/answerValidator.mjs';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -636,7 +637,25 @@ function buildFeedbackSummary(criteriaBreakdown, accepted, integrityFlags) {
   return parts.join(' ');
 }
 
-function evaluateSubjectiveAnswer(question, answerText, startedAt, completedAt) {
+function buildValidatorDecisionHash(questionId, answerText, validatorResult) {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        questionId,
+        answerText,
+        accepted: validatorResult.accepted,
+        score: validatorResult.score,
+        validatorMode: validatorResult.validatorMode,
+        validatorVersion: validatorResult.validatorVersion,
+        criteriaBreakdown: validatorResult.criteriaBreakdown,
+        integrityFlags: validatorResult.integrityFlags,
+        feedbackSummary: validatorResult.feedbackSummary,
+      }),
+    )
+    .digest('hex');
+}
+
+async function evaluateSubjectiveAnswer(question, answerText, startedAt, completedAt) {
   const rubric = extractRubricConfig(question);
   const integrityFlags = buildIntegrityFlags(answerText, startedAt, completedAt);
   const criteriaBreakdown = rubric.criteria.map((criterion) =>
@@ -659,35 +678,41 @@ function evaluateSubjectiveAnswer(question, answerText, startedAt, completedAt) 
     !hasBlockingIntegrityFlag &&
     requiredCriteriaMet &&
     score >= rubric.acceptThreshold;
-  const feedbackSummary = buildFeedbackSummary(criteriaBreakdown, accepted, integrityFlags);
-  const decisionHash = createHash('sha256')
-    .update(
-      JSON.stringify({
-        questionId: question.id,
-        answerText,
-        accepted,
-        score,
-        validatorVersion: SUBJECTIVE_VALIDATOR_VERSION,
-        criteriaBreakdown,
-        integrityFlags,
-      }),
-    )
-    .digest('hex');
-
-  return {
+  const baseResult = {
     accepted,
     score,
     criteriaBreakdown,
-    feedbackSummary,
+    feedbackSummary: buildFeedbackSummary(criteriaBreakdown, accepted, integrityFlags),
     validatorVersion: SUBJECTIVE_VALIDATOR_VERSION,
     validatorMode: rubric.mode,
     rubricSnapshot: rubric,
     integrityFlags,
-    decisionHash,
+  };
+  // Feedback can be upgraded by the model, but acceptance must stay rubric-deterministic.
+  const enhancedFeedback = await enhanceValidatorFeedback({
+    prompt: question.prompt,
+    learnerAnswer: answerText,
+    criteriaBreakdown,
+    integrityFlags,
+    accepted,
+    rubricMode: rubric.mode,
+  });
+  const validatorResult = enhancedFeedback
+    ? {
+        ...baseResult,
+        feedbackSummary: enhancedFeedback.feedbackSummary,
+        validatorVersion: enhancedFeedback.validatorVersion,
+        validatorMode: enhancedFeedback.validatorMode,
+      }
+    : baseResult;
+
+  return {
+    ...validatorResult,
+    decisionHash: buildValidatorDecisionHash(question.id, answerText, validatorResult),
   };
 }
 
-function gradeAnswers(questions, submittedAnswers, startedAt = null, completedAt = null) {
+async function gradeAnswers(questions, submittedAnswers, startedAt = null, completedAt = null) {
   const questionIds = new Set(questions.map((question) => question.id));
   for (const questionId of submittedAnswers.keys()) {
     if (!questionIds.has(questionId)) {
@@ -698,13 +723,13 @@ function gradeAnswers(questions, submittedAnswers, startedAt = null, completedAt
     }
   }
 
-  const attempts = questions.map((question) => {
+  const attempts = await Promise.all(questions.map(async (question) => {
     const answerText = submittedAnswers.get(question.id) ?? '';
     let validatorResult = null;
     let isCorrect = false;
 
     if (question.questionType === 'short_text') {
-      validatorResult = evaluateSubjectiveAnswer(
+      validatorResult = await evaluateSubjectiveAnswer(
         question,
         answerText,
         startedAt,
@@ -725,7 +750,7 @@ function gradeAnswers(questions, submittedAnswers, startedAt = null, completedAt
       isCorrect,
       validatorResult,
     };
-  });
+  }));
 
   const correctAnswers = attempts.filter((attempt) => attempt.isCorrect).length;
   const totalQuestions = questions.length;
@@ -3451,7 +3476,12 @@ export async function submitLessonAttempt(
     }
 
     const questions = await listLessonQuestions(client, attempt.lessonVersionId);
-    const grading = gradeAnswers(questions, submittedAnswers, attempt.startedAt, timestamp);
+    const grading = await gradeAnswers(
+      questions,
+      submittedAnswers,
+      attempt.startedAt,
+      timestamp,
+    );
 
     await persistQuestionAttempts(client, normalizedAttemptId, grading.attempts);
     await persistAnswerValidationDecisions(client, normalizedAttemptId, grading.attempts);
