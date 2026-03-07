@@ -52,7 +52,8 @@ function resolveYieldStrategyProfile(profile) {
         enabled: true,
         kind: 'kamino_klend_reserve_v1',
         fixedApyBps: 800,
-        harvestIntervalSeconds: 3600,
+        // Weekly cadence keeps small devnet locks above integer rounding noise.
+        harvestIntervalSeconds: 7 * 24 * 60 * 60,
         kaminoRpcUrl: 'https://api.mainnet-beta.solana.com',
         kaminoMarketAddress: '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF',
         kaminoReserveSymbol: 'USDC',

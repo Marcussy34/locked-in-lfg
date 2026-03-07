@@ -15,6 +15,12 @@ Current implementation checkpoint:
   - checks for an existing on-chain lock before attempting another deposit
   - shows `SOL` alongside `USDC` and `SKR`
   - simulates `lock_funds` before opening the wallet so program/token errors surface in-app
+  - reads a per-course lock policy from the course catalog
+  - enforces minimum deposit and duration bounds before building the transaction
+  - offers quick principal presets (for example `1`, `5`, `10`, `25`, `50`, `100`)
+  - keeps `1 USDC` available as a dev/demo preset without changing the normal course policy
+  - is now reachable from both the first-connect onboarding flow and the in-app course browser
+  - only unlocks lesson access for the specific course that was locked
 - the Solana client layer can now also build a real `unlock_funds` transaction for a locked course
 - the flow still depends on configured program/mint env vars and a deployed `LockVault` program on the selected cluster
 - live lock inspection is now available through `scripts/inspect-lock-vault.mjs`
@@ -23,14 +29,19 @@ Current implementation checkpoint:
 
 - connected wallet public key
 - selected course id
-- lock duration (`30 | 60 | 90` days)
+- course lock policy:
+  - minimum deposit
+  - optional maximum deposit
+  - minimum lock duration
+  - maximum lock duration
+- lock duration (currently constrained by on-chain presets: `14 | 30 | 45 | 60 | 90 | 180 | 365`)
 - principal amount (USDC)
 - optional SKR amount
 
 ## Canonical Deposit Flow
 
 1. fetch wallet token balances (stablecoin and SKR)
-2. validate amount, mint support, and minimums
+2. validate amount, mint support, and per-course policy bounds
 3. derive required accounts:
    - lock PDA
    - user ATAs
@@ -41,6 +52,14 @@ Current implementation checkpoint:
 7. submit and confirm transaction
 8. persist lock reference in app state
 9. route user to gauntlet flow
+
+Current flow note:
+
+- user connects wallet
+- sees the course catalog
+- selects a specific course
+- locks funds for that specific course
+- only then descends into that course's gauntlet and lesson path
 
 ## Single-Transaction Requirement
 

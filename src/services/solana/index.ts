@@ -19,6 +19,7 @@ export {
   buildRedeemIchorTransaction,
   buildUnlockFundsTransaction,
   buildLockFundsTransaction,
+  deriveCoursePolicyAddress,
   deriveLockAccountAddress,
   fetchLockAccountSnapshot,
   fetchRedemptionVaultBalance,

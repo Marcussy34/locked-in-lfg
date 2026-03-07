@@ -38,6 +38,9 @@ export function ProfileScreen() {
     (s) => s.resetLessonProgressForCourse,
   );
 
+  const lockedCourseIds = activeCourseIds.filter((courseId) =>
+    Boolean(courseStates[courseId]?.lockAccountAddress),
+  );
   const activeState = activeCourseId ? courseStates[activeCourseId] : null;
   const activeLockAccountAddress = activeState?.lockAccountAddress ?? null;
   const activeCourse = activeCourseId
@@ -311,12 +314,12 @@ export function ProfileScreen() {
         </View>
 
         {/* Course Switcher */}
-        {activeCourseIds.length > 1 && (
+        {lockedCourseIds.length > 1 && (
           <View className="mt-6">
             <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-500">
               Switch Course
             </Text>
-            {activeCourseIds.map((courseId) => {
+            {lockedCourseIds.map((courseId) => {
               const course = courses.find((c) => c.id === courseId);
               if (!course) return null;
               const isActive = courseId === activeCourseId;
@@ -458,18 +461,11 @@ export function ProfileScreen() {
           <Pressable
             className="rounded-xl border border-neutral-700 bg-neutral-900 py-3 active:opacity-80"
             onPress={() => {
-              if (activeCourseId) {
-                deactivateCourse(activeCourseId);
-                if (activeCourseIds.length <= 1) {
-                  navigation.replace('CourseBrowser');
-                } else {
-                  navigation.goBack();
-                }
-              }
+              navigation.replace('CourseBrowser');
             }}
           >
             <Text className="text-center text-sm font-semibold text-neutral-400">
-              Exit Course
+              Browse Courses
             </Text>
           </Pressable>
           <Pressable

@@ -4,6 +4,7 @@
 
 This checkpoint made the first real `CommunityPot` path live on devnet.
 Redirected yield is no longer just a rules table or placeholder UI value. It now lands in an on-chain monthly pot window and can be read back by the app.
+The live course catalog now also aligns difficulty with real course-specific lock policy ranges, rather than treating every course as the same economic commitment.
 
 ## What Was Implemented
 
@@ -58,6 +59,16 @@ Redirected yield is no longer just a rules table or placeholder UI value. It now
   - closed-window totals
   - current wallet receipt
   - recipient rows for that window
+
+### Course-specific lock policy economics
+
+- Beginner starter courses now use:
+  - `10..100 USDC`
+  - `10..30` day policy bounds
+- Intermediate starter courses now use:
+  - `25..250 USDC`
+  - `30..90` day policy bounds
+- Every current course also exposes a `1 USDC` demo override for devnet onboarding and QA.
 
 ## Main Files
 

@@ -15,13 +15,14 @@ import {
 } from '@solana/web3.js';
 import { connection } from './connection';
 
-export type LockDurationDays = 30 | 60 | 90;
+export type LockDurationDays = 14 | 30 | 45 | 60 | 90 | 180 | 365;
 
 const LOCK_FUNDS_DISCRIMINATOR = Uint8Array.from([171, 49, 9, 86, 156, 155, 2, 88]);
 const UNLOCK_FUNDS_DISCRIMINATOR = Uint8Array.from([175, 119, 16, 245, 141, 55, 255, 43]);
 const REDEEM_ICHOR_DISCRIMINATOR = Uint8Array.from([70, 55, 11, 86, 107, 196, 69, 59]);
 const LOCK_ACCOUNT_DISCRIMINATOR_HEX = 'df40477cff5676c0';
 const PROTOCOL_SEED = Buffer.from('protocol');
+const COURSE_POLICY_SEED = Buffer.from('course-policy');
 const LOCK_SEED = Buffer.from('lock');
 
 const rawProgramId = (process.env.EXPO_PUBLIC_LOCK_VAULT_PROGRAM_ID ?? '').trim();
@@ -373,6 +374,17 @@ export async function deriveLockAccountAddress(
   return lockAccount.toBase58();
 }
 
+export async function deriveCoursePolicyAddress(courseId: string): Promise<string> {
+  const config = getLockVaultConfig();
+  const courseIdHash = await hashCourseId(courseId);
+  const [coursePolicy] = PublicKey.findProgramAddressSync(
+    [COURSE_POLICY_SEED, Buffer.from(courseIdHash)],
+    config.programId,
+  );
+
+  return coursePolicy.toBase58();
+}
+
 export async function fetchLockAccountSnapshot(params: {
   ownerAddress: string;
   courseId: string;
@@ -505,6 +517,10 @@ export async function buildLockFundsTransaction(params: {
     [PROTOCOL_SEED],
     config.programId,
   );
+  const [coursePolicy] = PublicKey.findProgramAddressSync(
+    [COURSE_POLICY_SEED, Buffer.from(courseIdHash)],
+    config.programId,
+  );
   const [lockAccount] = PublicKey.findProgramAddressSync(
     [LOCK_SEED, owner.toBuffer(), Buffer.from(courseIdHash)],
     config.programId,
@@ -556,6 +572,7 @@ export async function buildLockFundsTransaction(params: {
 
   const keys = [
     { pubkey: protocolConfig, isSigner: false, isWritable: false },
+    { pubkey: coursePolicy, isSigner: false, isWritable: false },
     { pubkey: lockAccount, isSigner: false, isWritable: true },
     { pubkey: stableMint, isSigner: false, isWritable: false },
     { pubkey: config.skrMint, isSigner: false, isWritable: false },

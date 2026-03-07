@@ -15,7 +15,7 @@ export function CourseSelectionScreen() {
   const contentError = useCourseStore((s) => s.contentError);
   const contentInitialized = useCourseStore((s) => s.contentInitialized);
   const initializeContent = useCourseStore((s) => s.initializeContent);
-  const availableCourses = courses.slice(0, 3);
+  const availableCourses = courses;
 
   useEffect(() => {
     if (!contentInitialized && !contentLoading) {

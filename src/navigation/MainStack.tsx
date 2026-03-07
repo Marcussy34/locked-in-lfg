@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import type { MainStackParamList } from './types';
 import { UndergroundHubScreen } from '@/screens/main/UndergroundHubScreen';
 import { CourseBrowserScreen } from '@/screens/main/CourseBrowserScreen';
+import { DepositScreen } from '@/screens/onboarding/DepositScreen';
 import { LessonScreen } from '@/screens/main/LessonScreen';
 import { LessonResultScreen } from '@/screens/main/LessonResultScreen';
 import { StreakStatusScreen } from '@/screens/main/StreakStatusScreen';
@@ -41,6 +42,11 @@ export function MainStack() {
       <Stack.Screen
         name="CourseBrowser"
         component={CourseBrowserScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Deposit"
+        component={DepositScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen

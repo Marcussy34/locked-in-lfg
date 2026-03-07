@@ -48,6 +48,7 @@ function toApiCourses(): ApiCourseCard[] {
     totalModules: 1,
     totalLessons: course.totalLessons,
     publishedAt: null,
+    lockPolicy: course.lockPolicy,
   }));
 }
 

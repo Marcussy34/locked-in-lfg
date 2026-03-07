@@ -12,6 +12,8 @@ The backend now also supports a second adapter kind, `kamino_klend_reserve_v1`, 
 That Kamino adapter can read from a separate configured RPC path, so devnet lock testing can still reference a live mainnet reserve APY.
 The backend now also supports one-line yield profiles, so operators can switch between the fixed dev adapter and live Kamino USDC APY without touching code.
 Profile mode now takes precedence over the raw `YIELD_*` strategy fields, so the switch behaves predictably even when older env values are still present.
+The Kamino profile now uses a weekly harvest cadence, which keeps small devnet locks above integer rounding noise during verification.
+That live Kamino-backed verification is now complete: the mainnet USDC reserve APY produced a non-zero weekly quote on the current devnet lock, and the resulting receipt published through `YieldSplitter`, `LockVault`, and `CommunityPot`.
 The backend can now also keep the devnet redemption vault topped up automatically when liquidity falls below a configured threshold.
 
 ## What Was Implemented
@@ -106,6 +108,5 @@ The backend can now also keep the devnet redemption vault topped up automaticall
 
 ## Remaining Follow-up
 
-- Switch a live environment from `fixed_apy_v1` to `kamino_klend_reserve_v1` and verify the first real protocol-backed harvest.
 - Decide whether harvest logic stays in `LockVault` or moves behind a dedicated companion program.
 - Add monthly `CommunityPot` settlement from redirected yield.

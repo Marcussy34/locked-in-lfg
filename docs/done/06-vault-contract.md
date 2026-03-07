@@ -14,6 +14,32 @@ This checkpoint established the first working `LockVault` program on devnet and 
   - official devnet USDC
   - project SKR mint
   - deterministic lock and vault PDAs
+- `lock_funds` now also requires a per-course `CoursePolicy` PDA and enforces:
+  - minimum principal
+  - optional maximum principal
+  - demo principal override
+  - duration inside the course policy range
+  - duration inside the canonical preset set
+- The canonical on-chain duration set is now:
+  - `14`
+  - `30`
+  - `45`
+  - `60`
+  - `90`
+  - `180`
+  - `365`
+
+### On-chain course policy accounts
+
+- `upsert_course_policy(...)` now exists as an authority-only instruction.
+- Each course policy is keyed by the hashed course id.
+- The current live devnet policy PDAs include:
+  - `solana-fundamentals`
+  - `anchor-dev`
+  - `rust-solana`
+  - `defi-protocols`
+- A bulk sync script now exists:
+  - `scripts/sync-lock-vault-course-policies.mjs`
 
 ### On-chain unlock path
 

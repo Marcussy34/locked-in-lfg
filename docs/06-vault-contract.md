@@ -81,7 +81,7 @@ Effects:
 Validation:
 
 - supported stablecoin mint only
-- lock duration in allowed set (`30`, `60`, `90`)
+- lock duration in allowed set (`14`, `30`, `45`, `60`, `90`, `180`, `365`)
 - one active lock per `(owner, course_id)` key
 
 Current scaffold note:

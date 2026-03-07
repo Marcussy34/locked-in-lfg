@@ -11,6 +11,13 @@ export const MOCK_COURSES: Course[] = [
     difficulty: 'beginner',
     category: 'solana',
     imageUrl: null,
+    lockPolicy: {
+      minPrincipalAmountUi: '10',
+      maxPrincipalAmountUi: '100',
+      demoPrincipalAmountUi: '1',
+      minLockDurationDays: 10,
+      maxLockDurationDays: 30,
+    },
   },
   {
     id: 'anchor-dev',
@@ -22,6 +29,13 @@ export const MOCK_COURSES: Course[] = [
     difficulty: 'intermediate',
     category: 'solana',
     imageUrl: null,
+    lockPolicy: {
+      minPrincipalAmountUi: '25',
+      maxPrincipalAmountUi: '250',
+      demoPrincipalAmountUi: '1',
+      minLockDurationDays: 30,
+      maxLockDurationDays: 90,
+    },
   },
   {
     id: 'rust-solana',
@@ -33,6 +47,13 @@ export const MOCK_COURSES: Course[] = [
     difficulty: 'beginner',
     category: 'rust',
     imageUrl: null,
+    lockPolicy: {
+      minPrincipalAmountUi: '10',
+      maxPrincipalAmountUi: '100',
+      demoPrincipalAmountUi: '1',
+      minLockDurationDays: 10,
+      maxLockDurationDays: 30,
+    },
   },
   {
     id: 'defi-protocols',
@@ -44,6 +65,13 @@ export const MOCK_COURSES: Course[] = [
     difficulty: 'intermediate',
     category: 'defi',
     imageUrl: null,
+    lockPolicy: {
+      minPrincipalAmountUi: '25',
+      maxPrincipalAmountUi: '250',
+      demoPrincipalAmountUi: '1',
+      minLockDurationDays: 30,
+      maxLockDurationDays: 90,
+    },
   },
 ];
 

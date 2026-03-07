@@ -14,7 +14,7 @@ const MIN_FUEL_CAP: u16 = 7;
 const MAX_FUEL_CAP: u16 = 14;
 const DEFAULT_MAX_SAVERS: u8 = 3;
 const GAUNTLET_DAYS: u8 = 7;
-const MAX_LOCK_DURATION_DAYS: u16 = 90;
+const MAX_LOCK_DURATION_DAYS: u16 = 365;
 const ACTIVE_STATUS: u8 = 0;
 const CLOSED_STATUS: u8 = 2;
 const FULL_REDIRECT_BPS: u16 = 10_000;
@@ -75,11 +75,18 @@ pub mod lock_vault {
         skr_amount: u64,
     ) -> Result<()> {
         require!(stable_amount > 0, LockVaultError::InvalidPrincipalAmount);
+        require!(
+            ctx.accounts.course_policy.course_id_hash == course_id_hash,
+            LockVaultError::InvalidCoursePolicy
+        );
         validate_supported_mints(
             &ctx.accounts.protocol_config,
             ctx.accounts.stable_mint.key(),
             ctx.accounts.skr_mint.key(),
         )?;
+        ctx.accounts
+            .course_policy
+            .validate_lock_request(stable_amount, lock_duration_days)?;
         validate_owner_token_account(
             &ctx.accounts.owner_stable_token_account,
             ctx.accounts.owner.key(),
@@ -146,6 +153,45 @@ pub mod lock_vault {
             skr_locked_amount: lock_account.skr_locked_amount,
             skr_tier: lock_account.skr_tier,
             lock_end_ts: lock_account.lock_end_ts,
+        });
+
+        Ok(())
+    }
+
+    pub fn upsert_course_policy(
+        ctx: Context<UpsertCoursePolicy>,
+        course_id_hash: [u8; 32],
+        min_principal_amount: u64,
+        max_principal_amount: u64,
+        demo_principal_amount: u64,
+        min_lock_duration_days: u16,
+        max_lock_duration_days: u16,
+    ) -> Result<()> {
+        validate_course_policy_params(
+            min_principal_amount,
+            max_principal_amount,
+            demo_principal_amount,
+            min_lock_duration_days,
+            max_lock_duration_days,
+        )?;
+
+        let course_policy = &mut ctx.accounts.course_policy;
+        course_policy.course_id_hash = course_id_hash;
+        course_policy.min_principal_amount = min_principal_amount;
+        course_policy.max_principal_amount = max_principal_amount;
+        course_policy.demo_principal_amount = demo_principal_amount;
+        course_policy.min_lock_duration_days = min_lock_duration_days;
+        course_policy.max_lock_duration_days = max_lock_duration_days;
+        course_policy.bump = ctx.bumps.course_policy;
+
+        emit!(CoursePolicyUpserted {
+            course_policy: course_policy.key(),
+            course_id_hash,
+            min_principal_amount,
+            max_principal_amount,
+            demo_principal_amount,
+            min_lock_duration_days,
+            max_lock_duration_days,
         });
 
         Ok(())
@@ -460,6 +506,28 @@ pub struct InitializeProtocol<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(course_id_hash: [u8; 32])]
+pub struct UpsertCoursePolicy<'info> {
+    #[account(
+        seeds = [ProtocolConfig::SEED],
+        bump = protocol_config.bump,
+        has_one = authority @ LockVaultError::UnauthorizedWorker
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + CoursePolicy::INIT_SPACE,
+        seeds = [CoursePolicy::SEED, course_id_hash.as_ref()],
+        bump
+    )]
+    pub course_policy: Account<'info, CoursePolicy>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 #[instruction(course_id_hash: [u8; 32], lock_duration_days: u16, stable_amount: u64, skr_amount: u64)]
 pub struct LockFunds<'info> {
     #[account(
@@ -467,6 +535,11 @@ pub struct LockFunds<'info> {
         bump = protocol_config.bump
     )]
     pub protocol_config: Account<'info, ProtocolConfig>,
+    #[account(
+        seeds = [CoursePolicy::SEED, course_id_hash.as_ref()],
+        bump = course_policy.bump
+    )]
+    pub course_policy: Account<'info, CoursePolicy>,
     #[account(
         init,
         payer = owner,
@@ -696,6 +769,50 @@ pub struct ProtocolConfig {
 
 impl ProtocolConfig {
     pub const SEED: &'static [u8] = b"protocol";
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct CoursePolicy {
+    pub course_id_hash: [u8; 32],
+    pub min_principal_amount: u64,
+    pub max_principal_amount: u64,
+    pub demo_principal_amount: u64,
+    pub min_lock_duration_days: u16,
+    pub max_lock_duration_days: u16,
+    pub bump: u8,
+}
+
+impl CoursePolicy {
+    pub const SEED: &'static [u8] = b"course-policy";
+
+    fn validate_lock_request(&self, stable_amount: u64, lock_duration_days: u16) -> Result<()> {
+        validate_lock_duration(lock_duration_days)?;
+
+        require!(
+            lock_duration_days >= self.min_lock_duration_days
+                && lock_duration_days <= self.max_lock_duration_days,
+            LockVaultError::DurationOutsideCoursePolicy
+        );
+
+        let is_demo_override =
+            self.demo_principal_amount > 0 && stable_amount == self.demo_principal_amount;
+        if !is_demo_override {
+            require!(
+                stable_amount >= self.min_principal_amount,
+                LockVaultError::PrincipalBelowCourseMinimum
+            );
+        }
+
+        if self.max_principal_amount > 0 {
+            require!(
+                stable_amount <= self.max_principal_amount,
+                LockVaultError::PrincipalAboveCourseMaximum
+            );
+        }
+
+        Ok(())
+    }
 }
 
 #[account]
@@ -1103,6 +1220,17 @@ pub struct LockCreated {
 }
 
 #[event]
+pub struct CoursePolicyUpserted {
+    pub course_policy: Pubkey,
+    pub course_id_hash: [u8; 32],
+    pub min_principal_amount: u64,
+    pub max_principal_amount: u64,
+    pub demo_principal_amount: u64,
+    pub min_lock_duration_days: u16,
+    pub max_lock_duration_days: u16,
+}
+
+#[event]
 pub struct FuelCredited {
     pub lock_account: Pubkey,
     pub completion_day: i64,
@@ -1183,6 +1311,22 @@ pub enum LockVaultError {
     InvalidMintConfig,
     #[msg("The stable deposit amount must be greater than zero.")]
     InvalidPrincipalAmount,
+    #[msg("The supplied course policy PDA does not match the requested course.")]
+    InvalidCoursePolicy,
+    #[msg("Course policy minimum principal must be greater than zero.")]
+    InvalidCoursePolicyMinimumPrincipal,
+    #[msg("Course policy maximum principal must be zero or at least the minimum principal.")]
+    InvalidCoursePolicyMaximumPrincipal,
+    #[msg("Course policy demo principal must be zero or a valid positive override.")]
+    InvalidCoursePolicyDemoPrincipal,
+    #[msg("Course policy duration bounds are invalid.")]
+    InvalidCoursePolicyDurationRange,
+    #[msg("The deposit amount is below the course minimum.")]
+    PrincipalBelowCourseMinimum,
+    #[msg("The deposit amount is above the course maximum.")]
+    PrincipalAboveCourseMaximum,
+    #[msg("The selected duration is outside the course policy range.")]
+    DurationOutsideCoursePolicy,
     #[msg("Only the configured USDC mint is supported.")]
     UnsupportedStableMint,
     #[msg("The provided SKR mint does not match protocol config.")]
@@ -1244,9 +1388,39 @@ fn validate_protocol_params(
     Ok(())
 }
 
+fn validate_course_policy_params(
+    min_principal_amount: u64,
+    max_principal_amount: u64,
+    demo_principal_amount: u64,
+    min_lock_duration_days: u16,
+    max_lock_duration_days: u16,
+) -> Result<()> {
+    require!(
+        min_principal_amount > 0,
+        LockVaultError::InvalidCoursePolicyMinimumPrincipal
+    );
+    require!(
+        max_principal_amount == 0 || max_principal_amount >= min_principal_amount,
+        LockVaultError::InvalidCoursePolicyMaximumPrincipal
+    );
+    require!(
+        min_lock_duration_days > 0
+            && max_lock_duration_days >= min_lock_duration_days
+            && max_lock_duration_days <= MAX_LOCK_DURATION_DAYS,
+        LockVaultError::InvalidCoursePolicyDurationRange
+    );
+    require!(
+        demo_principal_amount == 0
+            || (max_principal_amount == 0 || demo_principal_amount <= max_principal_amount),
+        LockVaultError::InvalidCoursePolicyDemoPrincipal
+    );
+
+    Ok(())
+}
+
 fn validate_lock_duration(lock_duration_days: u16) -> Result<()> {
     require!(
-        matches!(lock_duration_days, 30 | 60 | 90),
+        matches!(lock_duration_days, 14 | 30 | 45 | 60 | 90 | 180 | 365),
         LockVaultError::InvalidLockDuration
     );
 
@@ -1542,6 +1716,48 @@ mod tests {
     fn protocol_params_require_distinct_mints() {
         let mint = Pubkey::new_unique();
         assert!(validate_protocol_params(7, 3, 7, mint, mint).is_err());
+    }
+
+    #[test]
+    fn course_policy_validates_demo_override_and_duration_range() {
+        assert!(validate_course_policy_params(10_000_000, 100_000_000, 1_000_000, 10, 30).is_ok());
+        assert!(validate_course_policy_params(10_000_000, 0, 1_000_000, 10, 365).is_ok());
+        assert!(validate_course_policy_params(0, 100_000_000, 0, 10, 30).is_err());
+        assert!(validate_course_policy_params(10_000_000, 5_000_000, 0, 10, 30).is_err());
+        assert!(validate_course_policy_params(10_000_000, 100_000_000, 200_000_000, 10, 30).is_err());
+        assert!(validate_course_policy_params(10_000_000, 100_000_000, 0, 30, 10).is_err());
+    }
+
+    #[test]
+    fn course_policy_enforces_demo_override_and_range() {
+        let policy = CoursePolicy {
+            course_id_hash: [1; 32],
+            min_principal_amount: 10_000_000,
+            max_principal_amount: 100_000_000,
+            demo_principal_amount: 1_000_000,
+            min_lock_duration_days: 10,
+            max_lock_duration_days: 30,
+            bump: 255,
+        };
+
+        assert!(policy.validate_lock_request(1_000_000, 14).is_ok());
+        assert!(policy.validate_lock_request(10_000_000, 14).is_ok());
+        assert!(policy.validate_lock_request(5_000_000, 14).is_err());
+        assert!(policy.validate_lock_request(10_000_000, 45).is_err());
+    }
+
+    #[test]
+    fn lock_duration_allows_canonical_v3_values() {
+        for duration in [14u16, 30, 45, 60, 90, 180, 365] {
+            assert!(validate_lock_duration(duration).is_ok(), "duration {duration} should pass");
+        }
+
+        for duration in [1u16, 10, 15, 29, 120, 366] {
+            assert!(
+                validate_lock_duration(duration).is_err(),
+                "duration {duration} should fail"
+            );
+        }
     }
 
     #[test]

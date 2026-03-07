@@ -24,6 +24,11 @@ Current implementation checkpoint:
 - backend config now also supports one-line strategy profiles:
   - `fixed_apy_dev`
   - `kamino_usdc_mainnet`
+- the Kamino profile now uses a weekly harvest cadence so tiny devnet locks still produce non-zero quoted yield
+- a live Kamino-backed harvest is now verified on devnet:
+  - quoted APY source: Kamino mainnet USDC reserve
+  - gross yield: `3` atomic units on the current `1 USDC` lock over one weekly interval
+  - result: `YieldSplitter`, `LockVault`, and `CommunityPot` all published successfully
 - when a strategy profile is set, it takes precedence over the raw `YIELD_*` strategy env fields
 - the runtime scheduler worker can now auto-create deterministic `auto-harvest:*` receipts
 - a positive devnet harvest has already credited real `ichor_counter` and `ichor_lifetime_total`

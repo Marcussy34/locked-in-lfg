@@ -28,16 +28,26 @@ export function UndergroundHubScreen() {
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
+  const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
+  const lockedCourseIds = activeCourseIds.filter((courseId) =>
+    Boolean(courseStates[courseId]?.lockAccountAddress),
+  );
 
   // Initialize mock data
   useCourseStore.getState().initializeMockData();
 
-  // Guard: no active courses → CourseBrowser
+  // Guard: no locked courses → CourseBrowser
   useEffect(() => {
-    if (activeCourseIds.length === 0) {
+    if (lockedCourseIds.length === 0) {
       navigation.replace('CourseBrowser');
     }
-  }, [activeCourseIds.length, navigation]);
+  }, [lockedCourseIds.length, navigation]);
+
+  useEffect(() => {
+    if (lockedCourseIds.length > 0 && (!activeCourseId || !lockedCourseIds.includes(activeCourseId))) {
+      setActiveCourse(lockedCourseIds[0]);
+    }
+  }, [activeCourseId, lockedCourseIds, setActiveCourse]);
 
   // Show/hide WebView on screen focus/blur
   useFocusEffect(

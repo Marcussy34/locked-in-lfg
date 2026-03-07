@@ -54,7 +54,7 @@ interface CourseStore {
     courseId: string,
     lock: {
       amount: number;
-      duration: 30 | 60 | 90;
+      duration: 14 | 30 | 45 | 60 | 90 | 180 | 365;
       lockAccountAddress?: string | null;
       stableMintAddress?: string | null;
       skrAmount?: number;

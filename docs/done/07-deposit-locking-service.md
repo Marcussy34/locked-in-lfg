@@ -4,6 +4,7 @@
 
 This checkpoint replaced the placeholder deposit path with a real devnet `LockVault` flow.
 The mobile app now creates funded course locks on-chain, persists them across reconnects, exposes a live resurface card, and the repo includes lock inspection tooling for verification.
+It now also treats each course as its own lock path instead of a global/shared deposit state.
 
 ## What Was Implemented
 
@@ -11,6 +12,7 @@ The mobile app now creates funded course locks on-chain, persists them across re
 
 - The app now derives:
   - `ProtocolConfig` PDA
+  - per-course `CoursePolicy` PDA
   - per-course `LockAccount` PDA
   - stable vault ATA
   - SKR vault ATA
@@ -24,6 +26,34 @@ The mobile app now creates funded course locks on-chain, persists them across re
 - The deposit builder now also passes a safe trailing placeholder for `owner_skr_token_account` when locking `0 SKR`, which fixes the live `USDC`-only deposit path on Anchor.
 - The deposit screen now simulates `lock_funds` before wallet approval, so token-account and program-level errors surface in-app instead of only as a generic Phantom failure.
 - The screen also shows current `SOL`, `USDC`, and `SKR` balances before deposit, and it defaults the new lock amount to `1 USDC` for devnet testing.
+- The deposit screen is now scrollable on smaller phones.
+
+### Course-specific lock flow
+
+- After wallet connect, the user sees the course catalog first.
+- Selecting a course now leads to that course's own deposit screen.
+- Each course now has its own:
+  - deposit bounds
+  - demo override
+  - lock duration range
+  - on-chain `CoursePolicy` PDA
+- The in-app course browser no longer uses the old mock activation path for available courses.
+- Inactive course detail pages no longer let users open lessons before that specific course has been locked.
+- The main app now treats only real locked courses as active/descendable.
+
+### Live catalog expansion
+
+- The live backend catalog now includes four lockable courses:
+  - `solana-fundamentals`
+  - `anchor-dev`
+  - `rust-solana`
+  - `defi-protocols`
+- The current published starter lesson counts are:
+  - `5` for Solana Fundamentals
+  - `3` for Anchor Development
+  - `3` for Rust for Solana
+  - `3` for DeFi Protocols
+- `scripts/sync-lock-vault-course-policies.mjs` can now sync every backend course policy row to devnet in one command.
 
 ### Devnet deployment and bootstrap
 
@@ -33,6 +63,7 @@ The mobile app now creates funded course locks on-chain, persists them across re
   - project SKR mint
   - canonical Fuel/saver config
 - The current client flow is configured for `USDC + SKR` only.
+- Live course policies are now also written on-chain for the published courses.
 
 ### Lock inspection tooling
 
@@ -105,6 +136,8 @@ The mobile app now creates funded course locks on-chain, persists them across re
   - `gauntletDay = 1` before any on-chain lesson relay
 - After reconnect, the app returns to the existing locked-course flow instead of incorrectly requesting a second deposit.
 - `Profile` now shows the live resurface card with the correct principal, SKR, and unlock time.
+- Available courses in the main browser now route into the real deposit screen instead of a mock enroll action.
+- The current live catalog is no longer a thin stub; it now publishes four real course entries with their own lesson lists.
 
 ## Remaining Follow-up
 

@@ -1,5 +1,11 @@
 import { getContentProvider } from '@/services/api';
-import type { Course, CourseModule, Lesson, QuestionOption } from '@/types';
+import {
+  defaultCourseLockPolicyForDifficulty,
+  type Course,
+  type CourseModule,
+  type Lesson,
+  type QuestionOption,
+} from '@/types';
 import type {
   ApiCourseCard,
   ApiLessonBlock,
@@ -40,6 +46,8 @@ function toCourse(course: ApiCourseCard): Course {
     category: course.category,
     publishedAt: course.publishedAt,
     imageUrl: course.imageUrl,
+    lockPolicy:
+      course.lockPolicy ?? defaultCourseLockPolicyForDifficulty(course.difficulty),
   };
 }
 

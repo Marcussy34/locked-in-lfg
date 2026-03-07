@@ -69,6 +69,19 @@ export async function listCourses(releaseId) {
         c.image_url as "imageUrl",
         count(distinct pm.module_id)::int as "totalModules",
         count(distinct pl.lesson_id)::int as "totalLessons",
+        jsonb_build_object(
+          'minPrincipalAmountUi', c.min_principal_amount_usdc::text,
+          'maxPrincipalAmountUi', case
+            when c.max_principal_amount_usdc is null then null
+            else c.max_principal_amount_usdc::text
+          end,
+          'demoPrincipalAmountUi', case
+            when c.demo_principal_amount_usdc is null then null
+            else c.demo_principal_amount_usdc::text
+          end,
+          'minLockDurationDays', c.min_lock_duration_days,
+          'maxLockDurationDays', c.max_lock_duration_days
+        ) as "lockPolicy",
         r.created_at as "publishedAt"
       from lesson.courses c
       join lesson.publish_releases r on r.id::text = $1
@@ -76,7 +89,20 @@ export async function listCourses(releaseId) {
         on pm.course_id = c.id and pm.release_id::text = $1
       left join lesson.published_lessons pl
         on pl.module_id = pm.module_id and pl.release_id::text = $1
-      group by c.id, c.slug, c.title, c.description, c.difficulty, c.category, c.image_url, r.created_at
+      group by
+        c.id,
+        c.slug,
+        c.title,
+        c.description,
+        c.difficulty,
+        c.category,
+        c.image_url,
+        c.min_principal_amount_usdc,
+        c.max_principal_amount_usdc,
+        c.demo_principal_amount_usdc,
+        c.min_lock_duration_days,
+        c.max_lock_duration_days,
+        r.created_at
       order by c.title asc
     `,
     [releaseId],

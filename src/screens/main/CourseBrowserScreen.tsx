@@ -35,14 +35,15 @@ export function CourseBrowserScreen() {
   const lessonProgress = useCourseStore((s) => s.lessonProgress);
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
-  const activateCourse = useCourseStore((s) => s.activateCourse);
   const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
-  const deactivateCourse = useCourseStore((s) => s.deactivateCourse);
 
   // Mode detection
-  const isMainMenu = activeCourseIds.length === 0;
-  const activeCourses = courses.filter((c) => activeCourseIds.includes(c.id));
-  const availableCourses = courses.filter((c) => !activeCourseIds.includes(c.id));
+  const lockedCourseIds = activeCourseIds.filter((courseId) =>
+    Boolean(courseStates[courseId]?.lockAccountAddress),
+  );
+  const isMainMenu = lockedCourseIds.length === 0;
+  const activeCourses = courses.filter((c) => lockedCourseIds.includes(c.id));
+  const availableCourses = courses.filter((c) => !lockedCourseIds.includes(c.id));
 
   const selectedCourse = selectedCourseId
     ? courses.find((c) => c.id === selectedCourseId) ?? null
@@ -51,10 +52,9 @@ export function CourseBrowserScreen() {
     ? (lessons[selectedCourseId] ?? [])
     : [];
 
-  // Handle dev-mode enroll: activate + navigate to dungeon
+  // Available courses must go through the real per-course deposit flow.
   const handleEnroll = (courseId: string) => {
-    activateCourse(courseId, { amount: 100, duration: 30 }); // mock $100, 30 days
-    navigation.navigate('DungeonHome');
+    navigation.navigate('Deposit', { courseId });
   };
 
   // Handle tapping an active course card: switch + go to dungeon
@@ -65,8 +65,9 @@ export function CourseBrowserScreen() {
 
   // ====== Detail View ======
   if (selectedCourse) {
-    const isActive = activeCourseIds.includes(selectedCourse.id);
+    const isActive = lockedCourseIds.includes(selectedCourse.id);
     const state = courseStates[selectedCourse.id];
+    const isLocked = Boolean(state?.lockAccountAddress);
 
     return (
       <SafeAreaView className="flex-1 bg-neutral-950">
@@ -81,7 +82,7 @@ export function CourseBrowserScreen() {
           </Text>
 
           {/* Action button */}
-          {isActive ? (
+          {isLocked ? (
             <View className="mt-3 gap-2">
               <Pressable
                 className="rounded-xl bg-purple-600 px-5 py-3 active:opacity-80"
@@ -91,17 +92,6 @@ export function CourseBrowserScreen() {
                   DESCEND
                 </Text>
               </Pressable>
-              <Pressable
-                className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-2.5 active:opacity-80"
-                onPress={() => {
-                  deactivateCourse(selectedCourse.id);
-                  setSelectedCourseId(null);
-                }}
-              >
-                <Text className="text-center text-sm font-semibold text-red-400">
-                  Exit Course
-                </Text>
-              </Pressable>
             </View>
           ) : (
             <Pressable
@@ -109,7 +99,7 @@ export function CourseBrowserScreen() {
               onPress={() => handleEnroll(selectedCourse.id)}
             >
               <Text className="text-center font-bold text-white">
-                DESCEND
+                LOCK & START
               </Text>
             </Pressable>
           )}
@@ -146,6 +136,14 @@ export function CourseBrowserScreen() {
           </View>
 
           {/* Lesson list */}
+          {!isLocked && (
+            <View className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
+              <Text className="text-sm text-neutral-400">
+                Lock this specific course first. Each course has its own deposit and lock duration.
+              </Text>
+            </View>
+          )}
+
           <View className="mt-6 gap-3 pb-8">
             {selectedLessons
               .sort((a, b) => a.order - b.order)
@@ -156,13 +154,15 @@ export function CourseBrowserScreen() {
                 return (
                   <Pressable
                     key={lesson.id}
-                    className="flex-row items-center rounded-xl border border-neutral-700 bg-neutral-900 p-4 active:bg-neutral-800"
-                    onPress={() =>
+                    className={`flex-row items-center rounded-xl border border-neutral-700 p-4 ${isLocked ? 'bg-neutral-900 active:bg-neutral-800' : 'bg-neutral-900/60 opacity-70'}`}
+                    disabled={!isLocked}
+                    onPress={() => {
+                      if (!isLocked) return;
                       navigation.navigate('Lesson', {
                         lessonId: lesson.id,
                         courseId: selectedCourse.id,
-                      })
-                    }
+                      });
+                    }}
                   >
                     {/* Order number circle */}
                     <View
@@ -316,10 +316,12 @@ function CourseCard({
   course,
   onPress,
   onEnroll,
+  buttonLabel = 'LOCK & START',
 }: {
   course: Course;
   onPress: () => void;
   onEnroll: () => void;
+  buttonLabel?: string;
 }) {
   const progressPercent =
     course.totalLessons > 0
@@ -378,7 +380,7 @@ function CourseCard({
         }}
       >
         <Text className="text-center text-sm font-bold text-white">
-          DESCEND
+          {buttonLabel}
         </Text>
       </Pressable>
     </Pressable>

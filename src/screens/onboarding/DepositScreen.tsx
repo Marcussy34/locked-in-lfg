@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { PublicKey } from '@solana/web3.js';
-import type { OnboardingStackParamList } from '@/navigation/types';
+import type { MainStackParamList, OnboardingStackParamList } from '@/navigation/types';
 import {
   connection,
   buildLockFundsTransaction,
@@ -16,11 +16,14 @@ import {
 } from '@/services/solana';
 import { SendTransactionError } from '@solana/web3.js';
 import { useCourseStore, useUserStore } from '@/stores';
+import { defaultCourseLockPolicyForDifficulty } from '@/types';
 
-type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'Deposit'>;
-type DepositRoute = RouteProp<OnboardingStackParamList, 'Deposit'>;
+type SharedDepositParamList = OnboardingStackParamList & MainStackParamList;
+type Nav = NativeStackNavigationProp<SharedDepositParamList, 'Deposit'>;
+type DepositRoute = RouteProp<SharedDepositParamList, 'Deposit'>;
 
-const LOCK_DURATIONS: LockDurationDays[] = [30, 60, 90];
+const LOCK_DURATIONS: LockDurationDays[] = [14, 30, 45, 60, 90, 180, 365];
+const PRINCIPAL_PRESETS = [1, 5, 10, 25, 50, 100, 250, 500];
 const MIN_RENT_SOL_BUFFER = 0.01;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
@@ -32,13 +35,20 @@ function inferLockDurationDays(params: {
   const startMs = new Date(params.lockStartDate).getTime();
   const endMs = new Date(params.lockEndDate).getTime();
   const totalDays = Math.max(
-    30,
+    14,
     Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)) - params.extensionDays,
   );
 
-  if (totalDays >= 90) return 90;
-  if (totalDays >= 60) return 60;
-  return 30;
+  const exactMatch = LOCK_DURATIONS.find((duration) => duration === totalDays);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const closestLowerMatch = [...LOCK_DURATIONS]
+    .reverse()
+    .find((duration) => duration <= totalDays);
+
+  return closestLowerMatch ?? 14;
 }
 
 export function DepositScreen() {
@@ -55,6 +65,50 @@ export function DepositScreen() {
     () => courses.find((entry) => entry.id === route.params.courseId) ?? null,
     [courses, route.params.courseId],
   );
+  const courseLockPolicy = useMemo(
+    () =>
+      course?.lockPolicy ??
+      defaultCourseLockPolicyForDifficulty(course?.difficulty ?? 'beginner'),
+    [course],
+  );
+  const availableLockDurations = useMemo(
+    () =>
+      LOCK_DURATIONS.filter(
+        (duration) =>
+          duration >= courseLockPolicy.minLockDurationDays &&
+          duration <= courseLockPolicy.maxLockDurationDays,
+      ),
+    [courseLockPolicy],
+  );
+  const policyConfigMessage = useMemo(() => {
+    if (availableLockDurations.length > 0) {
+      return null;
+    }
+
+    return 'This course policy does not overlap with the current on-chain lock presets yet.';
+  }, [availableLockDurations]);
+  const principalPresets = useMemo(() => {
+    const maximumPrincipal = courseLockPolicy.maxPrincipalAmountUi
+      ? Number(courseLockPolicy.maxPrincipalAmountUi)
+      : null;
+    const nextValues = new Set<number>(PRINCIPAL_PRESETS);
+    nextValues.add(Number(courseLockPolicy.minPrincipalAmountUi));
+    if (courseLockPolicy.demoPrincipalAmountUi) {
+      nextValues.add(Number(courseLockPolicy.demoPrincipalAmountUi));
+    }
+    if (maximumPrincipal != null) {
+      nextValues.add(maximumPrincipal);
+    }
+
+    return Array.from(nextValues)
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .filter((value) => maximumPrincipal == null || value <= maximumPrincipal)
+      .sort((a, b) => a - b);
+  }, [
+    courseLockPolicy.demoPrincipalAmountUi,
+    courseLockPolicy.maxPrincipalAmountUi,
+    courseLockPolicy.minPrincipalAmountUi,
+  ]);
 
   const [lockDuration, setLockDuration] = useState<LockDurationDays>(30);
   const [principalAmount, setPrincipalAmount] = useState('1');
@@ -80,6 +134,43 @@ export function DepositScreen() {
 
     setConfigMessage(null);
   }, []);
+
+  useEffect(() => {
+    setLockDuration((current) => {
+      if (availableLockDurations.includes(current)) {
+        return current;
+      }
+
+      return availableLockDurations[0] ?? 30;
+    });
+  }, [availableLockDurations]);
+
+  useEffect(() => {
+    setPrincipalAmount((current) => {
+      const nextMin = Number(courseLockPolicy.minPrincipalAmountUi);
+      const nextMax = courseLockPolicy.maxPrincipalAmountUi
+        ? Number(courseLockPolicy.maxPrincipalAmountUi)
+        : null;
+      const currentValue = Number(current);
+
+      if (!current || !Number.isFinite(currentValue)) {
+        return courseLockPolicy.minPrincipalAmountUi;
+      }
+
+      if (currentValue < nextMin) {
+        return courseLockPolicy.minPrincipalAmountUi;
+      }
+
+      if (nextMax != null && currentValue > nextMax) {
+        return courseLockPolicy.maxPrincipalAmountUi ?? current;
+      }
+
+      return current;
+    });
+  }, [
+    courseLockPolicy.maxPrincipalAmountUi,
+    courseLockPolicy.minPrincipalAmountUi,
+  ]);
 
   useEffect(() => {
     if (!walletAddress || !hasLockVaultConfig()) {
@@ -147,12 +238,14 @@ export function DepositScreen() {
         if (snapshot.gauntletComplete) {
           completeGauntlet();
           setStatusMessage('Existing lock found on-chain. Resuming your course...');
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          }
           return;
         }
 
         startGauntlet();
         setStatusMessage('Existing lock found on-chain. Returning to your gauntlet...');
-        navigation.replace('GauntletRoom');
       })
       .catch((error) => {
         if (cancelled) return;
@@ -197,10 +290,48 @@ export function DepositScreen() {
       return;
     }
 
+    if (availableLockDurations.length === 0) {
+      setStatusMessage(
+        'This course policy is not compatible with the current on-chain lock presets yet.',
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
       const requestedStable = Number(principalAmount);
+      if (!Number.isFinite(requestedStable) || requestedStable <= 0) {
+        throw new Error('Enter a valid USDC amount before creating the lock.');
+      }
+
+      const minimumPrincipal = Number(courseLockPolicy.minPrincipalAmountUi);
+      const demoPrincipalOverride = courseLockPolicy.demoPrincipalAmountUi
+        ? Number(courseLockPolicy.demoPrincipalAmountUi)
+        : null;
+      const isDemoPrincipalOverride =
+        demoPrincipalOverride != null && requestedStable === demoPrincipalOverride;
+      if (requestedStable < minimumPrincipal && !isDemoPrincipalOverride) {
+        throw new Error(
+          `This course requires at least ${courseLockPolicy.minPrincipalAmountUi} USDC to start.`,
+        );
+      }
+
+      const maximumPrincipal = courseLockPolicy.maxPrincipalAmountUi
+        ? Number(courseLockPolicy.maxPrincipalAmountUi)
+        : null;
+      if (maximumPrincipal != null && requestedStable > maximumPrincipal) {
+        throw new Error(
+          `This course allows up to ${courseLockPolicy.maxPrincipalAmountUi} USDC for a single lock.`,
+        );
+      }
+
+      if (!availableLockDurations.includes(lockDuration)) {
+        throw new Error(
+          `This course currently supports ${availableLockDurations.map((duration) => `${duration}d`).join(', ')} lock presets.`,
+        );
+      }
+
       const availableStable = Number(balances.stable);
       if (Number.isFinite(requestedStable) && requestedStable > availableStable) {
         throw new Error(
@@ -279,7 +410,6 @@ export function DepositScreen() {
       startGauntlet();
 
       setStatusMessage(`Lock created: ${signature.slice(0, 8)}...`);
-      navigation.navigate('GauntletRoom');
 
       void fetchWalletDepositBalances(walletAddress).then((nextBalances) => {
         setBalances({
@@ -302,7 +432,15 @@ export function DepositScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-neutral-950">
-      <View className="flex-1 px-6 py-8">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingTop: 32,
+          paddingBottom: 48,
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text className="text-2xl font-bold text-white">Lock Your Funds</Text>
         <Text className="mt-2 text-neutral-400">
           {course?.title ?? 'Selected Course'}
@@ -312,6 +450,37 @@ export function DepositScreen() {
         </Text>
 
         <View className="mt-8 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+          <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
+            Course Lock Policy
+          </Text>
+          <View className="mt-3 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-4">
+            <Text className="text-sm text-neutral-300">
+              Minimum deposit: {courseLockPolicy.minPrincipalAmountUi} USDC
+            </Text>
+            <Text className="mt-1 text-sm text-neutral-300">
+              Maximum deposit:{' '}
+              {courseLockPolicy.maxPrincipalAmountUi
+                ? `${courseLockPolicy.maxPrincipalAmountUi} USDC`
+                : 'No course max'}
+            </Text>
+            <Text className="mt-1 text-sm text-neutral-300">
+              Demo preset:{' '}
+              {courseLockPolicy.demoPrincipalAmountUi
+                ? `${courseLockPolicy.demoPrincipalAmountUi} USDC`
+                : 'None'}
+            </Text>
+            <Text className="mt-1 text-sm text-neutral-300">
+              Policy duration: {courseLockPolicy.minLockDurationDays}-
+              {courseLockPolicy.maxLockDurationDays} days
+            </Text>
+            <Text className="mt-1 text-sm text-neutral-500">
+              Current on-chain presets:{' '}
+              {availableLockDurations.length > 0
+                ? availableLockDurations.map((duration) => `${duration}d`).join(' / ')
+                : 'None yet'}
+            </Text>
+          </View>
+
           <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
             Stablecoin
           </Text>
@@ -329,9 +498,32 @@ export function DepositScreen() {
             keyboardType="decimal-pad"
             value={principalAmount}
             onChangeText={setPrincipalAmount}
-            placeholder="1"
+            placeholder={courseLockPolicy.minPrincipalAmountUi}
             placeholderTextColor="#737373"
           />
+          <View className="mt-3 flex-row flex-wrap gap-2">
+            {principalPresets.map((value) => {
+              const selected = Number(principalAmount) === value;
+              return (
+                <Pressable
+                  key={value}
+                  className={`rounded-full border px-3 py-2 ${selected ? 'border-emerald-500 bg-emerald-500/10' : 'border-neutral-700 bg-neutral-950'}`}
+                  onPress={() => setPrincipalAmount(String(value))}
+                >
+                  <Text
+                    className={`text-sm font-semibold ${selected ? 'text-emerald-300' : 'text-neutral-300'}`}
+                  >
+                    {value} USDC
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text className="mt-2 text-xs text-neutral-500">
+            {courseLockPolicy.demoPrincipalAmountUi
+              ? `${courseLockPolicy.demoPrincipalAmountUi} USDC stays available as the demo preset for this course.`
+              : 'Course minimums apply to all lock amounts.'}
+          </Text>
 
           <Text className="mt-5 text-xs uppercase tracking-[2px] text-neutral-500">
             Optional SKR Amount
@@ -349,7 +541,7 @@ export function DepositScreen() {
             Lock Duration
           </Text>
           <View className="mt-3 flex-row gap-3">
-            {LOCK_DURATIONS.map((duration) => {
+            {availableLockDurations.map((duration) => {
               const selected = lockDuration === duration;
               return (
                 <Pressable
@@ -391,6 +583,12 @@ export function DepositScreen() {
           </View>
         ) : null}
 
+        {policyConfigMessage ? (
+          <View className="mt-5 rounded-xl border border-amber-700 bg-amber-950/40 p-4">
+            <Text className="text-sm text-amber-200">{policyConfigMessage}</Text>
+          </View>
+        ) : null}
+
         {statusMessage ? (
           <View className="mt-5 rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-4">
             <Text className="text-sm text-neutral-300">{statusMessage}</Text>
@@ -398,8 +596,13 @@ export function DepositScreen() {
         ) : null}
 
         <Pressable
-          className={`mt-6 rounded-xl px-6 py-4 ${isSubmitting || isRestoringExistingLock || Boolean(configMessage) ? 'bg-neutral-700' : 'bg-emerald-600 active:bg-emerald-700'}`}
-          disabled={isSubmitting || isRestoringExistingLock || Boolean(configMessage)}
+          className={`mt-6 rounded-xl px-6 py-4 ${isSubmitting || isRestoringExistingLock || Boolean(configMessage) || Boolean(policyConfigMessage) ? 'bg-neutral-700' : 'bg-emerald-600 active:bg-emerald-700'}`}
+          disabled={
+            isSubmitting ||
+            isRestoringExistingLock ||
+            Boolean(configMessage) ||
+            Boolean(policyConfigMessage)
+          }
           onPress={() => {
             void handleDeposit();
           }}
@@ -412,7 +615,7 @@ export function DepositScreen() {
                 : 'Deposit & Start Gauntlet'}
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

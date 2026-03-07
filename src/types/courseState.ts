@@ -9,7 +9,7 @@ export type FuelEarnStatus =
 export interface CourseGameState {
   // Lock
   lockAmount: number;
-  lockDuration: 30 | 60 | 90;
+  lockDuration: 14 | 30 | 45 | 60 | 90 | 180 | 365;
   lockStartDate: string | null;
   lockAccountAddress: string | null;
   stableMintAddress: string | null;

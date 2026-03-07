@@ -1,6 +1,14 @@
 export type ApiQuestionType = 'mcq' | 'short_text';
 export type ApiLessonBlockType = 'paragraph' | 'code' | 'callout' | 'image';
 
+export interface ApiCourseLockPolicy {
+  minPrincipalAmountUi: string;
+  maxPrincipalAmountUi: string | null;
+  demoPrincipalAmountUi: string | null;
+  minLockDurationDays: number;
+  maxLockDurationDays: number;
+}
+
 export interface ApiCourseCard {
   id: string;
   slug: string;
@@ -12,6 +20,7 @@ export interface ApiCourseCard {
   totalModules: number;
   totalLessons: number;
   publishedAt: string | null;
+  lockPolicy: ApiCourseLockPolicy;
 }
 
 export interface ApiModuleCard {

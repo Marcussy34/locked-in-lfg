@@ -16,6 +16,7 @@ export type OnboardingStackParamList = {
 export type MainStackParamList = {
   DungeonHome: undefined;
   CourseBrowser: undefined;
+  Deposit: { courseId: string };
   Lesson: { lessonId: string; courseId: string };
   LessonResult: {
     lessonId: string;
