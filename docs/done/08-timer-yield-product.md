@@ -13,6 +13,8 @@ The backend can now evaluate due runtime actions against on-chain lock state ins
 - The worker starts and stops with the Fastify server lifecycle.
 - Before scheduling anything, it reads the live `LockVault` account and syncs the runtime row from chain.
 - The worker can now also auto-create fixed-APY `auto-harvest:*` receipts in dev mode.
+- Added a second polling worker for unlock indexing under `backend/src/workers/unlockIndexerWorker.mjs`.
+- That worker scans recent `LockVault` signatures and stores verified unlock receipts from chain when runtime metadata is available.
 
 ### Deterministic automatic runtime ids
 
@@ -52,6 +54,7 @@ The backend can now evaluate due runtime actions against on-chain lock state ins
 - `backend/src/server.mjs`
 - `backend/src/workers/runtimeSchedulerWorker.mjs`
 - `backend/src/workers/lockVaultRelayWorker.mjs`
+- `backend/src/workers/unlockIndexerWorker.mjs`
 - `backend/src/lib/lockVault.mjs`
 - `backend/src/modules/progress/repository.mjs`
 - `backend/src/modules/progress/routes.mjs`
@@ -70,9 +73,9 @@ The backend can now evaluate due runtime actions against on-chain lock state ins
 - App reconnect now returns to the existing locked course flow instead of incorrectly showing the deposit screen again.
 - Live profile/runtime screens now show the real lock state after refresh.
 - The user can now see recent harvest receipts in `Ichor Shop` instead of relying only on backend logs.
+- The backend now has an independent unlock receipt discovery path and no longer depends only on app-posted unlock receipts.
 
 ## Remaining Follow-up
 
 - Add production scheduler cadence and deployment wiring beyond the current in-process worker.
-- Add a real history/audit surface for automatic burns, misses, and extensions.
 - Settle redirected yield into the monthly `CommunityPot` flow.

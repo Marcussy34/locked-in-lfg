@@ -70,6 +70,10 @@ Current implementation checkpoint:
   - auto-generates deterministic burn cycle ids when Brewer is actually due
   - auto-generates deterministic miss event ids when a full UTC day is missed
   - no-ops safely while a course is still in gauntlet
+- backend now also includes an unlock indexer worker that:
+  - scans recent `LockVault` program signatures
+  - detects real `unlock_funds` instructions
+  - stores verified unlock receipts from chain when metadata is available in runtime state
 - the `Community Pot` screen now reads the live current-month redirected-yield window from chain
 - `Streak Status` now includes a backend-backed runtime audit timeline for:
   - fuel burns

@@ -17,6 +17,7 @@ import {
   getModuleProgress,
   refreshLeaderboardSnapshot,
   recordUnlockReceipt,
+  syncUnlockReceiptsFromChain,
   publishFuelBurnReceipt,
   publishHarvestSplitReceipt,
   publishHarvestRedirectToCommunityPot,
@@ -269,6 +270,15 @@ export async function progressRoutes(app) {
         ? Number(request.body?.limit)
         : 25;
     return refreshLeaderboardSnapshot(limit);
+  });
+
+  app.post('/v1/internal/unlocks/index/sync', async (request) => {
+    requireSchedulerAuth(request);
+    const limit =
+      Number.isFinite(Number(request.body?.limit)) && Number(request.body?.limit) > 0
+        ? Number(request.body?.limit)
+        : appConfig.unlockIndexerScanLimit;
+    return syncUnlockReceiptsFromChain(limit);
   });
 
   app.get(

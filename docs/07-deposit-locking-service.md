@@ -85,6 +85,10 @@ Current implementation checkpoint:
   - a live resurface card in `Profile`
   - a persisted resurface receipt history screen
   - post-unlock navigation into that receipt history
+- backend now also supports an independent unlock indexer path:
+  - recent `LockVault` transactions are scanned for real `unlock_funds` instructions
+  - verified unlocks can be written into backend receipt history even if the app never posts the receipt payload
+  - runtime rows now persist lock metadata needed for that chain-derived receipt path
 
 ## Failure Handling
 

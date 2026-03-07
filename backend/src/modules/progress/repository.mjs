@@ -11,6 +11,8 @@ import {
 import {
   hasLockVaultReadConfig,
   hasLockVaultRelayConfig,
+  inspectUnlockTransaction,
+  listRecentLockVaultProgramSignatures,
   publishFuelBurnToLockVault,
   publishHarvestToLockVault,
   publishMissConsequenceToLockVault,
@@ -1232,6 +1234,12 @@ export async function syncCourseRuntimeStateWithLockSnapshot(
             last_completed_day = $13::date,
             last_fuel_credit_day = $14::date,
             last_brewer_burn_ts = $15::timestamptz,
+            lock_account_address = $16,
+            stable_mint = $17,
+            principal_amount = $18::bigint,
+            skr_locked_amount = $19::bigint,
+            lock_start_at = $20::timestamptz,
+            lock_end_at = $21::timestamptz,
             updated_at = now()
         where wallet_address = $1
           and course_id = $2
@@ -1252,6 +1260,12 @@ export async function syncCourseRuntimeStateWithLockSnapshot(
         epochDayToIsoDate(snapshot.lastCompletionDay),
         epochDayToIsoDate(snapshot.lastFuelCreditDay),
         unixTimestampSecondsToIso(snapshot.lastBrewerBurnTs),
+        snapshot.lockAccount,
+        snapshot.stableMint,
+        snapshot.principalAmount,
+        snapshot.skrLockedAmount,
+        unixTimestampSecondsToIso(snapshot.lockStartTs),
+        unixTimestampSecondsToIso(snapshot.lockEndTs),
       ],
     );
 
@@ -1491,6 +1505,89 @@ async function readUnlockReceipt(client, walletAddress, unlockTxSignature) {
   return result.rows[0] ?? null;
 }
 
+async function readRuntimeLockMetadata(client, walletAddress, courseId) {
+  const result = await client.query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        lock_account_address as "lockAccountAddress",
+        stable_mint as "stableMint",
+        principal_amount as "principalAmount",
+        skr_locked_amount as "skrLockedAmount",
+        lock_start_at as "lockStartAt",
+        lock_end_at as "lockEndAt"
+      from lesson.user_course_runtime_state
+      where wallet_address = $1
+        and course_id = $2
+      limit 1
+    `,
+    [walletAddress, courseId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function readRuntimeLockMetadataByLockAccount(client, lockAccountAddress) {
+  const result = await client.query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        lock_account_address as "lockAccountAddress",
+        stable_mint as "stableMint",
+        principal_amount as "principalAmount",
+        skr_locked_amount as "skrLockedAmount",
+        lock_start_at as "lockStartAt",
+        lock_end_at as "lockEndAt"
+      from lesson.user_course_runtime_state
+      where lock_account_address = $1
+      order by updated_at desc
+      limit 1
+    `,
+    [lockAccountAddress],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function readUnlockIndexerState(client) {
+  const result = await client.query(
+    `
+      select
+        program_id as "programId",
+        last_signature as "lastSignature",
+        last_slot as "lastSlot",
+        updated_at as "updatedAt"
+      from lesson.unlock_indexer_state
+      where program_id = $1
+      limit 1
+    `,
+    [appConfig.lockVaultProgramId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function writeUnlockIndexerState(client, lastSignature, lastSlot) {
+  await client.query(
+    `
+      insert into lesson.unlock_indexer_state (
+        program_id,
+        last_signature,
+        last_slot
+      )
+      values ($1, $2, $3)
+      on conflict (program_id)
+      do update set
+        last_signature = excluded.last_signature,
+        last_slot = excluded.last_slot,
+        updated_at = now()
+    `,
+    [appConfig.lockVaultProgramId, lastSignature, lastSlot],
+  );
+}
+
 export async function recordUnlockReceipt(walletAddress, payload) {
   if (!payload?.unlockTxSignature || typeof payload.unlockTxSignature !== 'string') {
     throw badRequest('unlockTxSignature is required', 'MISSING_UNLOCK_TX_SIGNATURE');
@@ -1582,6 +1679,168 @@ export async function recordUnlockReceipt(walletAddress, payload) {
     );
 
     return readUnlockReceipt(client, walletAddress, payload.unlockTxSignature);
+  });
+}
+
+export async function recordUnlockReceiptFromChain(unlockTxSignature) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+      unlockTxSignature,
+    };
+  }
+
+  if (!hasLockVaultReadConfig()) {
+    return {
+      processed: false,
+      reason: 'LOCK_VAULT_READ_DISABLED',
+      unlockTxSignature,
+    };
+  }
+
+  const inspection = await inspectUnlockTransaction(unlockTxSignature);
+  if (!inspection.valid) {
+    return {
+      processed: false,
+      reason: inspection.reason,
+      unlockTxSignature,
+    };
+  }
+
+  const metadata = await withTransaction(async (client) =>
+    readRuntimeLockMetadataByLockAccount(client, inspection.lockAccountAddress),
+  );
+  if (!metadata) {
+    return {
+      processed: false,
+      reason: 'LOCK_METADATA_NOT_FOUND',
+      unlockTxSignature,
+      walletAddress: inspection.walletAddress,
+      lockAccountAddress: inspection.lockAccountAddress,
+    };
+  }
+
+  const existing = await withTransactionAsWallet(metadata.walletAddress, async (client) =>
+    readUnlockReceipt(client, metadata.walletAddress, unlockTxSignature),
+  );
+  if (existing) {
+    return {
+      processed: false,
+      reason: 'ALREADY_RECORDED',
+      unlockTxSignature,
+      walletAddress: metadata.walletAddress,
+      courseId: metadata.courseId,
+      receipt: existing,
+    };
+  }
+
+  const receipt = await recordUnlockReceipt(metadata.walletAddress, {
+    courseId: metadata.courseId,
+    lockAccountAddress: metadata.lockAccountAddress,
+    principalAmountUi: formatAtomicUsdcUi(metadata.principalAmount ?? 0),
+    skrLockedAmountUi: formatAtomicUsdcUi(metadata.skrLockedAmount ?? 0),
+    lockEndDate:
+      metadata.lockEndAt instanceof Date
+        ? metadata.lockEndAt.toISOString()
+        : String(metadata.lockEndAt),
+    unlockedAt: inspection.blockTime ?? new Date().toISOString(),
+    unlockTxSignature,
+  });
+
+  return {
+    processed: true,
+    reason: 'RECORDED_FROM_CHAIN',
+    unlockTxSignature,
+    walletAddress: metadata.walletAddress,
+    courseId: metadata.courseId,
+    receipt,
+  };
+}
+
+export async function syncUnlockReceiptsFromChain(limit = 25) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasLockVaultReadConfig()) {
+    return {
+      processed: false,
+      reason: 'LOCK_VAULT_READ_DISABLED',
+    };
+  }
+
+  const recentSignatures = await listRecentLockVaultProgramSignatures(limit);
+  if (recentSignatures.length === 0) {
+    return {
+      processed: false,
+      reason: 'NO_SIGNATURES',
+      scanned: 0,
+      recorded: 0,
+      skipped: 0,
+    };
+  }
+
+  return withTransaction(async (client) => {
+    const state = await readUnlockIndexerState(client);
+    const lastSeenSignature = state?.lastSignature ?? null;
+
+    const unseen = [];
+    for (const entry of recentSignatures) {
+      if (lastSeenSignature && entry.signature === lastSeenSignature) {
+        break;
+      }
+      unseen.push(entry);
+    }
+
+    if (unseen.length === 0) {
+      return {
+        processed: false,
+        reason: 'NO_NEW_SIGNATURES',
+        scanned: 0,
+        recorded: 0,
+        skipped: 0,
+      };
+    }
+
+    let recorded = 0;
+    let skipped = 0;
+    const results = [];
+
+    for (const entry of unseen.slice().reverse()) {
+      try {
+        const result = await recordUnlockReceiptFromChain(entry.signature);
+        if (result.processed) {
+          recorded += 1;
+        } else {
+          skipped += 1;
+        }
+        results.push(result);
+      } catch (error) {
+        skipped += 1;
+        results.push({
+          processed: false,
+          reason: error instanceof Error ? error.message : String(error),
+          unlockTxSignature: entry.signature,
+        });
+      }
+    }
+
+    const newest = recentSignatures[0];
+    await writeUnlockIndexerState(client, newest.signature, newest.slot ?? null);
+
+    return {
+      processed: recorded > 0,
+      reason: recorded > 0 ? 'SYNCED' : 'NO_UNLOCKS_FOUND',
+      scanned: unseen.length,
+      recorded,
+      skipped,
+      lastSignature: newest.signature,
+      results,
+    };
   });
 }
 

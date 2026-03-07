@@ -8,6 +8,7 @@ import { authRoutes } from './modules/auth/routes.mjs';
 import { progressRoutes } from './modules/progress/routes.mjs';
 import { registerLockVaultRelayWorker } from './workers/lockVaultRelayWorker.mjs';
 import { registerRuntimeSchedulerWorker } from './workers/runtimeSchedulerWorker.mjs';
+import { registerUnlockIndexerWorker } from './workers/unlockIndexerWorker.mjs';
 
 function buildLoggerConfig() {
   const loggerConfig = {
@@ -110,6 +111,7 @@ function buildServer() {
   app.register(progressRoutes);
   registerLockVaultRelayWorker(app);
   registerRuntimeSchedulerWorker(app);
+  registerUnlockIndexerWorker(app);
 
   app.log.info(
     { corsAllowedOrigins: appConfig.corsAllowedOrigins },

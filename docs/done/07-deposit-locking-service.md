@@ -71,6 +71,7 @@ The mobile app now creates funded course locks on-chain, persists them across re
 ### Resurface receipt history
 
 - The app now persists successful resurface receipts locally per wallet.
+- Backend can now also discover real `unlock_funds` transactions from chain and store verified receipts without depending only on the app postback.
 - A dedicated `Resurface Receipts` screen can show:
   - course title
   - returned principal
@@ -79,6 +80,7 @@ The mobile app now creates funded course locks on-chain, persists them across re
   - actual unlock timestamp
   - transaction signature
 - Successful unlocks now route into that receipt screen instead of dropping straight back to browsing.
+- Runtime rows now persist lock metadata so the backend unlock indexer can resolve course/amount fields from chain-detected unlocks.
 
 ## Main Files
 

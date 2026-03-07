@@ -345,6 +345,34 @@ export async function verifyUnlockTransaction({
   walletAddress,
   lockAccountAddress = null,
 }) {
+  const inspection = await inspectUnlockTransaction(unlockTxSignature);
+  if (!inspection.valid) {
+    return inspection;
+  }
+
+  if (walletAddress && inspection.walletAddress !== walletAddress) {
+    return {
+      valid: false,
+      reason: 'SIGNER_MISMATCH',
+    };
+  }
+
+  if (
+    lockAccountAddress &&
+    inspection.lockAccountAddress &&
+    lockAccountAddress !== inspection.lockAccountAddress
+  ) {
+    return {
+      valid: false,
+      reason: 'LOCK_ACCOUNT_MISMATCH',
+      lockAccountAddress: inspection.lockAccountAddress,
+    };
+  }
+
+  return inspection;
+}
+
+export async function inspectUnlockTransaction(unlockTxSignature) {
   const connection = getReadConnection();
   const transaction = await connection.getParsedTransaction(unlockTxSignature, {
     commitment: 'confirmed',
@@ -368,15 +396,20 @@ export async function verifyUnlockTransaction({
   const accountKeys = transaction.transaction.message.accountKeys ?? [];
   const signerMatchesWallet = accountKeys.some((accountKey) => {
     const pubkey = toBase58PublicKey(accountKey);
-    return Boolean(accountKey?.signer) && pubkey === walletAddress;
+    return Boolean(accountKey?.signer);
   });
 
   if (!signerMatchesWallet) {
     return {
       valid: false,
-      reason: 'SIGNER_MISMATCH',
+      reason: 'MISSING_SIGNER',
     };
   }
+
+  const signerWalletAddress =
+    accountKeys.find((accountKey) => Boolean(accountKey?.signer))?.pubkey?.toBase58?.() ??
+    toBase58PublicKey(accountKeys.find((accountKey) => Boolean(accountKey?.signer))) ??
+    null;
 
   const unlockInstruction = transaction.transaction.message.instructions.find((instruction) => {
     const programId = toBase58PublicKey(instruction?.programId);
@@ -404,16 +437,9 @@ export async function verifyUnlockTransaction({
     : [];
   const derivedLockAccountAddress = instructionAccounts[0] ?? null;
 
-  if (lockAccountAddress && derivedLockAccountAddress && lockAccountAddress !== derivedLockAccountAddress) {
-    return {
-      valid: false,
-      reason: 'LOCK_ACCOUNT_MISMATCH',
-      lockAccountAddress: derivedLockAccountAddress,
-    };
-  }
-
   return {
     valid: true,
+    walletAddress: signerWalletAddress,
     slot: transaction.slot,
     blockTime:
       transaction.blockTime != null
@@ -421,6 +447,14 @@ export async function verifyUnlockTransaction({
         : null,
     lockAccountAddress: derivedLockAccountAddress,
   };
+}
+
+export async function listRecentLockVaultProgramSignatures(limit = 25) {
+  const connection = getReadConnection();
+  const programId = new PublicKey(appConfig.lockVaultProgramId);
+  return connection.getSignaturesForAddress(programId, {
+    limit: Math.max(1, Number(limit) || 25),
+  });
 }
 
 export async function publishFuelBurnToLockVault({
