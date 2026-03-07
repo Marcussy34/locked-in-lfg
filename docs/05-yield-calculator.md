@@ -13,7 +13,8 @@ Current implementation checkpoint:
 - backend can queue and publish manual harvest receipts into the live devnet lock
 - a positive devnet harvest has already credited real `ichor_counter` and `ichor_lifetime_total`
 - the mobile `Ichor Shop` now reads live on-chain Ichor state and redemption tier
-- redemption remains disabled when the protocol redemption vault has no USDC liquidity
+- the redirected-yield share from a published harvest can now be relayed into the live `CommunityPot` program
+- the mobile `Community Pot` screen now reads the live current-month pot balance on-chain
 
 ## Inputs
 

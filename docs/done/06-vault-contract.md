@@ -39,6 +39,12 @@ This checkpoint established the first working `LockVault` program on devnet and 
   - Ichor accrual into `ichor_counter` and `ichor_lifetime_total`
 - Backend harvest receipts can now be queued and published to the live lock.
 
+### Companion CommunityPot program
+
+- `CommunityPot` now exists as a separate on-chain program on devnet.
+- It stores redirected yield in monthly UTC `YYYYMM` windows.
+- Harvest receipts can now relay their redirected share into the live pot with separate idempotent status tracking.
+
 ### Worker-side runtime instructions
 
 - The program now supports worker-only mutations for:
@@ -111,9 +117,10 @@ This checkpoint established the first working `LockVault` program on devnet and 
 - The protocol redemption vault was funded with devnet USDC.
 - The mobile app now reads live lock and redemption-vault state from chain.
 - The mobile `Ichor Shop` can execute the real `redeem_ichor` path against the live program.
+- The live CommunityPot window now holds the redirected `0.1 USDC` share from `manual-harvest-002`.
 
 ## Remaining Follow-up
 
 - Replace manual harvest seeding with a real `YieldSplitter` or strategy adapter path.
-- Add monthly/community-pot settlement for redirected yield.
+- Add monthly/community-pot close and distribution instructions.
 - Live-test `unlock_funds` once a real lock reaches its unlock timestamp.

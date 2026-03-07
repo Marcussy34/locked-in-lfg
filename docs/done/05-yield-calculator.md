@@ -21,6 +21,7 @@ It does not integrate Kamino/Marginfi yet, but it now has a working harvest rece
 - Added `lesson.harvest_result_receipts`.
 - Backend can record manual/scheduler harvest receipts.
 - Backend can publish those receipts into the live lock on devnet.
+- Backend can now also relay the published `redirected_amount` into the live `CommunityPot`.
 - Receipt rows store:
   - applied vs skipped outcome
   - fee amount
@@ -74,6 +75,7 @@ It does not integrate Kamino/Marginfi yet, but it now has a working harvest rece
 - The live redemption vault now has `5 USDC`.
 - The app shop shows the live Ichor state, live vault liquidity, and a redeemable quote.
 - The live mobile redemption path is now usable against the deployed devnet program.
+- The redirected `0.1 USDC` share from `manual-harvest-002` now also exists in the live `CommunityPot` monthly window.
 
 ## Remaining Follow-up
 

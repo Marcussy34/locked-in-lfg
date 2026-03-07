@@ -42,6 +42,12 @@ Companion programs in the same on-chain stack:
 - `YieldSplitter` for harvest partitioning and Ichor credit logic
 - `CommunityPot` for redirected-yield accounting and distribution settlement
 
+Current companion checkpoint:
+
+- `CommunityPot` now exists as a separate on-chain accumulator program on devnet
+- published harvest receipts can relay their `redirected_amount` into the live monthly pot window
+- monthly close/distribution instructions are still the next slice
+
 ## Responsibilities
 
 1. Lock stablecoin principal and optional SKR in one course lock.
@@ -262,3 +268,9 @@ Required guards:
 - idempotent window/event keys
 - deterministic snapshot cutoffs per window
 - no principal vault funds used for pot settlement
+
+Current implementation checkpoint:
+
+- `record_redirect(redirect_event_id, amount)` now exists as the first live instruction
+- redirects are stored against a monthly UTC `YYYYMM` window PDA
+- backend harvest receipts now track CommunityPot relay status separately from LockVault relay status

@@ -79,6 +79,13 @@ At harvest, gross yield is partitioned into:
 - Eligibility: active streakers.
 - Weighting inputs: streak length and locked deposit size.
 
+Current implementation checkpoint:
+
+- redirected yield from published harvest receipts can now be recorded into the on-chain `CommunityPot`
+- the current monthly window is keyed by UTC `YYYYMM`
+- the mobile `Community Pot` screen now reads the live on-chain window balance instead of using a local proxy
+- monthly close/distribution logic is still pending
+
 ## Invariants
 
 1. Fuel and Ichor remain internal counters only.

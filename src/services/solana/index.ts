@@ -1,6 +1,13 @@
 // src/services/solana/index.ts
 export { connection, CLUSTER, RPC_ENDPOINT } from './connection';
 export {
+  deriveCommunityPotWindowAddress,
+  fetchCurrentCommunityPotSnapshot,
+  getCurrentCommunityPotWindowId,
+  hasCommunityPotConfig,
+  type CommunityPotSnapshot,
+} from './communityPot';
+export {
   connectWallet,
   reconnectWallet,
   disconnectWallet,

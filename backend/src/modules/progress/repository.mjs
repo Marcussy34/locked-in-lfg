@@ -15,6 +15,11 @@ import {
   readLockAccountSnapshot,
   readLockAccountTiming,
 } from '../../lib/lockVault.mjs';
+import {
+  deriveCommunityPotWindowId,
+  hasCommunityPotRelayConfig,
+  publishRedirectToCommunityPot,
+} from '../../lib/communityPot.mjs';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1207,7 +1212,12 @@ async function readHarvestResultReceipt(client, walletAddress, courseId, harvest
         lock_vault_status as "lockVaultStatus",
         lock_vault_published_at as "lockVaultPublishedAt",
         lock_vault_last_error as "lockVaultLastError",
-        lock_vault_transaction_signature as "lockVaultTransactionSignature"
+        lock_vault_transaction_signature as "lockVaultTransactionSignature",
+        community_pot_status as "communityPotStatus",
+        community_pot_published_at as "communityPotPublishedAt",
+        community_pot_last_error as "communityPotLastError",
+        community_pot_transaction_signature as "communityPotTransactionSignature",
+        community_pot_window_id as "communityPotWindowId"
       from lesson.harvest_result_receipts
       where wallet_address = $1
         and course_id = $2
@@ -1247,6 +1257,7 @@ export async function recordHarvestResult(
       harvestedAt: harvestedAtValue,
       grossYieldAmount: amount.toString(),
       lockVaultStatus: 'pending',
+      communityPotStatus: 'pending',
     };
   }
 
@@ -1503,6 +1514,227 @@ export async function publishHarvestResultReceipt(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await markHarvestResultReceiptFailed(walletAddress, courseId, harvestId, message);
+
+    return {
+      processed: false,
+      reason: 'PUBLISH_FAILED',
+      walletAddress,
+      courseId,
+      harvestId,
+      error: message,
+    };
+  }
+}
+
+async function claimHarvestRedirectReceipt(
+  walletAddress,
+  courseId,
+  harvestId,
+  retryFailed = false,
+) {
+  const claimableStatuses = retryFailed ? ['pending', 'failed'] : ['pending'];
+  const result = await query(
+    `
+      update lesson.harvest_result_receipts
+      set community_pot_status = 'publishing',
+          community_pot_last_error = null
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+        and lock_vault_status = 'published'
+        and community_pot_status = any($4::text[])
+      returning
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        harvest_id as "harvestId",
+        harvested_at as "harvestedAt",
+        gross_yield_amount as "grossYieldAmount",
+        redirected_amount as "redirectedAmount",
+        lock_vault_status as "lockVaultStatus",
+        community_pot_status as "communityPotStatus"
+    `,
+    [walletAddress, courseId, harvestId, claimableStatuses],
+  );
+
+  if (result.rowCount > 0) {
+    return { receipt: result.rows[0], reason: 'CLAIMED' };
+  }
+
+  const current = await query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        harvest_id as "harvestId",
+        harvested_at as "harvestedAt",
+        gross_yield_amount as "grossYieldAmount",
+        redirected_amount as "redirectedAmount",
+        lock_vault_status as "lockVaultStatus",
+        community_pot_status as "communityPotStatus",
+        community_pot_published_at as "communityPotPublishedAt",
+        community_pot_last_error as "communityPotLastError",
+        community_pot_transaction_signature as "communityPotTransactionSignature",
+        community_pot_window_id as "communityPotWindowId"
+      from lesson.harvest_result_receipts
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+      limit 1
+    `,
+    [walletAddress, courseId, harvestId],
+  );
+
+  if (current.rowCount === 0) {
+    return { receipt: null, reason: 'RECEIPT_NOT_FOUND' };
+  }
+
+  const existing = current.rows[0];
+  if (existing.lockVaultStatus !== 'published') {
+    return { receipt: existing, reason: 'LOCK_VAULT_NOT_PUBLISHED' };
+  }
+
+  if (existing.communityPotStatus === 'published') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHED' };
+  }
+
+  if (existing.communityPotStatus === 'publishing') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHING' };
+  }
+
+  return { receipt: existing, reason: 'RETRY_REQUIRED' };
+}
+
+async function markHarvestRedirectPublished(
+  walletAddress,
+  courseId,
+  harvestId,
+  values,
+) {
+  await query(
+    `
+      update lesson.harvest_result_receipts
+      set community_pot_status = 'published',
+          community_pot_published_at = now(),
+          community_pot_last_error = null,
+          community_pot_transaction_signature = $4,
+          community_pot_window_id = $5::bigint
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+    `,
+    [
+      walletAddress,
+      courseId,
+      harvestId,
+      values.signature,
+      values.windowId,
+    ],
+  );
+}
+
+async function markHarvestRedirectFailed(walletAddress, courseId, harvestId, error) {
+  await query(
+    `
+      update lesson.harvest_result_receipts
+      set community_pot_status = 'failed',
+          community_pot_last_error = $4
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+    `,
+    [walletAddress, courseId, harvestId, error],
+  );
+}
+
+export async function publishHarvestRedirectToCommunityPot(
+  walletAddress,
+  courseId,
+  harvestId,
+  retryFailed = false,
+) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasCommunityPotRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'COMMUNITY_POT_RELAY_DISABLED',
+    };
+  }
+
+  const claim = await claimHarvestRedirectReceipt(
+    walletAddress,
+    courseId,
+    harvestId,
+    retryFailed,
+  );
+  if (!claim.receipt) {
+    return {
+      processed: false,
+      reason: claim.reason,
+    };
+  }
+
+  if (claim.reason !== 'CLAIMED') {
+    return {
+      processed: false,
+      reason: claim.reason,
+      receipt: claim.receipt,
+    };
+  }
+
+  try {
+    const redirectedAmount = BigInt(claim.receipt.redirectedAmount ?? 0);
+    const windowId = deriveCommunityPotWindowId(claim.receipt.harvestedAt);
+
+    if (redirectedAmount <= 0n) {
+      await markHarvestRedirectPublished(walletAddress, courseId, harvestId, {
+        signature: null,
+        windowId,
+      });
+
+      return {
+        processed: true,
+        reason: 'SKIPPED_NO_REDIRECT',
+        walletAddress,
+        courseId,
+        harvestId,
+        redirectedAmount: redirectedAmount.toString(),
+        windowId,
+      };
+    }
+
+    const publishResult = await publishRedirectToCommunityPot({
+      redirectEventId: harvestId,
+      harvestedAt: claim.receipt.harvestedAt,
+      redirectedAmount: redirectedAmount.toString(),
+    });
+
+    await markHarvestRedirectPublished(walletAddress, courseId, harvestId, {
+      signature: publishResult.signature,
+      windowId: publishResult.windowId,
+    });
+
+    return {
+      processed: true,
+      reason: 'PUBLISHED',
+      walletAddress,
+      courseId,
+      harvestId,
+      redirectedAmount: redirectedAmount.toString(),
+      signature: publishResult.signature,
+      authority: publishResult.authority,
+      windowId: publishResult.windowId,
+      windowAccount: publishResult.windowAccount,
+      receiptAccount: publishResult.receiptAccount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await markHarvestRedirectFailed(walletAddress, courseId, harvestId, message);
 
     return {
       processed: false,

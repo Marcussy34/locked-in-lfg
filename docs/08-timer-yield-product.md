@@ -69,6 +69,7 @@ Current implementation checkpoint:
   - auto-generates deterministic burn cycle ids when Brewer is actually due
   - auto-generates deterministic miss event ids when a full UTC day is missed
   - no-ops safely while a course is still in gauntlet
+- the `Community Pot` screen now reads the live current-month redirected-yield window from chain
 
 ## Timer Rules
 

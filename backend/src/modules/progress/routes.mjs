@@ -8,6 +8,7 @@ import {
   getCourseProgress,
   getModuleProgress,
   publishFuelBurnReceipt,
+  publishHarvestRedirectToCommunityPot,
   publishHarvestResultReceipt,
   publishMissConsequenceReceipt,
   publishVerifiedCompletionEvent,
@@ -153,6 +154,22 @@ export async function progressRoutes(app) {
     const retryFailed = request.body?.retryFailed === true;
 
     return publishHarvestResultReceipt(walletAddress, courseId, harvestId, retryFailed);
+  });
+
+  app.post('/v1/internal/community-pot/yield/harvest/publish', async (request) => {
+    requireSchedulerAuth(request);
+
+    const walletAddress = assertBodyField(request.body?.walletAddress, 'walletAddress');
+    const courseId = assertBodyField(request.body?.courseId, 'courseId');
+    const harvestId = assertBodyField(request.body?.harvestId, 'harvestId');
+    const retryFailed = request.body?.retryFailed === true;
+
+    return publishHarvestRedirectToCommunityPot(
+      walletAddress,
+      courseId,
+      harvestId,
+      retryFailed,
+    );
   });
 
   app.post('/v1/internal/consequences/miss', async (request) => {
