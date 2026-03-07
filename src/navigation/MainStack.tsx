@@ -9,6 +9,7 @@ import { StreakStatusScreen } from '@/screens/main/StreakStatusScreen';
 import { AlchemyScreen } from '@/screens/main/AlchemyScreen';
 import { LeaderboardScreen } from '@/screens/main/LeaderboardScreen';
 import { CommunityPotScreen } from '@/screens/main/CommunityPotScreen';
+import { CommunityPotWindowScreen } from '@/screens/main/CommunityPotWindowScreen';
 import { ProfileScreen } from '@/screens/main/ProfileScreen';
 import { InventoryScreen } from '@/screens/main/InventoryScreen';
 import { IchorShopScreen } from '@/screens/main/IchorShopScreen';
@@ -69,6 +70,11 @@ export function MainStack() {
       <Stack.Screen
         name="CommunityPot"
         component={CommunityPotScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="CommunityPotWindow"
+        component={CommunityPotWindowScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen

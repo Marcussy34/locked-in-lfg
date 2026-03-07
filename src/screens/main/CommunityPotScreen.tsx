@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   ApiError,
   getCommunityPotHistory,
@@ -15,6 +16,7 @@ import {
 } from '@/services/solana';
 import { useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
+import type { MainStackParamList } from '@/navigation/types';
 
 function renderWindowStatus(status: CommunityPotHistoryWindow['status']) {
   if (status === 'DISTRIBUTED') return 'Distributed';
@@ -30,8 +32,10 @@ function renderRecipientStatus(status: CommunityPotHistoryWindow['userStatus']) 
   return 'Not eligible';
 }
 
+type Nav = NativeStackNavigationProp<MainStackParamList>;
+
 export function CommunityPotScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<Nav>();
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
@@ -276,9 +280,15 @@ export function CommunityPotScreen() {
             </Text>
           ) : (
             payoutHistory.map((window) => (
-              <View
+              <Pressable
                 key={`payout-${window.windowId}`}
                 className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4"
+                onPress={() =>
+                  navigation.navigate('CommunityPotWindow', {
+                    windowId: window.windowId,
+                    windowLabel: window.windowLabel,
+                  })
+                }
               >
                 <View className="flex-row items-center justify-between">
                   <Text className="text-base font-semibold text-white">
@@ -307,7 +317,7 @@ export function CommunityPotScreen() {
                 {window.userLastError ? (
                   <Text className="mt-2 text-xs text-amber-300">{window.userLastError}</Text>
                 ) : null}
-              </View>
+              </Pressable>
             ))
           )}
         </View>
@@ -326,9 +336,15 @@ export function CommunityPotScreen() {
             </Text>
           ) : (
             history.map((window) => (
-              <View
+              <Pressable
                 key={`window-${window.windowId}`}
                 className="mb-3 rounded-xl border border-neutral-700 bg-neutral-900 p-4"
+                onPress={() =>
+                  navigation.navigate('CommunityPotWindow', {
+                    windowId: window.windowId,
+                    windowLabel: window.windowLabel,
+                  })
+                }
               >
                 <View className="flex-row items-center justify-between">
                   <Text className="text-base font-semibold text-white">
@@ -382,7 +398,7 @@ export function CommunityPotScreen() {
                     Closed early in dev testing for payout verification.
                   </Text>
                 ) : null}
-              </View>
+              </Pressable>
             ))
           )}
         </View>

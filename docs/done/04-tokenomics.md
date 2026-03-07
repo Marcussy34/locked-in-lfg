@@ -54,6 +54,10 @@ Redirected yield is no longer just a rules table or placeholder UI value. It now
   - closed monthly windows
   - current wallet payout history
   - payout status and tx history for distributed rows
+- A dedicated window drill-down screen can now show:
+  - closed-window totals
+  - current wallet receipt
+  - recipient rows for that window
 
 ## Main Files
 

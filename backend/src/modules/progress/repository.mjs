@@ -2271,6 +2271,209 @@ export async function getCommunityPotHistory(walletAddress, limit = 6) {
   };
 }
 
+function truncateWalletAddress(value) {
+  if (!value || value.length <= 10) {
+    return value;
+  }
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+export async function getCommunityPotWindowDetail(walletAddress, windowId) {
+  if (!hasDatabase()) {
+    return {
+      windowId,
+      recipients: [],
+      userEntry: null,
+    };
+  }
+
+  const [potWindow, distributionWindow, recipientRows] = await Promise.all([
+    readCommunityPotWindow(windowId),
+    readCommunityPotDistributionWindow(windowId),
+    readDistributionSnapshotRows(windowId),
+  ]);
+
+  if (!potWindow && !distributionWindow && recipientRows.length === 0) {
+    throw notFound('Community Pot window not found', 'COMMUNITY_POT_WINDOW_NOT_FOUND');
+  }
+
+  const totalRedirectedAmount = BigInt(potWindow?.totalRedirectedAmount ?? 0);
+  const distributedAmount = BigInt(distributionWindow?.distributedAmount ?? 0);
+  const remainingAmount = totalRedirectedAmount - distributedAmount;
+
+  const recipients = recipientRows.map((row) => ({
+    walletAddress: row.walletAddress,
+    displayIdentity: truncateWalletAddress(row.walletAddress),
+    courseId: row.courseId,
+    currentStreak: Number(row.currentStreak),
+    principalAmount: String(row.principalAmount),
+    principalAmountUi: formatAtomicUsdcUi(row.principalAmount),
+    weight: String(row.weight),
+    payoutAmount: String(row.payoutAmount),
+    payoutAmountUi: formatAtomicUsdcUi(row.payoutAmount),
+    status: mapRecipientStatus(row.status),
+    distributedAt: row.distributedAt ?? null,
+    transactionSignature: row.distributionTransactionSignature ?? null,
+    lastError: row.distributionLastError ?? null,
+    isCurrentUser: row.walletAddress === walletAddress,
+  }));
+
+  const userEntry = recipients.find((row) => row.isCurrentUser) ?? null;
+
+  return {
+    windowId,
+    windowLabel: formatCommunityPotWindowLabel(windowId),
+    totalRedirectedAmount: totalRedirectedAmount.toString(),
+    totalRedirectedAmountUi: formatAtomicUsdcUi(totalRedirectedAmount),
+    distributedAmount: distributedAmount.toString(),
+    distributedAmountUi: formatAtomicUsdcUi(distributedAmount),
+    remainingAmount: (remainingAmount > 0n ? remainingAmount : 0n).toString(),
+    remainingAmountUi: formatAtomicUsdcUi(remainingAmount > 0n ? remainingAmount : 0n),
+    redirectCount: Number(potWindow?.redirectCount ?? 0),
+    eligibleRecipientCount: Number(distributionWindow?.eligibleRecipientCount ?? 0),
+    distributionCount: Number(distributionWindow?.distributionCount ?? 0),
+    status: mapDistributionWindowStatus(distributionWindow?.status ?? potWindow?.status ?? 0),
+    closedAt: unixTimestampSecondsToIso(distributionWindow?.closedAtTs ?? null),
+    recipients,
+    userEntry,
+  };
+}
+
+export async function getLeaderboardSnapshot(walletAddress) {
+  if (!hasDatabase()) {
+    return {
+      currentPotSizeUi: '0',
+      nextDistributionWindowLabel: null,
+      currentUser: null,
+      entries: [],
+    };
+  }
+
+  const runtimeWallets = await query(
+    `
+      select distinct wallet_address
+      from lesson.user_course_runtime_state
+      order by wallet_address asc
+    `,
+  );
+
+  const latestClosedWindowIdResult = await query(
+    `
+      select window_id
+      from lesson.community_pot_distribution_snapshots
+      group by window_id
+      order by window_id desc
+      limit 1
+    `,
+  );
+
+  const latestClosedWindowId =
+    latestClosedWindowIdResult.rowCount > 0
+      ? Number(latestClosedWindowIdResult.rows[0].window_id)
+      : null;
+  const latestClosedWindow =
+    latestClosedWindowId != null
+      ? await readCommunityPotDistributionWindow(latestClosedWindowId)
+      : null;
+  const latestClosedRows =
+    latestClosedWindowId != null ? await readDistributionSnapshotRows(latestClosedWindowId) : [];
+
+  const entries = [];
+  for (const row of runtimeWallets.rows) {
+    const wallet = row.wallet_address;
+    const courseIdsResult = await query(
+      `
+        select course_id as "courseId"
+        from lesson.user_course_runtime_state
+        where wallet_address = $1
+        order by course_id asc
+      `,
+      [wallet],
+    );
+
+    let streakLength = 0;
+    let activeCourseCount = 0;
+    let lockedPrincipal = 0n;
+    let recentActivityDate = null;
+
+    for (const course of courseIdsResult.rows) {
+      try {
+        const snapshot = await readLockAccountSnapshot(wallet, course.courseId);
+        if (snapshot.status !== 0) {
+          continue;
+        }
+
+        const currentStreak = Number(snapshot.currentStreak ?? 0);
+        streakLength = Math.max(streakLength, currentStreak);
+        if (currentStreak > 0) {
+          activeCourseCount += 1;
+        }
+
+        lockedPrincipal += BigInt(snapshot.principalAmount ?? 0);
+        const completionDate = epochDayToIsoDate(snapshot.lastCompletionDay);
+        if (completionDate && (!recentActivityDate || completionDate > recentActivityDate)) {
+          recentActivityDate = completionDate;
+        }
+      } catch {
+        // Skip unreadable locks.
+      }
+    }
+
+    const projectedRow =
+      latestClosedWindowId != null
+        ? latestClosedRows.find((entry) => entry.walletAddress === wallet)
+        : null;
+
+    entries.push({
+      walletAddress: wallet,
+      displayIdentity: truncateWalletAddress(wallet),
+      streakLength,
+      streakStatus: streakLength > 0 ? 'active' : 'broken',
+      activeCourseCount,
+      lockedPrincipalAmount: lockedPrincipal.toString(),
+      lockedPrincipalAmountUi: formatAtomicUsdcUi(lockedPrincipal),
+      projectedCommunityPotShare:
+        projectedRow?.payoutAmount != null ? String(projectedRow.payoutAmount) : '0',
+      projectedCommunityPotShareUi:
+        projectedRow?.payoutAmount != null
+          ? formatAtomicUsdcUi(projectedRow.payoutAmount)
+          : '0',
+      recentActivityDate,
+      isCurrentUser: wallet === walletAddress,
+    });
+  }
+
+  entries.sort((left, right) => {
+    if (left.streakLength !== right.streakLength) {
+      return right.streakLength - left.streakLength;
+    }
+    const leftPrincipal = BigInt(left.lockedPrincipalAmount);
+    const rightPrincipal = BigInt(right.lockedPrincipalAmount);
+    if (leftPrincipal !== rightPrincipal) {
+      return rightPrincipal > leftPrincipal ? 1 : -1;
+    }
+    return left.walletAddress.localeCompare(right.walletAddress);
+  });
+
+  const rankedEntries = entries.map((entry, index) => ({
+    rank: index + 1,
+    ...entry,
+  }));
+
+  return {
+    currentPotSizeUi: latestClosedWindow
+      ? formatAtomicUsdcUi(latestClosedWindow.totalRedirectedAmount)
+      : '0',
+    nextDistributionWindowLabel:
+      latestClosedWindowId != null
+        ? formatCommunityPotWindowLabel(latestClosedWindowId + 1)
+        : null,
+    currentUser:
+      rankedEntries.find((entry) => entry.walletAddress === walletAddress) ?? null,
+    entries: rankedEntries,
+  };
+}
+
 async function readFuelBurnReceipt(client, walletAddress, courseId, cycleId) {
   const result = await client.query(
     `

@@ -22,6 +22,7 @@ export type MainStackParamList = {
   Alchemy: undefined;
   Leaderboard: undefined;
   CommunityPot: undefined;
+  CommunityPotWindow: { windowId: number; windowLabel: string };
   Profile: undefined;
   Inventory: undefined;
   IchorShop: undefined;

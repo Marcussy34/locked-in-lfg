@@ -15,3 +15,4 @@ Current implementation summaries:
 - `docs/done/06-vault-contract.md`
 - `docs/done/07-deposit-locking-service.md`
 - `docs/done/08-timer-yield-product.md`
+- `docs/done/09-leaderboard.md`

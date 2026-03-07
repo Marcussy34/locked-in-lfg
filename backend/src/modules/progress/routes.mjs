@@ -5,8 +5,10 @@ import {
   consumeDailyFuel,
   closeCommunityPotWindowAndSnapshot,
   distributeCommunityPotWindowBatch,
+  getCommunityPotWindowDetail,
   consumeSaverOrApplyFullConsequence,
   getCommunityPotHistory,
+  getLeaderboardSnapshot,
   getCourseRuntimeSnapshot,
   getCourseProgress,
   getModuleProgress,
@@ -244,9 +246,29 @@ export async function progressRoutes(app) {
   });
 
   app.get(
+    '/v1/progress/leaderboard',
+    { preHandler: requireAccessAuth },
+    async (request) => getLeaderboardSnapshot(request.auth.walletAddress),
+  );
+
+  app.get(
     '/v1/progress/community-pot/history',
     { preHandler: requireAccessAuth },
     async (request) => getCommunityPotHistory(request.auth.walletAddress),
+  );
+
+  app.get(
+    '/v1/progress/community-pot/windows/:windowId',
+    { preHandler: requireAccessAuth },
+    async (request) => {
+      const rawWindowId = request.params?.windowId;
+      const windowId = Number.parseInt(String(rawWindowId), 10);
+      if (!Number.isFinite(windowId)) {
+        throw badRequest('windowId is required', 'MISSING_WINDOW_ID');
+      }
+
+      return getCommunityPotWindowDetail(request.auth.walletAddress, windowId);
+    },
   );
 
   app.get(

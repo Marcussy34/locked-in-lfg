@@ -207,3 +207,62 @@ export interface CommunityPotHistoryWindow {
 export interface CommunityPotHistoryResponse {
   windows: CommunityPotHistoryWindow[];
 }
+
+export interface CommunityPotWindowRecipient {
+  walletAddress: string;
+  displayIdentity: string;
+  courseId: string;
+  currentStreak: number;
+  principalAmount: string;
+  principalAmountUi: string;
+  weight: string;
+  payoutAmount: string;
+  payoutAmountUi: string;
+  status: CommunityPotRecipientStatus;
+  distributedAt: string | null;
+  transactionSignature: string | null;
+  lastError: string | null;
+  isCurrentUser: boolean;
+}
+
+export interface CommunityPotWindowDetailResponse {
+  windowId: number;
+  windowLabel: string;
+  totalRedirectedAmount: string;
+  totalRedirectedAmountUi: string;
+  distributedAmount: string;
+  distributedAmountUi: string;
+  remainingAmount: string;
+  remainingAmountUi: string;
+  redirectCount: number;
+  eligibleRecipientCount: number;
+  distributionCount: number;
+  status: CommunityPotWindowStatus;
+  closedAt: string | null;
+  recipients: CommunityPotWindowRecipient[];
+  userEntry: CommunityPotWindowRecipient | null;
+}
+
+export type LeaderboardEntryStatus = 'active' | 'broken';
+
+export interface LeaderboardEntry {
+  rank: number;
+  walletAddress: string;
+  displayIdentity: string;
+  streakLength: number;
+  streakStatus: LeaderboardEntryStatus;
+  activeCourseCount: number;
+  lockedPrincipalAmount: string;
+  lockedPrincipalAmountUi: string;
+  projectedCommunityPotShare: string;
+  projectedCommunityPotShareUi: string;
+  recentActivityDate: string | null;
+  isCurrentUser: boolean;
+}
+
+export interface LeaderboardResponse {
+  currentPotSizeUi: string;
+  nextDistributionWindowLabel: string | null;
+  currentUser: LeaderboardEntry | null;
+  entries: LeaderboardEntry[];
+}

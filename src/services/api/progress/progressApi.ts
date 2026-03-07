@@ -3,6 +3,8 @@ import type {
   CourseRuntimeSnapshot,
   CourseProgressSnapshot,
   CommunityPotHistoryResponse,
+  LeaderboardResponse,
+  CommunityPotWindowDetailResponse,
   ModuleProgressSnapshot,
   ProgressStartLessonRequest,
   ProgressStartLessonResponse,
@@ -72,6 +74,22 @@ export function getModuleProgress(
 
 export function getCommunityPotHistory(token: string): Promise<CommunityPotHistoryResponse> {
   return httpRequest<CommunityPotHistoryResponse>('/v1/progress/community-pot/history', {
+    token,
+  });
+}
+
+export function getCommunityPotWindowDetail(
+  windowId: number,
+  token: string,
+): Promise<CommunityPotWindowDetailResponse> {
+  return httpRequest<CommunityPotWindowDetailResponse>(
+    `/v1/progress/community-pot/windows/${windowId}`,
+    { token },
+  );
+}
+
+export function getLeaderboard(token: string): Promise<LeaderboardResponse> {
+  return httpRequest<LeaderboardResponse>('/v1/progress/leaderboard', {
     token,
   });
 }
