@@ -7,7 +7,11 @@ import {
   getCourseRuntimeSnapshot,
   getCourseProgress,
   getModuleProgress,
+  publishFuelBurnReceipt,
+  publishHarvestResultReceipt,
+  publishMissConsequenceReceipt,
   publishVerifiedCompletionEvent,
+  recordHarvestResult,
   startLessonAttempt,
   submitLessonAttempt,
 } from './repository.mjs';
@@ -111,6 +115,46 @@ export async function progressRoutes(app) {
     return publishVerifiedCompletionEvent(eventId, retryFailed);
   });
 
+  app.post('/v1/internal/lock-vault/fuel-burn/publish', async (request) => {
+    requireSchedulerAuth(request);
+
+    const walletAddress = assertBodyField(request.body?.walletAddress, 'walletAddress');
+    const courseId = assertBodyField(request.body?.courseId, 'courseId');
+    const cycleId = assertBodyField(request.body?.cycleId, 'cycleId');
+    const retryFailed = request.body?.retryFailed === true;
+
+    return publishFuelBurnReceipt(walletAddress, courseId, cycleId, retryFailed);
+  });
+
+  app.post('/v1/internal/yield/harvest', async (request) => {
+    requireSchedulerAuth(request);
+
+    const walletAddress = assertBodyField(request.body?.walletAddress, 'walletAddress');
+    const courseId = assertBodyField(request.body?.courseId, 'courseId');
+    const harvestId = assertBodyField(request.body?.harvestId, 'harvestId');
+    const grossYieldAmount = request.body?.grossYieldAmount;
+    const harvestedAt = request.body?.harvestedAt ?? null;
+
+    return recordHarvestResult(
+      walletAddress,
+      courseId,
+      harvestId,
+      grossYieldAmount,
+      harvestedAt,
+    );
+  });
+
+  app.post('/v1/internal/lock-vault/yield/harvest/publish', async (request) => {
+    requireSchedulerAuth(request);
+
+    const walletAddress = assertBodyField(request.body?.walletAddress, 'walletAddress');
+    const courseId = assertBodyField(request.body?.courseId, 'courseId');
+    const harvestId = assertBodyField(request.body?.harvestId, 'harvestId');
+    const retryFailed = request.body?.retryFailed === true;
+
+    return publishHarvestResultReceipt(walletAddress, courseId, harvestId, retryFailed);
+  });
+
   app.post('/v1/internal/consequences/miss', async (request) => {
     requireSchedulerAuth(request);
 
@@ -132,6 +176,22 @@ export async function progressRoutes(app) {
       courseId,
       missEventId,
       missDay,
+    );
+  });
+
+  app.post('/v1/internal/lock-vault/consequences/miss/publish', async (request) => {
+    requireSchedulerAuth(request);
+
+    const walletAddress = assertBodyField(request.body?.walletAddress, 'walletAddress');
+    const courseId = assertBodyField(request.body?.courseId, 'courseId');
+    const missEventId = assertBodyField(request.body?.missEventId, 'missEventId');
+    const retryFailed = request.body?.retryFailed === true;
+
+    return publishMissConsequenceReceipt(
+      walletAddress,
+      courseId,
+      missEventId,
+      retryFailed,
     );
   });
 

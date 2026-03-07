@@ -7,6 +7,14 @@ This spec defines the canonical yield math shown to users and the on-chain accou
 Display values are projections unless backed by harvested on-chain data.
 Settlement is determined by on-chain program state.
 
+Current implementation checkpoint:
+
+- `LockVault` now includes a worker-only `apply_harvest_result(...)` instruction
+- backend can queue and publish manual harvest receipts into the live devnet lock
+- a positive devnet harvest has already credited real `ichor_counter` and `ichor_lifetime_total`
+- the mobile `Ichor Shop` now reads live on-chain Ichor state and redemption tier
+- redemption remains disabled when the protocol redemption vault has no USDC liquidity
+
 ## Inputs
 
 Per course lock:

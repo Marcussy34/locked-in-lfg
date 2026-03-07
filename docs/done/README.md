@@ -10,4 +10,7 @@ Current implementation summaries:
 
 - `docs/done/02-lesson-api.md`
 - `docs/done/03-fuel.md`
+- `docs/done/05-yield-calculator.md`
+- `docs/done/06-vault-contract.md`
 - `docs/done/07-deposit-locking-service.md`
+- `docs/done/08-timer-yield-product.md`

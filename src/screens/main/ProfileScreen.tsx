@@ -1,10 +1,18 @@
-import { useCallback } from 'react';
-import { Alert, View, Text, Pressable, ScrollView } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, ActivityIndicator, View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '@/navigation/types';
-import { disconnectWallet } from '@/services/solana';
+import {
+  buildUnlockFundsTransaction,
+  connection,
+  disconnectWallet,
+  fetchLockAccountSnapshot,
+  hasLockVaultConfig,
+  signTransaction,
+  type LockAccountSnapshot,
+} from '@/services/solana';
 import { useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
 
@@ -20,17 +28,24 @@ export function ProfileScreen() {
   const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
   const deactivateCourse = useCourseStore((s) => s.deactivateCourse);
   const refreshCourseRuntime = useCourseStore((s) => s.refreshCourseRuntime);
+  const syncLockSnapshot = useCourseStore((s) => s.syncLockSnapshot);
   const resetLessonProgressForCourse = useCourseStore(
     (s) => s.resetLessonProgressForCourse,
   );
 
   const activeState = activeCourseId ? courseStates[activeCourseId] : null;
+  const activeLockAccountAddress = activeState?.lockAccountAddress ?? null;
   const activeCourse = activeCourseId
     ? courses.find((c) => c.id === activeCourseId)
     : null;
+  const walletAddress = useUserStore((s) => s.walletAddress);
   const authToken = useUserStore((s) => s.authToken);
   const walletAuthToken = useUserStore((s) => s.walletAuthToken);
   const disconnect = useUserStore((s) => s.disconnect);
+  const [lockSnapshot, setLockSnapshot] = useState<LockAccountSnapshot | null>(null);
+  const [isLoadingLock, setIsLoadingLock] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [unlockStatusMessage, setUnlockStatusMessage] = useState<string | null>(null);
 
   const streak = activeState?.currentStreak ?? 0;
   const ichor = activeState?.ichorBalance ?? 0;
@@ -45,8 +60,95 @@ export function ProfileScreen() {
           // Keep last synced runtime visible if refresh fails.
         });
       }
-    }, [activeCourseId, authToken, refreshCourseRuntime]),
+
+      if (
+        activeCourseId &&
+        walletAddress &&
+        activeLockAccountAddress &&
+        hasLockVaultConfig()
+      ) {
+        setIsLoadingLock(true);
+        void fetchLockAccountSnapshot({
+          ownerAddress: walletAddress,
+          courseId: activeCourseId,
+        })
+          .then((snapshot) => {
+            setUnlockStatusMessage(null);
+            syncLockSnapshot(activeCourseId, snapshot);
+            setLockSnapshot(snapshot);
+          })
+          .catch((error) => {
+            const message =
+              error instanceof Error ? error.message : 'Unable to read live lock state.';
+            setUnlockStatusMessage(message);
+            setLockSnapshot(null);
+          })
+          .finally(() => {
+            setIsLoadingLock(false);
+          });
+      } else {
+        setIsLoadingLock(false);
+        setLockSnapshot(null);
+      }
+    }, [
+      activeCourseId,
+      activeLockAccountAddress,
+      authToken,
+      refreshCourseRuntime,
+      syncLockSnapshot,
+      walletAddress,
+    ]),
   );
+
+  const handleUnlock = async () => {
+    if (!activeCourseId || !walletAddress || !walletAuthToken) {
+      setUnlockStatusMessage('Connect your wallet again before resurfacing.');
+      return;
+    }
+
+    try {
+      setIsUnlocking(true);
+      setUnlockStatusMessage('Building unlock transaction...');
+
+      const buildResult = await buildUnlockFundsTransaction({
+        ownerAddress: walletAddress,
+        courseId: activeCourseId,
+      });
+
+      setUnlockStatusMessage('Requesting wallet approval...');
+      const signedTransaction = await signTransaction(
+        walletAddress,
+        buildResult.transaction,
+        walletAuthToken,
+      );
+
+      setUnlockStatusMessage('Submitting transaction...');
+      const rawTransaction = signedTransaction.serialize();
+      const signature = await connection.sendRawTransaction(rawTransaction, {
+        skipPreflight: false,
+        maxRetries: 3,
+        preflightCommitment: 'confirmed',
+      });
+
+      setUnlockStatusMessage('Confirming unlock on-chain...');
+      await connection.confirmTransaction(signature, 'confirmed');
+
+      deactivateCourse(activeCourseId);
+      setUnlockStatusMessage(`Unlocked: ${signature.slice(0, 8)}...`);
+
+      if (activeCourseIds.length <= 1) {
+        navigation.replace('CourseBrowser');
+      } else {
+        navigation.goBack();
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to unlock this course yet.';
+      setUnlockStatusMessage(message);
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
 
   const menuItems = [
     { label: 'Streak Status', screen: 'StreakStatus' as const, icon: '\u2739' },
@@ -152,6 +254,67 @@ export function ProfileScreen() {
             </Pressable>
           ))}
         </View>
+
+        {activeLockAccountAddress ? (
+          <View className="mt-6 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-5">
+            <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
+              Resurface
+            </Text>
+            <Text className="mt-2 text-lg font-semibold text-white">
+              Unlock & reclaim your locked funds
+            </Text>
+
+            {isLoadingLock ? (
+              <View className="mt-4 flex-row items-center gap-3">
+                <ActivityIndicator size="small" color="#a3a3a3" />
+                <Text className="text-sm text-neutral-400">Reading live lock state...</Text>
+              </View>
+            ) : lockSnapshot ? (
+              <>
+                <Text className="mt-3 text-sm text-neutral-300">
+                  Principal: {lockSnapshot.principalAmountUi} USDC
+                </Text>
+                <Text className="mt-1 text-sm text-neutral-300">
+                  Locked SKR: {lockSnapshot.skrLockedAmountUi}
+                </Text>
+                <Text className="mt-1 text-sm text-neutral-300">
+                  Unlock at: {new Date(lockSnapshot.lockEndDate).toLocaleString()}
+                </Text>
+                <Text className="mt-1 text-xs text-neutral-500">
+                  {lockSnapshot.unlockEligible
+                    ? 'This lock can be resurfaced now.'
+                    : 'This lock is still active on-chain.'}
+                </Text>
+              </>
+            ) : (
+              <Text className="mt-3 text-sm text-neutral-500">
+                Live lock state is unavailable right now.
+              </Text>
+            )}
+
+            {unlockStatusMessage ? (
+              <View className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-3">
+                <Text className="text-sm text-neutral-300">{unlockStatusMessage}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              className={`mt-4 rounded-xl px-4 py-4 ${
+                isUnlocking || !lockSnapshot?.unlockEligible
+                  ? 'bg-neutral-700'
+                  : 'bg-sky-600 active:bg-sky-700'
+              }`}
+              disabled={isUnlocking || !lockSnapshot?.unlockEligible}
+              onPress={() => {
+                void handleUnlock();
+              }}
+            >
+              <Text className="text-center text-base font-semibold text-white">
+                {isUnlocking ? 'Unlocking...' : 'Unlock & Resurface'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* Danger zone */}
         <View className="mt-6 gap-3 pb-8">

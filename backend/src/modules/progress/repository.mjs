@@ -8,7 +8,12 @@ import {
 } from '../../lib/db.mjs';
 import {
   hasLockVaultRelayConfig,
+  publishFuelBurnToLockVault,
+  publishHarvestToLockVault,
+  publishMissConsequenceToLockVault,
   publishVerifiedCompletionToLockVault,
+  readLockAccountSnapshot,
+  readLockAccountTiming,
 } from '../../lib/lockVault.mjs';
 
 const UUID_RE =
@@ -43,8 +48,41 @@ function diffDays(fromDay, toDay) {
   return Math.round((to - from) / (24 * 60 * 60 * 1000));
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function getSaverRedirectBps(saverCount) {
   return SAVER_REDIRECT_BPS_BY_COUNT[saverCount] ?? 10000;
+}
+
+function percentageOfAmount(amount, bps) {
+  return Math.floor((Number(amount) * Number(bps)) / 10_000);
+}
+
+function getSkrMultiplierBps(skrTier) {
+  if (skrTier >= 3) return 11_000;
+  if (skrTier === 2) return 10_500;
+  if (skrTier === 1) return 10_200;
+  return 10_000;
+}
+
+function percentageOfAmountAtomic(amount, bps) {
+  return (BigInt(amount) * BigInt(bps)) / 10_000n;
+}
+
+function epochDayToIsoDate(epochDay) {
+  if (epochDay == null || Number(epochDay) < 0) {
+    return null;
+  }
+
+  return new Date(Number(epochDay) * DAY_MS).toISOString().slice(0, 10);
+}
+
+function unixTimestampSecondsToIso(value) {
+  if (value == null || Number(value) <= 0) {
+    return null;
+  }
+
+  return new Date(Number(value) * 1000).toISOString();
 }
 
 function assertAnswers(answers) {
@@ -612,6 +650,7 @@ async function claimVerifiedCompletionEvent(eventId = null, retryFailed = false)
           course_id as "courseId",
           completion_day::text as "completionDay",
           reward_units as "rewardUnits",
+          payload->>'completedAt' as "completedAt",
           status
       `,
       selectionArgs,
@@ -638,6 +677,7 @@ async function claimVerifiedCompletionEvent(eventId = null, retryFailed = false)
           events.course_id as "courseId",
           events.completion_day::text as "completionDay",
           events.reward_units as "rewardUnits",
+          events.payload->>'completedAt' as "completedAt",
           events.status
       `,
       selectionArgs,
@@ -663,6 +703,7 @@ async function claimVerifiedCompletionEvent(eventId = null, retryFailed = false)
       select
         event_id::text as "eventId",
         status,
+        payload->>'completedAt' as "completedAt",
         last_error as "lastError",
         published_at as "publishedAt",
         transaction_signature as "transactionSignature"
@@ -727,6 +768,15 @@ async function markVerifiedCompletionEventFailed(eventId, error) {
   );
 }
 
+function toUnixTimestampSeconds(value) {
+  const milliseconds = new Date(value).getTime();
+  if (!Number.isFinite(milliseconds)) {
+    throw badRequest('completedAt is invalid', 'INVALID_COMPLETED_AT');
+  }
+
+  return Math.floor(milliseconds / 1000);
+}
+
 export async function readCourseRuntimeState(client, walletAddress, courseId) {
   const state = await ensureCourseRuntimeState(client, walletAddress, courseId);
   const referenceDay =
@@ -751,6 +801,91 @@ export async function readCourseRuntimeState(client, walletAddress, courseId) {
     fuelAwarded: 0,
     fuelEarnStatus: deriveFuelEarnStatus(state, referenceDay),
   };
+}
+
+export async function syncCourseRuntimeStateWithLockSnapshot(
+  walletAddress,
+  courseId,
+  lockSnapshot = null,
+) {
+  if (!hasDatabase()) {
+    return null;
+  }
+
+  const snapshot = lockSnapshot ?? (await readLockAccountSnapshot(walletAddress, courseId));
+  const extensionDays = Math.floor(snapshot.extensionSecondsTotal / 86_400);
+  const saverCount = snapshot.gauntletComplete ? Math.max(0, 3 - snapshot.saversRemaining) : 0;
+
+  return withTransactionAsWallet(walletAddress, async (client) => {
+    await ensureCourseRuntimeState(client, walletAddress, courseId);
+    await client.query(
+      `
+        update lesson.user_course_runtime_state
+        set current_streak = $3,
+            longest_streak = $4,
+            gauntlet_active = $5,
+            gauntlet_day = $6,
+            saver_count = $7,
+            saver_recovery_mode = $8,
+            current_yield_redirect_bps = $9,
+            extension_days = $10,
+            fuel_counter = $11,
+            fuel_cap = $12,
+            last_completed_day = $13::date,
+            last_fuel_credit_day = $14::date,
+            last_brewer_burn_ts = $15::timestamptz,
+            updated_at = now()
+        where wallet_address = $1
+          and course_id = $2
+      `,
+      [
+        walletAddress,
+        courseId,
+        snapshot.currentStreak,
+        snapshot.longestStreak,
+        !snapshot.gauntletComplete,
+        snapshot.gauntletDay,
+        saverCount,
+        snapshot.saverRecoveryMode,
+        snapshot.currentYieldRedirectBps,
+        extensionDays,
+        snapshot.fuelCounter,
+        snapshot.fuelCap,
+        epochDayToIsoDate(snapshot.lastCompletionDay),
+        epochDayToIsoDate(snapshot.lastFuelCreditDay),
+        unixTimestampSecondsToIso(snapshot.lastBrewerBurnTs),
+      ],
+    );
+
+    return readCourseRuntimeState(client, walletAddress, courseId);
+  });
+}
+
+export async function listRuntimeSchedulerCandidates(limit = 10) {
+  if (!hasDatabase()) {
+    return [];
+  }
+
+  const result = await query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        current_streak as "currentStreak",
+        gauntlet_active as "gauntletActive",
+        fuel_counter as "fuelCounter",
+        last_completed_day::text as "lastCompletedDay",
+        last_miss_day::text as "lastMissDay",
+        last_brewer_burn_ts as "lastBrewerBurnTs",
+        updated_at as "updatedAt"
+      from lesson.user_course_runtime_state
+      order by updated_at asc
+      limit $1
+    `,
+    [limit],
+  );
+
+  return result.rows;
 }
 
 export async function getCourseRuntimeSnapshot(walletAddress, courseId) {
@@ -814,6 +949,27 @@ export async function publishVerifiedCompletionEvent(
   }
 
   try {
+    const lockTiming = await readLockAccountTiming(
+      claim.event.walletAddress,
+      claim.event.courseId,
+    );
+    const completedAtTs = toUnixTimestampSeconds(claim.event.completedAt);
+
+    if (completedAtTs < lockTiming.lockStartTs) {
+      const error =
+        'Completion predates the on-chain lock start and cannot be published.';
+      await markVerifiedCompletionEventFailed(claim.event.eventId, error);
+      return {
+        processed: false,
+        reason: 'PREDATES_LOCK',
+        eventId: claim.event.eventId,
+        courseId: claim.event.courseId,
+        walletAddress: claim.event.walletAddress,
+        error,
+        lockAccount: lockTiming.lockAccount,
+      };
+    }
+
     const publishResult = await publishVerifiedCompletionToLockVault(claim.event);
     await markVerifiedCompletionEventPublished(
       claim.event.eventId,
@@ -848,16 +1004,533 @@ export async function publishVerifiedCompletionEvent(
   }
 }
 
+export async function publishFuelBurnReceipt(
+  walletAddress,
+  courseId,
+  cycleId,
+  retryFailed = false,
+) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasLockVaultRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'LOCK_VAULT_RELAY_DISABLED',
+    };
+  }
+
+  const claim = await claimFuelBurnReceipt(
+    walletAddress,
+    courseId,
+    cycleId,
+    retryFailed,
+  );
+  if (!claim.receipt) {
+    return {
+      processed: false,
+      reason: claim.reason,
+    };
+  }
+
+  if (claim.reason !== 'CLAIMED') {
+    return {
+      processed: false,
+      reason: claim.reason,
+      receipt: claim.receipt,
+    };
+  }
+
+  if (!['BURNED', 'GAUNTLET_LOCKED', 'NO_FUEL'].includes(claim.receipt.reason ?? '')) {
+    const error = `Fuel burn receipt reason is not publishable: ${claim.receipt.reason ?? 'UNKNOWN'}`;
+    await markFuelBurnReceiptFailed(walletAddress, courseId, cycleId, error);
+    return {
+      processed: false,
+      reason: 'UNPUBLISHABLE_RECEIPT',
+      walletAddress,
+      courseId,
+      cycleId,
+      error,
+    };
+  }
+
+  try {
+    const publishResult = await publishFuelBurnToLockVault(claim.receipt);
+    await markFuelBurnReceiptPublished(
+      walletAddress,
+      courseId,
+      cycleId,
+      publishResult.signature,
+    );
+
+    return {
+      processed: true,
+      reason: 'PUBLISHED',
+      walletAddress,
+      courseId,
+      cycleId,
+      burnedAt: claim.receipt.burnedAt,
+      signature: publishResult.signature,
+      authority: publishResult.authority,
+      lockAccount: publishResult.lockAccount,
+      receiptAccount: publishResult.receiptAccount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await markFuelBurnReceiptFailed(walletAddress, courseId, cycleId, message);
+
+    return {
+      processed: false,
+      reason: 'PUBLISH_FAILED',
+      walletAddress,
+      courseId,
+      cycleId,
+      error: message,
+    };
+  }
+}
+
+export async function publishMissConsequenceReceipt(
+  walletAddress,
+  courseId,
+  missEventId,
+  retryFailed = false,
+) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasLockVaultRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'LOCK_VAULT_RELAY_DISABLED',
+    };
+  }
+
+  const claim = await claimMissConsequenceReceipt(
+    walletAddress,
+    courseId,
+    missEventId,
+    retryFailed,
+  );
+  if (!claim.receipt) {
+    return {
+      processed: false,
+      reason: claim.reason,
+    };
+  }
+
+  if (claim.reason !== 'CLAIMED') {
+    return {
+      processed: false,
+      reason: claim.reason,
+      receipt: claim.receipt,
+    };
+  }
+
+  if (!['SAVER_CONSUMED', 'FULL_CONSEQUENCE', 'GAUNTLET_LOCKED'].includes(claim.receipt.reason ?? '')) {
+    const error =
+      `Miss consequence receipt reason is not publishable: ${claim.receipt.reason ?? 'UNKNOWN'}`;
+    await markMissConsequenceReceiptFailed(walletAddress, courseId, missEventId, error);
+    return {
+      processed: false,
+      reason: 'UNPUBLISHABLE_RECEIPT',
+      walletAddress,
+      courseId,
+      missEventId,
+      error,
+    };
+  }
+
+  try {
+    const publishResult = await publishMissConsequenceToLockVault(claim.receipt);
+    await markMissConsequenceReceiptPublished(
+      walletAddress,
+      courseId,
+      missEventId,
+      publishResult.signature,
+    );
+
+    return {
+      processed: true,
+      reason: 'PUBLISHED',
+      walletAddress,
+      courseId,
+      missEventId,
+      missDay: claim.receipt.missDay,
+      signature: publishResult.signature,
+      authority: publishResult.authority,
+      lockAccount: publishResult.lockAccount,
+      receiptAccount: publishResult.receiptAccount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await markMissConsequenceReceiptFailed(
+      walletAddress,
+      courseId,
+      missEventId,
+      message,
+    );
+
+    return {
+      processed: false,
+      reason: 'PUBLISH_FAILED',
+      walletAddress,
+      courseId,
+      missEventId,
+      error: message,
+    };
+  }
+}
+
+async function readHarvestResultReceipt(client, walletAddress, courseId, harvestId) {
+  const result = await client.query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        harvest_id as "harvestId",
+        harvested_at as "harvestedAt",
+        gross_yield_amount as "grossYieldAmount",
+        applied,
+        reason,
+        platform_fee_amount as "platformFeeAmount",
+        redirected_amount as "redirectedAmount",
+        ichor_awarded as "ichorAwarded",
+        lock_vault_status as "lockVaultStatus",
+        lock_vault_published_at as "lockVaultPublishedAt",
+        lock_vault_last_error as "lockVaultLastError",
+        lock_vault_transaction_signature as "lockVaultTransactionSignature"
+      from lesson.harvest_result_receipts
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+      limit 1
+    `,
+    [walletAddress, courseId, harvestId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+export async function recordHarvestResult(
+  walletAddress,
+  courseId,
+  harvestId,
+  grossYieldAmount,
+  harvestedAt = null,
+) {
+  if (!harvestId || typeof harvestId !== 'string') {
+    throw badRequest('harvestId is required', 'MISSING_HARVEST_ID');
+  }
+
+  const amount =
+    typeof grossYieldAmount === 'string' || typeof grossYieldAmount === 'number'
+      ? BigInt(grossYieldAmount)
+      : null;
+  if (amount == null || amount < 0n) {
+    throw badRequest('grossYieldAmount must be a non-negative integer', 'INVALID_GROSS_YIELD');
+  }
+
+  const harvestedAtValue = harvestedAt ?? new Date().toISOString();
+
+  if (!hasDatabase()) {
+    return {
+      harvestId,
+      harvestedAt: harvestedAtValue,
+      grossYieldAmount: amount.toString(),
+      lockVaultStatus: 'pending',
+    };
+  }
+
+  return withTransactionAsWallet(walletAddress, async (client) => {
+    const existingReceipt = await readHarvestResultReceipt(
+      client,
+      walletAddress,
+      courseId,
+      harvestId,
+    );
+
+    if (existingReceipt) {
+      return existingReceipt;
+    }
+
+    await client.query(
+      `
+        insert into lesson.harvest_result_receipts (
+          wallet_address,
+          course_id,
+          harvest_id,
+          harvested_at,
+          gross_yield_amount
+        )
+        values ($1, $2, $3, $4::timestamptz, $5::bigint)
+      `,
+      [walletAddress, courseId, harvestId, harvestedAtValue, amount.toString()],
+    );
+
+    return readHarvestResultReceipt(client, walletAddress, courseId, harvestId);
+  });
+}
+
+async function claimHarvestResultReceipt(
+  walletAddress,
+  courseId,
+  harvestId,
+  retryFailed = false,
+) {
+  const claimableStatuses = retryFailed ? ['pending', 'failed'] : ['pending'];
+  const result = await query(
+    `
+      update lesson.harvest_result_receipts
+      set lock_vault_status = 'publishing',
+          lock_vault_last_error = null
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+        and lock_vault_status = any($4::text[])
+      returning
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        harvest_id as "harvestId",
+        harvested_at as "harvestedAt",
+        gross_yield_amount as "grossYieldAmount",
+        applied,
+        reason
+    `,
+    [walletAddress, courseId, harvestId, claimableStatuses],
+  );
+
+  if (result.rowCount > 0) {
+    return { receipt: result.rows[0], reason: 'CLAIMED' };
+  }
+
+  const current = await query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        harvest_id as "harvestId",
+        harvested_at as "harvestedAt",
+        gross_yield_amount as "grossYieldAmount",
+        applied,
+        reason,
+        lock_vault_status as "lockVaultStatus",
+        lock_vault_published_at as "lockVaultPublishedAt",
+        lock_vault_last_error as "lockVaultLastError",
+        lock_vault_transaction_signature as "lockVaultTransactionSignature"
+      from lesson.harvest_result_receipts
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+      limit 1
+    `,
+    [walletAddress, courseId, harvestId],
+  );
+
+  if (current.rowCount === 0) {
+    return { receipt: null, reason: 'RECEIPT_NOT_FOUND' };
+  }
+
+  const existing = current.rows[0];
+  if (existing.lockVaultStatus === 'published') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHED' };
+  }
+
+  if (existing.lockVaultStatus === 'publishing') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHING' };
+  }
+
+  return { receipt: existing, reason: 'RETRY_REQUIRED' };
+}
+
+async function markHarvestResultReceiptPublished(
+  walletAddress,
+  courseId,
+  harvestId,
+  values,
+) {
+  await query(
+    `
+      update lesson.harvest_result_receipts
+      set lock_vault_status = 'published',
+          lock_vault_published_at = now(),
+          lock_vault_last_error = null,
+          lock_vault_transaction_signature = $4,
+          applied = $5,
+          reason = $6,
+          platform_fee_amount = $7::bigint,
+          redirected_amount = $8::bigint,
+          ichor_awarded = $9::bigint
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+    `,
+    [
+      walletAddress,
+      courseId,
+      harvestId,
+      values.signature,
+      values.applied,
+      values.reason,
+      values.platformFeeAmount,
+      values.redirectedAmount,
+      values.ichorAwarded,
+    ],
+  );
+}
+
+async function markHarvestResultReceiptFailed(walletAddress, courseId, harvestId, error) {
+  await query(
+    `
+      update lesson.harvest_result_receipts
+      set lock_vault_status = 'failed',
+          lock_vault_last_error = $4
+      where wallet_address = $1
+        and course_id = $2
+        and harvest_id = $3
+    `,
+    [walletAddress, courseId, harvestId, error],
+  );
+}
+
+export async function publishHarvestResultReceipt(
+  walletAddress,
+  courseId,
+  harvestId,
+  retryFailed = false,
+) {
+  if (!hasDatabase()) {
+    return {
+      processed: false,
+      reason: 'NO_DATABASE',
+    };
+  }
+
+  if (!hasLockVaultRelayConfig()) {
+    return {
+      processed: false,
+      reason: 'LOCK_VAULT_RELAY_DISABLED',
+    };
+  }
+
+  const claim = await claimHarvestResultReceipt(
+    walletAddress,
+    courseId,
+    harvestId,
+    retryFailed,
+  );
+  if (!claim.receipt) {
+    return {
+      processed: false,
+      reason: claim.reason,
+    };
+  }
+
+  if (claim.reason !== 'CLAIMED') {
+    return {
+      processed: false,
+      reason: claim.reason,
+      receipt: claim.receipt,
+    };
+  }
+
+  try {
+    const snapshotBefore = await readLockAccountSnapshot(walletAddress, courseId);
+    const grossYieldAmount = BigInt(claim.receipt.grossYieldAmount);
+    const publishResult = await publishHarvestToLockVault({
+      walletAddress,
+      courseId,
+      harvestId,
+      grossYieldAmount: claim.receipt.grossYieldAmount,
+    });
+    const snapshotAfter = await readLockAccountSnapshot(walletAddress, courseId);
+
+    const applied =
+      snapshotAfter.ichorCounter > snapshotBefore.ichorCounter ||
+      snapshotAfter.ichorLifetimeTotal > snapshotBefore.ichorLifetimeTotal;
+    const platformFeeAmount = percentageOfAmountAtomic(grossYieldAmount, 1_000).toString();
+    const redirectedAmount = percentageOfAmountAtomic(
+      grossYieldAmount,
+      snapshotBefore.currentYieldRedirectBps,
+    ).toString();
+    const userShare =
+      grossYieldAmount - BigInt(platformFeeAmount) - BigInt(redirectedAmount);
+    const ichorAwarded = applied
+      ? (
+          percentageOfAmountAtomic(
+            userShare > 0n ? userShare : 0n,
+            getSkrMultiplierBps(snapshotBefore.skrTier),
+          )
+        ).toString()
+      : '0';
+    const reason = applied ? 'HARVEST_APPLIED' : 'HARVEST_SKIPPED';
+
+    await markHarvestResultReceiptPublished(walletAddress, courseId, harvestId, {
+      signature: publishResult.signature,
+      applied,
+      reason,
+      platformFeeAmount,
+      redirectedAmount,
+      ichorAwarded,
+    });
+    await syncCourseRuntimeStateWithLockSnapshot(walletAddress, courseId, snapshotAfter);
+
+    return {
+      processed: true,
+      reason: 'PUBLISHED',
+      walletAddress,
+      courseId,
+      harvestId,
+      grossYieldAmount: claim.receipt.grossYieldAmount,
+      applied,
+      harvestReason: reason,
+      platformFeeAmount,
+      redirectedAmount,
+      ichorAwarded,
+      signature: publishResult.signature,
+      authority: publishResult.authority,
+      lockAccount: publishResult.lockAccount,
+      receiptAccount: publishResult.receiptAccount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await markHarvestResultReceiptFailed(walletAddress, courseId, harvestId, message);
+
+    return {
+      processed: false,
+      reason: 'PUBLISH_FAILED',
+      walletAddress,
+      courseId,
+      harvestId,
+      error: message,
+    };
+  }
+}
+
 async function readFuelBurnReceipt(client, walletAddress, courseId, cycleId) {
   const result = await client.query(
     `
       select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
         cycle_id as "cycleId",
         burned_at as "burnedAt",
         applied,
         fuel_before as "fuelBefore",
         fuel_after as "fuelAfter",
-        reason
+        reason,
+        lock_vault_status as "lockVaultStatus",
+        lock_vault_published_at as "lockVaultPublishedAt",
+        lock_vault_last_error as "lockVaultLastError",
+        lock_vault_transaction_signature as "lockVaultTransactionSignature"
       from lesson.fuel_burn_cycle_receipts
       where wallet_address = $1
         and course_id = $2
@@ -870,10 +1543,106 @@ async function readFuelBurnReceipt(client, walletAddress, courseId, cycleId) {
   return result.rows[0] ?? null;
 }
 
+async function claimFuelBurnReceipt(walletAddress, courseId, cycleId, retryFailed = false) {
+  const claimableStatuses = retryFailed ? ['pending', 'failed'] : ['pending'];
+  const result = await query(
+    `
+      update lesson.fuel_burn_cycle_receipts
+      set lock_vault_status = 'publishing',
+          lock_vault_last_error = null
+      where wallet_address = $1
+        and course_id = $2
+        and cycle_id = $3
+        and lock_vault_status = any($4::text[])
+      returning
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        cycle_id as "cycleId",
+        burned_at as "burnedAt",
+        applied,
+        reason
+    `,
+    [walletAddress, courseId, cycleId, claimableStatuses],
+  );
+
+  if (result.rowCount > 0) {
+    return { receipt: result.rows[0], reason: 'CLAIMED' };
+  }
+
+  const current = await query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        cycle_id as "cycleId",
+        burned_at as "burnedAt",
+        applied,
+        reason,
+        lock_vault_status as "lockVaultStatus",
+        lock_vault_published_at as "lockVaultPublishedAt",
+        lock_vault_last_error as "lockVaultLastError",
+        lock_vault_transaction_signature as "lockVaultTransactionSignature"
+      from lesson.fuel_burn_cycle_receipts
+      where wallet_address = $1
+        and course_id = $2
+        and cycle_id = $3
+      limit 1
+    `,
+    [walletAddress, courseId, cycleId],
+  );
+
+  if (current.rowCount === 0) {
+    return { receipt: null, reason: 'RECEIPT_NOT_FOUND' };
+  }
+
+  const existing = current.rows[0];
+  if (existing.lockVaultStatus === 'published') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHED' };
+  }
+
+  if (existing.lockVaultStatus === 'publishing') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHING' };
+  }
+
+  return { receipt: existing, reason: 'RETRY_REQUIRED' };
+}
+
+async function markFuelBurnReceiptPublished(walletAddress, courseId, cycleId, signature) {
+  await query(
+    `
+      update lesson.fuel_burn_cycle_receipts
+      set lock_vault_status = 'published',
+          lock_vault_published_at = now(),
+          lock_vault_last_error = null,
+          lock_vault_transaction_signature = $4
+      where wallet_address = $1
+        and course_id = $2
+        and cycle_id = $3
+    `,
+    [walletAddress, courseId, cycleId, signature],
+  );
+}
+
+async function markFuelBurnReceiptFailed(walletAddress, courseId, cycleId, error) {
+  await query(
+    `
+      update lesson.fuel_burn_cycle_receipts
+      set lock_vault_status = 'failed',
+          lock_vault_last_error = $4
+      where wallet_address = $1
+        and course_id = $2
+        and cycle_id = $3
+    `,
+    [walletAddress, courseId, cycleId, error],
+  );
+}
+
 async function readMissConsequenceReceipt(client, walletAddress, courseId, missEventId) {
   const result = await client.query(
     `
       select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
         miss_event_id as "missEventId",
         miss_day::text as "missDay",
         applied,
@@ -883,7 +1652,11 @@ async function readMissConsequenceReceipt(client, walletAddress, courseId, missE
         redirect_bps_before as "redirectBpsBefore",
         redirect_bps_after as "redirectBpsAfter",
         extension_days_before as "extensionDaysBefore",
-        extension_days_after as "extensionDaysAfter"
+        extension_days_after as "extensionDaysAfter",
+        lock_vault_status as "lockVaultStatus",
+        lock_vault_published_at as "lockVaultPublishedAt",
+        lock_vault_last_error as "lockVaultLastError",
+        lock_vault_transaction_signature as "lockVaultTransactionSignature"
       from lesson.miss_consequence_receipts
       where wallet_address = $1
         and course_id = $2
@@ -894,6 +1667,110 @@ async function readMissConsequenceReceipt(client, walletAddress, courseId, missE
   );
 
   return result.rows[0] ?? null;
+}
+
+async function claimMissConsequenceReceipt(
+  walletAddress,
+  courseId,
+  missEventId,
+  retryFailed = false,
+) {
+  const claimableStatuses = retryFailed ? ['pending', 'failed'] : ['pending'];
+  const result = await query(
+    `
+      update lesson.miss_consequence_receipts
+      set lock_vault_status = 'publishing',
+          lock_vault_last_error = null
+      where wallet_address = $1
+        and course_id = $2
+        and miss_event_id = $3
+        and lock_vault_status = any($4::text[])
+      returning
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        miss_event_id as "missEventId",
+        miss_day::text as "missDay",
+        applied,
+        reason
+    `,
+    [walletAddress, courseId, missEventId, claimableStatuses],
+  );
+
+  if (result.rowCount > 0) {
+    return { receipt: result.rows[0], reason: 'CLAIMED' };
+  }
+
+  const current = await query(
+    `
+      select
+        wallet_address as "walletAddress",
+        course_id as "courseId",
+        miss_event_id as "missEventId",
+        miss_day::text as "missDay",
+        applied,
+        reason,
+        lock_vault_status as "lockVaultStatus",
+        lock_vault_published_at as "lockVaultPublishedAt",
+        lock_vault_last_error as "lockVaultLastError",
+        lock_vault_transaction_signature as "lockVaultTransactionSignature"
+      from lesson.miss_consequence_receipts
+      where wallet_address = $1
+        and course_id = $2
+        and miss_event_id = $3
+      limit 1
+    `,
+    [walletAddress, courseId, missEventId],
+  );
+
+  if (current.rowCount === 0) {
+    return { receipt: null, reason: 'RECEIPT_NOT_FOUND' };
+  }
+
+  const existing = current.rows[0];
+  if (existing.lockVaultStatus === 'published') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHED' };
+  }
+
+  if (existing.lockVaultStatus === 'publishing') {
+    return { receipt: existing, reason: 'ALREADY_PUBLISHING' };
+  }
+
+  return { receipt: existing, reason: 'RETRY_REQUIRED' };
+}
+
+async function markMissConsequenceReceiptPublished(
+  walletAddress,
+  courseId,
+  missEventId,
+  signature,
+) {
+  await query(
+    `
+      update lesson.miss_consequence_receipts
+      set lock_vault_status = 'published',
+          lock_vault_published_at = now(),
+          lock_vault_last_error = null,
+          lock_vault_transaction_signature = $4
+      where wallet_address = $1
+        and course_id = $2
+        and miss_event_id = $3
+    `,
+    [walletAddress, courseId, missEventId, signature],
+  );
+}
+
+async function markMissConsequenceReceiptFailed(walletAddress, courseId, missEventId, error) {
+  await query(
+    `
+      update lesson.miss_consequence_receipts
+      set lock_vault_status = 'failed',
+          lock_vault_last_error = $4
+      where wallet_address = $1
+        and course_id = $2
+        and miss_event_id = $3
+    `,
+    [walletAddress, courseId, missEventId, error],
+  );
 }
 
 export async function consumeSaverOrApplyFullConsequence(

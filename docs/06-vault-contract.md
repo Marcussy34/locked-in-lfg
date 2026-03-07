@@ -15,9 +15,27 @@ Current implementation checkpoint:
   - `POST /v1/internal/lock-vault/completions/publish`
   - completion outbox rows move through `pending -> publishing -> published|failed`
   - successful publish stores the devnet transaction signature on the event row
+- backend now has a polling relay worker for verified completions:
+  - starts on server boot through Fastify lifecycle hooks
+  - stops cleanly on server shutdown
+  - only publishes events that do not predate the on-chain lock start
+  - marks pre-lock backlog rows as `failed` instead of replaying them into a live lock
+- backend now has real burn and miss relay paths:
+  - `POST /v1/internal/lock-vault/fuel-burn/publish`
+  - `POST /v1/internal/lock-vault/consequences/miss/publish`
+  - burn and miss receipts now track `pending -> publishing -> published|failed` plus transaction signatures
+- `unlock_funds` is now implemented:
+  - unlockability is derived from `Clock` against `lock_end_ts`
+  - principal and locked SKR transfer back to the owner
+  - both vault ATAs are closed
+  - the lock account is marked closed and then closed to the owner
+- `redeem_ichor` is now implemented:
+  - redemption pulls USDC from the protocol redemption vault
+  - conversion uses canonical lifetime-tier bps
+  - gauntlet completion and available `ichor_counter` are enforced on-chain
 - Rust tests now cover deposit snapshotting, SKR tier thresholds, Fuel credit, gauntlet unlock, saver recovery, and full-consequence extension logic
 - devnet inspection is now supported through `scripts/inspect-lock-vault.mjs`
-- token exit paths (`unlock_funds`, `redeem_ichor`) remain the next on-chain slice
+- the upgraded program binary is live again on devnet under the same program id
 
 Companion programs in the same on-chain stack:
 
@@ -113,9 +131,9 @@ Preconditions:
 
 Effects:
 
-- computes quote from conversion tier
+- computes quote from the canonical lifetime conversion tier
 - debits `ichor_counter`
-- transfers stablecoin out from redemption/yield pool
+- transfers USDC out from the protocol redemption vault
 - emits redemption event
 
 ### `unlock_funds()`
@@ -125,7 +143,7 @@ Authorized caller: lock owner.
 Preconditions:
 
 - `now >= lock_end_ts` including extensions
-- lock status is unlockable
+- lock is not already closed
 
 Effects:
 
@@ -133,6 +151,10 @@ Effects:
 - returns locked SKR in full
 - handles final residual yield settlement per policy
 - marks lock closed and releases rent where applicable
+
+Current scaffold note:
+
+- unlockability is currently clock-derived rather than precomputed into a separate `unlockable` status value
 
 ## Account Topology
 

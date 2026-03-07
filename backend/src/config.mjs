@@ -62,6 +62,12 @@ export const appConfig = {
   refreshTokenTtl: process.env.REFRESH_TOKEN_TTL ?? '30d',
   schedulerSecret: required('SCHEDULER_SECRET', 'dev-only-scheduler-secret'),
   missExtensionDays: optionalInt('MISS_EXTENSION_DAYS', 7),
+  lockVaultRelayEnabled: optionalBool('LOCK_VAULT_RELAY_ENABLED', false),
+  lockVaultRelayIntervalMs: optionalInt('LOCK_VAULT_RELAY_INTERVAL_MS', 15_000),
+  lockVaultRelayBatchSize: optionalInt('LOCK_VAULT_RELAY_BATCH_SIZE', 5),
+  runtimeSchedulerEnabled: optionalBool('RUNTIME_SCHEDULER_ENABLED', false),
+  runtimeSchedulerIntervalMs: optionalInt('RUNTIME_SCHEDULER_INTERVAL_MS', 15_000),
+  runtimeSchedulerBatchSize: optionalInt('RUNTIME_SCHEDULER_BATCH_SIZE', 5),
   solanaRpcUrl:
     process.env.SOLANA_RPC_URL ??
     process.env.EXPO_PUBLIC_SOLANA_RPC_URL ??

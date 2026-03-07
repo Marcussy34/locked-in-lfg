@@ -4,6 +4,7 @@ import { asyncStorageAdapter } from './storage';
 import { MOCK_COURSES, MOCK_LESSONS } from '@/data/mockCourses';
 import { getCourseRuntime, hasRemoteLessonApi } from '@/services/api';
 import type { CourseRuntimeSnapshot } from '@/services/api/types';
+import type { LockAccountSnapshot } from '@/services/solana';
 import { BREW_MODES } from '@/types';
 import type {
   BrewModeId,
@@ -83,6 +84,7 @@ interface CourseStore {
   isEnrolled: (courseId: string) => boolean;
   getEnrolledCourses: () => Course[];
   syncCourseRuntime: (courseId: string, snapshot: CourseRuntimeSnapshot) => void;
+  syncLockSnapshot: (courseId: string, snapshot: LockAccountSnapshot) => void;
   refreshCourseRuntime: (courseId: string, token: string) => Promise<void>;
   resetLessonProgressForCourse: (courseId: string) => void;
   initializeContent: (force?: boolean) => Promise<void>;
@@ -537,6 +539,32 @@ export const useCourseStore = create<CourseStore>()(
               fuelCap: snapshot.fuelCap,
               lastFuelCreditDay: snapshot.lastFuelCreditDay,
               lastBrewerBurnTs: snapshot.lastBrewerBurnTs,
+            },
+          },
+        });
+      },
+
+      syncLockSnapshot: (courseId, snapshot) => {
+        const state = get();
+        const existingState = normalizeCourseGameState(state.courseStates[courseId]);
+
+        set({
+          courseStates: {
+            ...state.courseStates,
+            [courseId]: {
+              ...existingState,
+              lockAccountAddress:
+                snapshot.lockAccountAddress ?? existingState.lockAccountAddress,
+              lockStartDate: snapshot.lockStartDate,
+              extensionDays: snapshot.extensionDays,
+              gauntletActive: !snapshot.gauntletComplete,
+              gauntletDay: snapshot.gauntletDay,
+              saverRecoveryMode: snapshot.saverRecoveryMode,
+              currentYieldRedirectBps: snapshot.currentYieldRedirectBps,
+              fuelCounter: snapshot.fuelCounter,
+              fuelCap: snapshot.fuelCap,
+              ichorBalance: snapshot.ichorCounter,
+              totalIchorProduced: snapshot.ichorLifetimeTotal,
             },
           },
         });

@@ -19,6 +19,8 @@ const LOCK_SEED = Buffer.from('lock');
 const COMPLETION_SEED = Buffer.from('completion');
 const FUEL_BURN_SEED = Buffer.from('fuel-burn');
 const MISS_SEED = Buffer.from('miss');
+const HARVEST_SEED = Buffer.from('harvest');
+const LOCK_ACCOUNT_DISCRIMINATOR = 'df40477cff5676c0';
 
 const APPLY_VERIFIED_COMPLETION_DISCRIMINATOR = anchorDiscriminator(
   'apply_verified_completion',
@@ -27,6 +29,7 @@ const CONSUME_DAILY_FUEL_DISCRIMINATOR = anchorDiscriminator('consume_daily_fuel
 const CONSUME_SAVER_OR_FULL_CONSEQUENCE_DISCRIMINATOR = anchorDiscriminator(
   'consume_saver_or_apply_full_consequence',
 );
+const APPLY_HARVEST_RESULT_DISCRIMINATOR = anchorDiscriminator('apply_harvest_result');
 
 let relay = null;
 
@@ -43,6 +46,12 @@ function encodeU16LE(value) {
 function encodeI64LE(value) {
   const buffer = Buffer.alloc(8);
   buffer.writeBigInt64LE(BigInt(value), 0);
+  return buffer;
+}
+
+function encodeU64LE(value) {
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64LE(BigInt(value), 0);
   return buffer;
 }
 
@@ -123,11 +132,85 @@ function deriveReceiptAccount(programId, seed, lockAccount, receiptKey) {
   )[0];
 }
 
+function decodeLockAccountSnapshot(data) {
+  if (data.length < 201) {
+    throw new Error('Lock account data is shorter than expected.');
+  }
+
+  const discriminator = data.subarray(0, 8).toString('hex');
+  if (discriminator !== LOCK_ACCOUNT_DISCRIMINATOR) {
+    throw new Error('Account is not a LockVault LockAccount.');
+  }
+
+  let offset = 8;
+  const readPubkey = () => {
+    const value = new PublicKey(data.subarray(offset, offset + 32)).toBase58();
+    offset += 32;
+    return value;
+  };
+  const readBytes = (size) => {
+    const value = data.subarray(offset, offset + size);
+    offset += size;
+    return value;
+  };
+  const readU64 = () => {
+    const value = Number(data.readBigUInt64LE(offset));
+    offset += 8;
+    return value;
+  };
+  const readI64 = () => {
+    const value = Number(data.readBigInt64LE(offset));
+    offset += 8;
+    return value;
+  };
+  const readU8 = () => {
+    const value = data.readUInt8(offset);
+    offset += 1;
+    return value;
+  };
+  const readBool = () => readU8() === 1;
+  const readU16 = () => {
+    const value = data.readUInt16LE(offset);
+    offset += 2;
+    return value;
+  };
+
+  return {
+    owner: readPubkey(),
+    courseIdHash: Buffer.from(readBytes(32)).toString('hex'),
+    stableMint: readPubkey(),
+    principalAmount: readU64(),
+    lockStartTs: readI64(),
+    lockEndTs: readI64(),
+    extensionSecondsTotal: readU64(),
+    status: readU8(),
+    gauntletComplete: readBool(),
+    gauntletDay: readU8(),
+    currentStreak: readU16(),
+    longestStreak: readU16(),
+    saversRemaining: readU8(),
+    saverRecoveryMode: readBool(),
+    fuelCounter: readU16(),
+    fuelCap: readU16(),
+    lastFuelCreditDay: readI64(),
+    lastBrewerBurnTs: readI64(),
+    lastCompletionDay: readI64(),
+    ichorCounter: readU64(),
+    ichorLifetimeTotal: readU64(),
+    skrLockedAmount: readU64(),
+    skrTier: readU8(),
+    currentYieldRedirectBps: readU16(),
+    bump: readU8(),
+  };
+}
+
 async function assertLockAccountExists(connection, lockAccount) {
   const account = await connection.getAccountInfo(lockAccount, 'confirmed');
   if (!account) {
     throw new Error(`Lock account not found: ${lockAccount.toBase58()}`);
   }
+
+  return account;
 }
 
 async function sendWorkerInstruction(keys, data) {
@@ -200,6 +283,29 @@ export async function publishVerifiedCompletionToLockVault({
     receiptAccount: receiptAccount.toBase58(),
     completionDay,
     rewardUnits,
+  };
+}
+
+export async function readLockAccountTiming(walletAddress, courseId) {
+  const { connection, programId } = getRelay();
+  const lockAccount = deriveLockAccount(programId, walletAddress, courseId);
+  const account = await assertLockAccountExists(connection, lockAccount);
+  const snapshot = decodeLockAccountSnapshot(account.data);
+
+  return {
+    lockAccount: lockAccount.toBase58(),
+    lockStartTs: snapshot.lockStartTs,
+  };
+}
+
+export async function readLockAccountSnapshot(walletAddress, courseId) {
+  const { connection, programId } = getRelay();
+  const lockAccount = deriveLockAccount(programId, walletAddress, courseId);
+  const account = await assertLockAccountExists(connection, lockAccount);
+
+  return {
+    lockAccount: lockAccount.toBase58(),
+    ...decodeLockAccountSnapshot(account.data),
   };
 }
 
@@ -283,5 +389,44 @@ export async function publishMissConsequenceToLockVault({
     lockAccount: lockAccount.toBase58(),
     receiptAccount: receiptAccount.toBase58(),
     missDay,
+  };
+}
+
+export async function publishHarvestToLockVault({
+  walletAddress,
+  courseId,
+  harvestId,
+  grossYieldAmount,
+}) {
+  const { connection, signer, programId } = getRelay();
+  const protocolConfig = deriveProtocolConfig(programId);
+  const lockAccount = deriveLockAccount(programId, walletAddress, courseId);
+  const receiptKey = hashString(harvestId);
+  const receiptAccount = deriveReceiptAccount(programId, HARVEST_SEED, lockAccount, receiptKey);
+
+  await assertLockAccountExists(connection, lockAccount);
+
+  const data = Buffer.concat([
+    APPLY_HARVEST_RESULT_DISCRIMINATOR,
+    receiptKey,
+    encodeU64LE(BigInt(grossYieldAmount)),
+  ]);
+
+  const result = await sendWorkerInstruction(
+    [
+      { pubkey: protocolConfig, isSigner: false, isWritable: false },
+      { pubkey: lockAccount, isSigner: false, isWritable: true },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: receiptAccount, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  );
+
+  return {
+    ...result,
+    lockAccount: lockAccount.toBase58(),
+    receiptAccount: receiptAccount.toBase58(),
+    grossYieldAmount,
   };
 }

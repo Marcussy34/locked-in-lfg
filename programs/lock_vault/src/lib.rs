@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked},
+    token_interface::{self, CloseAccount, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
 declare_id!("41TexnrHDMV4ASJmqNNFcgQ7RBk6N193yvukfiCzKQmD");
@@ -16,10 +16,12 @@ const DEFAULT_MAX_SAVERS: u8 = 3;
 const GAUNTLET_DAYS: u8 = 7;
 const MAX_LOCK_DURATION_DAYS: u16 = 90;
 const ACTIVE_STATUS: u8 = 0;
+const CLOSED_STATUS: u8 = 2;
 const FULL_REDIRECT_BPS: u16 = 10_000;
 const RECEIPT_KIND_COMPLETION: u8 = 1;
 const RECEIPT_KIND_FUEL_BURN: u8 = 2;
 const RECEIPT_KIND_MISS: u8 = 3;
+const RECEIPT_KIND_HARVEST: u8 = 4;
 const OUTCOME_NO_REWARD_UNITS: u8 = 1;
 const OUTCOME_SAVER_RECOVERED: u8 = 2;
 const OUTCOME_ALREADY_EARNED_TODAY: u8 = 3;
@@ -30,6 +32,8 @@ const OUTCOME_NO_FUEL_AVAILABLE: u8 = 21;
 const OUTCOME_FUEL_BURNED: u8 = 22;
 const OUTCOME_SAVER_CONSUMED: u8 = 30;
 const OUTCOME_FULL_CONSEQUENCE: u8 = 31;
+const OUTCOME_HARVEST_SKIPPED: u8 = 40;
+const OUTCOME_HARVEST_APPLIED: u8 = 41;
 
 #[program]
 pub mod lock_vault {
@@ -271,6 +275,173 @@ pub mod lock_vault {
 
         Ok(())
     }
+
+    pub fn unlock_funds(ctx: Context<UnlockFunds>) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let authority_info = ctx.accounts.lock_account.to_account_info();
+        let (owner_key, course_id_hash, bump, principal_amount, skr_locked_amount) = {
+            let lock_account = &ctx.accounts.lock_account;
+            lock_account.assert_unlockable(now)?;
+
+            require!(
+                ctx.accounts.stable_vault.amount == lock_account.principal_amount,
+                LockVaultError::UnexpectedStableVaultBalance
+            );
+            require!(
+                ctx.accounts.skr_vault.amount == lock_account.skr_locked_amount,
+                LockVaultError::UnexpectedSkrVaultBalance
+            );
+
+            (
+                lock_account.owner,
+                lock_account.course_id_hash,
+                lock_account.bump,
+                lock_account.principal_amount,
+                lock_account.skr_locked_amount,
+            )
+        };
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            LockAccount::SEED,
+            owner_key.as_ref(),
+            course_id_hash.as_ref(),
+            &[bump],
+        ]];
+
+        transfer_checked_from_lock_vault(
+            &ctx.accounts.token_program,
+            &ctx.accounts.stable_vault,
+            &ctx.accounts.owner_stable_token_account,
+            &ctx.accounts.stable_mint,
+            &authority_info,
+            signer_seeds,
+            principal_amount,
+        )?;
+
+        if skr_locked_amount > 0 {
+            transfer_checked_from_lock_vault(
+                &ctx.accounts.token_program,
+                &ctx.accounts.skr_vault,
+                &ctx.accounts.owner_skr_token_account,
+                &ctx.accounts.skr_mint,
+                &authority_info,
+                signer_seeds,
+                skr_locked_amount,
+            )?;
+        }
+
+        close_token_account_from_lock_vault(
+            &ctx.accounts.token_program,
+            &ctx.accounts.stable_vault.to_account_info(),
+            &ctx.accounts.owner.to_account_info(),
+            &authority_info,
+            signer_seeds,
+        )?;
+        close_token_account_from_lock_vault(
+            &ctx.accounts.token_program,
+            &ctx.accounts.skr_vault.to_account_info(),
+            &ctx.accounts.owner.to_account_info(),
+            &authority_info,
+            signer_seeds,
+        )?;
+
+        let lock_account = &mut ctx.accounts.lock_account;
+        lock_account.mark_closed();
+
+        emit!(LockUnlocked {
+            lock_account: lock_account.key(),
+            owner: lock_account.owner,
+            principal_amount: lock_account.principal_amount,
+            skr_locked_amount: lock_account.skr_locked_amount,
+            unlocked_at_ts: now,
+        });
+
+        Ok(())
+    }
+
+    pub fn redeem_ichor(ctx: Context<RedeemIchor>, ichor_amount: u64) -> Result<()> {
+        validate_supported_mints(
+            &ctx.accounts.protocol_config,
+            ctx.accounts.stable_mint.key(),
+            ctx.accounts.protocol_config.skr_mint,
+        )?;
+        require!(
+            ctx.accounts.lock_account.stable_mint == ctx.accounts.stable_mint.key(),
+            LockVaultError::InvalidTokenAccountMint
+        );
+
+        let lock_account = &mut ctx.accounts.lock_account;
+        let effect = lock_account.redeem_ichor(ichor_amount, ctx.accounts.stable_mint.decimals)?;
+
+        require!(
+            ctx.accounts.redemption_vault.amount >= effect.usdc_out,
+            LockVaultError::InsufficientRedemptionLiquidity
+        );
+
+        let signer_seeds: &[&[&[u8]]] =
+            &[&[ProtocolConfig::SEED, &[ctx.accounts.protocol_config.bump]]];
+
+        transfer_checked_from_lock_vault(
+            &ctx.accounts.token_program,
+            &ctx.accounts.redemption_vault,
+            &ctx.accounts.owner_stable_token_account,
+            &ctx.accounts.stable_mint,
+            &ctx.accounts.protocol_config.to_account_info(),
+            signer_seeds,
+            effect.usdc_out,
+        )?;
+
+        emit!(IchorRedeemed {
+            lock_account: lock_account.key(),
+            owner: lock_account.owner,
+            ichor_amount,
+            usdc_out: effect.usdc_out,
+            conversion_bps: effect.conversion_bps,
+        });
+
+        Ok(())
+    }
+
+    pub fn apply_harvest_result(
+        ctx: Context<ApplyHarvestResult>,
+        receipt_key: [u8; 32],
+        gross_yield_amount: u64,
+    ) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let receipt = &mut ctx.accounts.receipt;
+        if receipt.is_initialized() {
+            return Ok(());
+        }
+
+        let effect = ctx
+            .accounts
+            .lock_account
+            .apply_harvest_result(gross_yield_amount)?;
+
+        receipt.record(
+            ctx.accounts.lock_account.key(),
+            receipt_key,
+            RECEIPT_KIND_HARVEST,
+            effect.applied,
+            effect.outcome,
+            now,
+            i64::try_from(effect.ichor_awarded).map_err(|_| LockVaultError::NumericalOverflow)?,
+            ctx.bumps.receipt,
+            now,
+        );
+
+        if effect.applied {
+            emit!(HarvestApplied {
+                lock_account: ctx.accounts.lock_account.key(),
+                gross_yield_amount,
+                platform_fee_amount: effect.platform_fee_amount,
+                redirected_amount: effect.redirected_amount,
+                ichor_awarded: effect.ichor_awarded,
+                ichor_counter: ctx.accounts.lock_account.ichor_counter,
+            });
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -402,6 +573,112 @@ pub struct ConsumeSaverOrApplyFullConsequence<'info> {
         bump
     )]
     pub receipt: Account<'info, WorkerReceipt>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(receipt_key: [u8; 32], gross_yield_amount: u64)]
+pub struct ApplyHarvestResult<'info> {
+    #[account(
+        seeds = [ProtocolConfig::SEED],
+        bump = protocol_config.bump,
+        has_one = authority @ LockVaultError::UnauthorizedWorker
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+    #[account(mut)]
+    pub lock_account: Account<'info, LockAccount>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + WorkerReceipt::INIT_SPACE,
+        seeds = [WorkerReceipt::HARVEST_SEED, lock_account.key().as_ref(), receipt_key.as_ref()],
+        bump
+    )]
+    pub receipt: Account<'info, WorkerReceipt>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UnlockFunds<'info> {
+    #[account(
+        mut,
+        close = owner,
+        has_one = owner @ LockVaultError::InvalidLockOwner
+    )]
+    pub lock_account: Account<'info, LockAccount>,
+    pub stable_mint: InterfaceAccount<'info, Mint>,
+    pub skr_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        mut,
+        token::mint = stable_mint,
+        token::authority = lock_account,
+        token::token_program = token_program
+    )]
+    pub stable_vault: InterfaceAccount<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = skr_mint,
+        token::authority = lock_account,
+        token::token_program = token_program
+    )]
+    pub skr_vault: InterfaceAccount<'info, TokenAccount>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        associated_token::mint = stable_mint,
+        associated_token::authority = owner,
+        associated_token::token_program = token_program
+    )]
+    pub owner_stable_token_account: InterfaceAccount<'info, TokenAccount>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        associated_token::mint = skr_mint,
+        associated_token::authority = owner,
+        associated_token::token_program = token_program
+    )]
+    pub owner_skr_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RedeemIchor<'info> {
+    #[account(
+        seeds = [ProtocolConfig::SEED],
+        bump = protocol_config.bump
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+    #[account(
+        mut,
+        has_one = owner @ LockVaultError::InvalidLockOwner
+    )]
+    pub lock_account: Account<'info, LockAccount>,
+    pub stable_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        mut,
+        token::mint = stable_mint,
+        token::authority = protocol_config,
+        token::token_program = token_program
+    )]
+    pub redemption_vault: InterfaceAccount<'info, TokenAccount>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        associated_token::mint = stable_mint,
+        associated_token::authority = owner,
+        associated_token::token_program = token_program
+    )]
+    pub owner_stable_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -672,6 +949,107 @@ impl LockAccount {
             extension_seconds_added: extension_seconds,
         })
     }
+
+    fn assert_unlockable(&self, now: i64) -> Result<()> {
+        require!(
+            self.status != CLOSED_STATUS,
+            LockVaultError::LockAlreadyClosed
+        );
+        require!(now >= self.lock_end_ts, LockVaultError::LockStillActive);
+        Ok(())
+    }
+
+    fn mark_closed(&mut self) {
+        self.status = CLOSED_STATUS;
+    }
+
+    fn redeem_ichor(&mut self, ichor_amount: u64, stable_decimals: u8) -> Result<RedeemEffect> {
+        require!(
+            self.status != CLOSED_STATUS,
+            LockVaultError::LockAlreadyClosed
+        );
+        require!(self.gauntlet_complete, LockVaultError::IchorExchangeLocked);
+        require!(ichor_amount > 0, LockVaultError::InvalidIchorAmount);
+        require!(
+            ichor_amount <= self.ichor_counter,
+            LockVaultError::InsufficientIchorBalance
+        );
+
+        let conversion_bps = ichor_conversion_bps(self.ichor_lifetime_total);
+        let base_units = 10u128
+            .checked_pow(u32::from(stable_decimals))
+            .ok_or(LockVaultError::UnsupportedMintDecimals)?;
+        let usdc_out = u128::from(ichor_amount)
+            .checked_mul(base_units)
+            .and_then(|value| value.checked_mul(u128::from(conversion_bps)))
+            .ok_or(LockVaultError::NumericalOverflow)?
+            / 1_000u128
+            / 10_000u128;
+        let usdc_out = u64::try_from(usdc_out).map_err(|_| LockVaultError::NumericalOverflow)?;
+
+        self.ichor_counter = self
+            .ichor_counter
+            .checked_sub(ichor_amount)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+
+        Ok(RedeemEffect {
+            usdc_out,
+            conversion_bps,
+        })
+    }
+
+    fn apply_harvest_result(&mut self, gross_yield_amount: u64) -> Result<HarvestEffect> {
+        require!(
+            self.status != CLOSED_STATUS,
+            LockVaultError::LockAlreadyClosed
+        );
+
+        if !self.gauntlet_complete || self.fuel_counter == 0 || gross_yield_amount == 0 {
+            return Ok(HarvestEffect {
+                applied: false,
+                outcome: OUTCOME_HARVEST_SKIPPED,
+                platform_fee_amount: 0,
+                redirected_amount: 0,
+                ichor_awarded: 0,
+            });
+        }
+
+        let platform_fee_amount = percentage_of_amount(gross_yield_amount, 1_000)?;
+        let redirected_amount =
+            percentage_of_amount(gross_yield_amount, self.current_yield_redirect_bps)?;
+        let user_share = gross_yield_amount
+            .checked_sub(platform_fee_amount)
+            .and_then(|value| value.checked_sub(redirected_amount))
+            .ok_or(LockVaultError::NumericalOverflow)?;
+
+        if user_share == 0 {
+            return Ok(HarvestEffect {
+                applied: false,
+                outcome: OUTCOME_HARVEST_SKIPPED,
+                platform_fee_amount,
+                redirected_amount,
+                ichor_awarded: 0,
+            });
+        }
+
+        let ichor_awarded = apply_skr_multiplier(user_share, self.skr_tier)?;
+        self.ichor_counter = self
+            .ichor_counter
+            .checked_add(ichor_awarded)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+        self.ichor_lifetime_total = self
+            .ichor_lifetime_total
+            .checked_add(ichor_awarded)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+
+        Ok(HarvestEffect {
+            applied: true,
+            outcome: OUTCOME_HARVEST_APPLIED,
+            platform_fee_amount,
+            redirected_amount,
+            ichor_awarded,
+        })
+    }
 }
 
 #[account]
@@ -692,6 +1070,7 @@ impl WorkerReceipt {
     pub const COMPLETION_SEED: &'static [u8] = b"completion";
     pub const FUEL_BURN_SEED: &'static [u8] = b"fuel-burn";
     pub const MISS_SEED: &'static [u8] = b"miss";
+    pub const HARVEST_SEED: &'static [u8] = b"harvest";
 
     fn is_initialized(&self) -> bool {
         self.lock_account != Pubkey::default()
@@ -765,6 +1144,34 @@ pub struct FullConsequenceApplied {
     pub current_yield_redirect_bps: u16,
 }
 
+#[event]
+pub struct LockUnlocked {
+    pub lock_account: Pubkey,
+    pub owner: Pubkey,
+    pub principal_amount: u64,
+    pub skr_locked_amount: u64,
+    pub unlocked_at_ts: i64,
+}
+
+#[event]
+pub struct IchorRedeemed {
+    pub lock_account: Pubkey,
+    pub owner: Pubkey,
+    pub ichor_amount: u64,
+    pub usdc_out: u64,
+    pub conversion_bps: u16,
+}
+
+#[event]
+pub struct HarvestApplied {
+    pub lock_account: Pubkey,
+    pub gross_yield_amount: u64,
+    pub platform_fee_amount: u64,
+    pub redirected_amount: u64,
+    pub ichor_awarded: u64,
+    pub ichor_counter: u64,
+}
+
 #[error_code]
 pub enum LockVaultError {
     #[msg("Fuel cap must stay within the v3 protocol range.")]
@@ -799,6 +1206,24 @@ pub enum LockVaultError {
     InvalidTokenAccountMint,
     #[msg("Mint decimals exceeded the supported range for tier snapshotting.")]
     UnsupportedMintDecimals,
+    #[msg("The provided lock owner does not match the signing wallet.")]
+    InvalidLockOwner,
+    #[msg("The lock is still active and cannot be unlocked yet.")]
+    LockStillActive,
+    #[msg("The lock has already been closed.")]
+    LockAlreadyClosed,
+    #[msg("The stable vault balance does not match the locked principal.")]
+    UnexpectedStableVaultBalance,
+    #[msg("The SKR vault balance does not match the locked snapshot amount.")]
+    UnexpectedSkrVaultBalance,
+    #[msg("Ichor exchange is still locked until gauntlet completion.")]
+    IchorExchangeLocked,
+    #[msg("Ichor amount must be greater than zero.")]
+    InvalidIchorAmount,
+    #[msg("Ichor balance is insufficient for this redemption.")]
+    InsufficientIchorBalance,
+    #[msg("Redemption vault liquidity is insufficient.")]
+    InsufficientRedemptionLiquidity,
 }
 
 fn validate_protocol_params(
@@ -893,6 +1318,49 @@ fn transfer_checked_tokens<'info>(
     token_interface::transfer_checked(cpi_context, amount, mint.decimals)
 }
 
+fn transfer_checked_from_lock_vault<'info>(
+    token_program: &Interface<'info, TokenInterface>,
+    from: &InterfaceAccount<'info, TokenAccount>,
+    to: &InterfaceAccount<'info, TokenAccount>,
+    mint: &InterfaceAccount<'info, Mint>,
+    authority: &AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+    amount: u64,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+
+    let cpi_accounts = TransferChecked {
+        from: from.to_account_info(),
+        mint: mint.to_account_info(),
+        to: to.to_account_info(),
+        authority: authority.clone(),
+    };
+    let cpi_context =
+        CpiContext::new(token_program.to_account_info(), cpi_accounts).with_signer(signer_seeds);
+
+    token_interface::transfer_checked(cpi_context, amount, mint.decimals)
+}
+
+fn close_token_account_from_lock_vault<'info>(
+    token_program: &Interface<'info, TokenInterface>,
+    account: &AccountInfo<'info>,
+    destination: &AccountInfo<'info>,
+    authority: &AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let cpi_accounts = CloseAccount {
+        account: account.clone(),
+        destination: destination.clone(),
+        authority: authority.clone(),
+    };
+    let cpi_context =
+        CpiContext::new(token_program.to_account_info(), cpi_accounts).with_signer(signer_seeds);
+
+    token_interface::close_account(cpi_context)
+}
+
 fn derive_skr_tier(amount: u64, decimals: u8) -> Result<u8> {
     let base_units = 10u128
         .checked_pow(u32::from(decimals))
@@ -930,6 +1398,33 @@ fn saver_redirect_bps(max_savers: u8, savers_remaining: u8) -> u16 {
     }
 }
 
+fn ichor_conversion_bps(ichor_lifetime_total: u64) -> u16 {
+    match ichor_lifetime_total {
+        0..=9_999 => 9_000,
+        10_000..=49_999 => 10_000,
+        50_000..=99_999 => 11_000,
+        _ => 12_500,
+    }
+}
+
+fn percentage_of_amount(amount: u64, bps: u16) -> Result<u64> {
+    let value = u128::from(amount)
+        .checked_mul(u128::from(bps))
+        .ok_or(LockVaultError::NumericalOverflow)?
+        / 10_000u128;
+    u64::try_from(value).map_err(|_| error!(LockVaultError::NumericalOverflow))
+}
+
+fn apply_skr_multiplier(base_amount: u64, skr_tier: u8) -> Result<u64> {
+    let multiplier_bps = match skr_tier {
+        0 => 10_000u16,
+        1 => 10_200u16,
+        2 => 10_500u16,
+        _ => 11_000u16,
+    };
+    percentage_of_amount(base_amount, multiplier_bps)
+}
+
 struct CompletionEffect {
     applied: bool,
     outcome: u8,
@@ -946,6 +1441,19 @@ struct MissEffect {
     applied: bool,
     outcome: u8,
     extension_seconds_added: i64,
+}
+
+struct RedeemEffect {
+    usdc_out: u64,
+    conversion_bps: u16,
+}
+
+struct HarvestEffect {
+    applied: bool,
+    outcome: u8,
+    platform_fee_amount: u64,
+    redirected_amount: u64,
+    ichor_awarded: u64,
 }
 
 #[cfg(test)]
@@ -1136,6 +1644,83 @@ mod tests {
         assert_eq!(burned.fuel_burned, 1);
         assert_eq!(lock.fuel_counter, 0);
         assert_eq!(lock.last_brewer_burn_ts, 1_700_000_000);
+    }
+
+    #[test]
+    fn unlock_requires_lock_end_and_prevents_double_close() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.initialize_from_funding(
+            &protocol,
+            Pubkey::new_unique(),
+            [3; 32],
+            protocol.usdc_mint,
+            1_000_000,
+            1_000_000_000,
+            2,
+            30,
+            1_700_000_000,
+            99,
+        )
+        .unwrap();
+
+        assert!(lock.assert_unlockable(lock.lock_end_ts - 1).is_err());
+        assert!(lock.assert_unlockable(lock.lock_end_ts).is_ok());
+
+        lock.mark_closed();
+        assert!(lock.assert_unlockable(lock.lock_end_ts + 1).is_err());
+    }
+
+    #[test]
+    fn ichor_conversion_bps_matches_canonical_thresholds() {
+        assert_eq!(ichor_conversion_bps(0), 9_000);
+        assert_eq!(ichor_conversion_bps(9_999), 9_000);
+        assert_eq!(ichor_conversion_bps(10_000), 10_000);
+        assert_eq!(ichor_conversion_bps(49_999), 10_000);
+        assert_eq!(ichor_conversion_bps(50_000), 11_000);
+        assert_eq!(ichor_conversion_bps(99_999), 11_000);
+        assert_eq!(ichor_conversion_bps(100_000), 12_500);
+    }
+
+    #[test]
+    fn redeem_ichor_requires_gauntlet_and_debits_balance() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.ichor_counter = 12_000;
+        lock.ichor_lifetime_total = 50_000;
+
+        assert!(lock.redeem_ichor(1_000, 6).is_err());
+
+        lock.gauntlet_complete = true;
+        let effect = lock.redeem_ichor(1_000, 6).unwrap();
+        assert_eq!(effect.conversion_bps, 11_000);
+        assert_eq!(effect.usdc_out, 1_100_000);
+        assert_eq!(lock.ichor_counter, 11_000);
+        assert_eq!(lock.ichor_lifetime_total, 50_000);
+    }
+
+    #[test]
+    fn harvest_applies_fee_redirect_and_skr_boost_only_when_brewer_active() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.gauntlet_day = 8;
+        lock.fuel_counter = 1;
+        lock.skr_tier = 2;
+        lock.current_yield_redirect_bps = 1_000;
+
+        let effect = lock.apply_harvest_result(100_000_000).unwrap();
+        assert!(effect.applied);
+        assert_eq!(effect.platform_fee_amount, 10_000_000);
+        assert_eq!(effect.redirected_amount, 10_000_000);
+        assert_eq!(effect.ichor_awarded, 84_000_000);
+        assert_eq!(lock.ichor_counter, 84_000_000);
+        assert_eq!(lock.ichor_lifetime_total, 84_000_000);
+
+        lock.fuel_counter = 0;
+        let skipped = lock.apply_harvest_result(100_000_000).unwrap();
+        assert!(!skipped.applied);
+        assert_eq!(skipped.outcome, OUTCOME_HARVEST_SKIPPED);
     }
 
     #[test]

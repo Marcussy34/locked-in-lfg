@@ -9,12 +9,22 @@ export {
   type WalletSession,
 } from './walletService';
 export {
+  buildRedeemIchorTransaction,
+  buildUnlockFundsTransaction,
   buildLockFundsTransaction,
+  deriveLockAccountAddress,
+  fetchLockAccountSnapshot,
+  fetchRedemptionVaultBalance,
   fetchWalletDepositBalances,
   formatDepositAmountUi,
+  getIchorRedemptionQuote,
   getLockVaultConfig,
   getStableMintAddress,
   hasLockVaultConfig,
+  parseIchorAmount,
   parseUiTokenAmount,
+  type LockAccountSnapshot,
   type LockDurationDays,
+  type RedemptionVaultBalance,
+  type RedeemIchorBuildResult,
 } from './lockVault';

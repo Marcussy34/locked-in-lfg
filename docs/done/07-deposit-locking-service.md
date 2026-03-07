@@ -3,7 +3,7 @@
 ## Scope Completed
 
 This checkpoint replaced the placeholder deposit path with a real devnet `LockVault` flow.
-The mobile app now creates funded course locks on-chain and the repo includes a lock inspection script for verification.
+The mobile app now creates funded course locks on-chain, persists them across reconnects, exposes a live resurface card, and the repo includes lock inspection tooling for verification.
 
 ## What Was Implemented
 
@@ -43,6 +43,27 @@ The mobile app now creates funded course locks on-chain and the repo includes a 
   - saver state
   - SKR amount and tier
 
+### Unlock transaction builder
+
+- The client now has a real `buildUnlockFundsTransaction(...)` helper.
+- It derives the existing lock PDA and both owner/vault ATAs.
+- It prepares the owner-signed `unlock_funds` instruction for the live resurface UI.
+
+### Reconnect and lock-state recovery
+
+- Reconnect now reconciles persisted onboarding state with the real locked course state.
+- The app no longer drops a user back onto the deposit screen when a lock already exists.
+
+### Live resurface UI
+
+- `Profile` now reads the live lock account from chain.
+- It shows:
+  - locked principal
+  - locked SKR
+  - unlock timestamp
+  - current lock availability state
+- `Unlock & Resurface` is only enabled when the program-derived lock is actually unlockable.
+
 ## Main Files
 
 - `programs/lock_vault/src/lib.rs`
@@ -64,8 +85,11 @@ The mobile app now creates funded course locks on-chain and the repo includes a 
   - `1000 SKR` locked
   - `skrTier = 2`
   - `gauntletDay = 1` before any on-chain lesson relay
+- After reconnect, the app returns to the existing locked-course flow instead of incorrectly requesting a second deposit.
+- `Profile` now shows the live resurface card with the correct principal, SKR, and unlock time.
 
 ## Remaining Follow-up
 
 - Relay verified completion, burn, and miss events from backend workers into the `LockVault` instruction surface.
-- Implement `unlock_funds` and later `redeem_ichor`.
+- Live-test `unlock_funds` once the current devnet lock reaches maturity.
+- Optionally add a dedicated unlock history or receipt view in the app.

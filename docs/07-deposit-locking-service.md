@@ -10,6 +10,7 @@ Current implementation checkpoint:
 - on-chain `lock_funds` now exists under `programs/lock_vault`
 - the mobile app now builds a real `lock_funds` transaction from `src/screens/onboarding/DepositScreen.tsx`
 - the client derives lock/vault PDAs, fetches wallet token balances, signs through MWA, and submits the raw transaction from the app for confirmation
+- the Solana client layer can now also build a real `unlock_funds` transaction for a locked course
 - the flow still depends on configured program/mint env vars and a deployed `LockVault` program on the selected cluster
 - live lock inspection is now available through `scripts/inspect-lock-vault.mjs`
 
@@ -70,6 +71,11 @@ When lock is unlockable:
 2. confirm return of principal stablecoin
 3. confirm return of locked SKR
 4. refresh all course lock state
+
+Current implementation checkpoint:
+
+- the transaction builder now exists in `src/services/solana/lockVault.ts`
+- a dedicated mobile unlock/resurface UI flow is still the next app-layer slice
 
 ## Failure Handling
 

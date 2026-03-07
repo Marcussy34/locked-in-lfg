@@ -6,6 +6,8 @@ import { getPool, hasDatabase } from './lib/db.mjs';
 import { contentRoutes } from './modules/content/routes.mjs';
 import { authRoutes } from './modules/auth/routes.mjs';
 import { progressRoutes } from './modules/progress/routes.mjs';
+import { registerLockVaultRelayWorker } from './workers/lockVaultRelayWorker.mjs';
+import { registerRuntimeSchedulerWorker } from './workers/runtimeSchedulerWorker.mjs';
 
 function buildLoggerConfig() {
   const loggerConfig = {
@@ -106,6 +108,8 @@ function buildServer() {
   app.register(contentRoutes);
   app.register(authRoutes);
   app.register(progressRoutes);
+  registerLockVaultRelayWorker(app);
+  registerRuntimeSchedulerWorker(app);
 
   app.log.info(
     { corsAllowedOrigins: appConfig.corsAllowedOrigins },
