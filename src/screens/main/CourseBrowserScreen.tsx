@@ -445,22 +445,20 @@ function CourseDetailView({
 
           {/* Action button */}
           {isLocked ? (
-            <Pressable
-              style={({ pressed }) => [s.ctaBtn, { backgroundColor: C.violet }, pressed && { opacity: 0.8 }]}
-              onPress={onDescend}
-            >
-              <Text style={[s.ctaBtnText, { color: '#fff' }]}>
-                {'\u25C6'}  DESCEND  {'\u25C6'}
-              </Text>
+            <Pressable onPress={onDescend}>
+              <View style={[s.ctaBtn, { backgroundColor: C.violet }]}>
+                <Text style={[s.ctaBtnText, { color: '#fff' }]}>
+                  {'\u25C6'}  DESCEND  {'\u25C6'}
+                </Text>
+              </View>
             </Pressable>
           ) : (
-            <Pressable
-              style={({ pressed }) => [s.ctaBtn, pressed && { opacity: 0.8 }]}
-              onPress={onEnroll}
-            >
-              <Text style={s.ctaBtnText}>
-                {'\u25C6'}  LOCK & START  {'\u25C6'}
-              </Text>
+            <Pressable onPress={onEnroll}>
+              <View style={s.ctaBtn}>
+                <Text style={s.ctaBtnText}>
+                  {'\u25C6'}  LOCK & START  {'\u25C6'}
+                </Text>
+              </View>
             </Pressable>
           )}
 

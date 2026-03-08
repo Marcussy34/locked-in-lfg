@@ -1,9 +1,15 @@
-import { View, Text, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback } from 'react';
 import { useCourseStore } from '@/stores/courseStore';
 import { useUserStore } from '@/stores';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  T,
+  ts,
+} from '@/theme';
 
 function formatFuelEarnStatus(status: string): string {
   switch (status) {
@@ -58,61 +64,99 @@ export function InventoryScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <View className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <View style={s.container}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">Inventory</Text>
-        <Text className="mt-1 text-sm text-neutral-500">
-          Your dungeon resources
-        </Text>
+        <Text style={[ts.pageTitle, s.title]}>Inventory</Text>
+        <Text style={ts.pageSub}>Your dungeon resources</Text>
 
         {/* Fuel */}
-        <View className="mt-6 rounded-xl border border-orange-500/30 bg-orange-500/5 p-5">
-          <View className="flex-row items-center justify-between">
+        <ParchmentCard style={[s.fuelCard, { borderColor: T.rust + '25' }]}>
+          <View style={s.cardRow}>
             <View>
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Fuel
-              </Text>
-              <Text className="mt-1 text-3xl font-bold text-orange-400">
+              <Text style={ts.cardLabel}>Fuel</Text>
+              <Text style={[ts.cardValue, s.bigValue, { color: T.rust }]}>
                 {fuelBalance}
-                <Text className="text-base text-neutral-500">/{fuelCap}</Text>
+                <Text style={s.capText}>/{fuelCap}</Text>
               </Text>
             </View>
-            <Text className="text-3xl">{'\u26FD'}</Text>
+            <Text style={s.emoji}>{'\u26FD'}</Text>
           </View>
-          <Text className="mt-2 text-xs text-neutral-500">
+          <Text style={s.detailText}>
             {formatFuelEarnStatus(fuelEarnStatus)}
           </Text>
-          <Text className="mt-1 text-xs text-neutral-600">
+          <Text style={s.mutedText}>
             Next burn: {formatBurnTime(nextFuelBurnAt)}
           </Text>
-          <Text className="mt-1 text-xs text-neutral-600">
+          <Text style={s.mutedText}>
             Brewer: {brewerStatus}
           </Text>
-        </View>
+        </ParchmentCard>
 
         {/* Dungeon Ichor */}
-        <View className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
-          <View className="flex-row items-center justify-between">
+        <ParchmentCard style={[s.ichorCard, { borderColor: T.amber + '25' }]}>
+          <View style={s.cardRow}>
             <View>
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Dungeon Ichor
-              </Text>
-              <Text className="mt-1 text-3xl font-bold text-amber-400">
+              <Text style={ts.cardLabel}>Dungeon Ichor</Text>
+              <Text style={[ts.cardValue, s.bigValue, { color: T.amber }]}>
                 {Math.floor(dungeonIchor).toLocaleString()}
               </Text>
             </View>
-            <Text className="text-3xl">{'\u2697'}</Text>
+            <Text style={s.emoji}>{'\u2697'}</Text>
           </View>
-          <Text className="mt-2 text-xs text-neutral-600">
+          <Text style={s.mutedText}>
             Locked until course complete + lock period ends
           </Text>
-        </View>
-
+        </ParchmentCard>
       </View>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingTop: 4,
+  },
+  title: {
+    marginTop: 8,
+  },
+  fuelCard: {
+    marginTop: 16,
+    padding: 20,
+  },
+  ichorCard: {
+    marginTop: 12,
+    padding: 20,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bigValue: {
+    fontSize: 30,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  capText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: T.textSecondary,
+  },
+  emoji: {
+    fontSize: 30,
+  },
+  detailText: {
+    fontSize: 11,
+    color: T.textSecondary,
+    marginTop: 8,
+  },
+  mutedText: {
+    fontSize: 11,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+});

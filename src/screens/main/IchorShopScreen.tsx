@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, View, Text, Pressable, TextInput, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, View, Text, Pressable, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   ApiError,
@@ -21,6 +20,13 @@ import {
 import { useCourseStore } from '@/stores/courseStore';
 import { useUserStore } from '@/stores';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  T,
+  ts,
+} from '@/theme';
 
 function renderHarvestStatus(status: YieldHistoryEntry['lockVaultStatus']) {
   if (status === 'published') return 'Published';
@@ -302,188 +308,179 @@ export function IchorShopScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={s.scroll} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">Ichor Shop</Text>
-        <Text className="mt-1 text-sm text-neutral-500">
-          Exchange Ichor for USDC
-        </Text>
+        <Text style={ts.pageTitle}>Ichor Shop</Text>
+        <Text style={ts.pageSub}>Exchange Ichor for USDC</Text>
 
         {isLoadingLock ? (
-          <View className="mt-6 flex-row items-center gap-3">
-            <ActivityIndicator size="small" color="#a3a3a3" />
-            <Text className="text-sm text-neutral-400">Reading live Ichor state...</Text>
+          <View style={s.loadingRow}>
+            <ActivityIndicator size="small" color={T.textSecondary} />
+            <Text style={s.loadingText}>Reading live Ichor state...</Text>
           </View>
         ) : (
           <>
-            <View className="mt-6 items-center rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Available Ichor
-              </Text>
-              <Text className="mt-2 text-4xl font-bold text-amber-400">
-                {availableIchor.toLocaleString()}
-              </Text>
-              <Text className="mt-2 text-xs text-neutral-500">
+            {/* ── Available Ichor hero ── */}
+            <ParchmentCard style={s.heroCard}>
+              <Text style={ts.cardLabel}>Available Ichor</Text>
+              <Text style={s.heroValue}>{availableIchor.toLocaleString()}</Text>
+              <Text style={s.heroSub}>
                 Lifetime total: {lockSnapshot?.ichorLifetimeTotal ?? 0}
               </Text>
-            </View>
+            </ParchmentCard>
 
-            <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-              <Text className="text-sm font-semibold text-neutral-400">
-                Exchange Rate
-              </Text>
-              <Text className="mt-2 text-lg text-white">
+            {/* ── Exchange Rate ── */}
+            <ParchmentCard style={s.sectionCard}>
+              <Text style={s.sectionTitle}>Exchange Rate</Text>
+              <Text style={s.rateValue}>
                 1,000 Ichor = {lockSnapshot?.conversionRateLabel ?? '0.90 USDC'}
               </Text>
-              <Text className="mt-1 text-xs text-neutral-600">
+              <Text style={s.footnote}>
                 Current tier is based on lifetime Ichor earned on this lock.
               </Text>
-              <Text className="mt-1 text-xs text-neutral-600">
+              <Text style={s.footnote}>
                 Redemption vault liquidity: {redemptionVaultBalanceUi} USDC
               </Text>
-            </View>
+            </ParchmentCard>
 
-            <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-              <Text className="text-sm font-semibold text-neutral-400">Harvest Summary</Text>
+            {/* ── Harvest Summary ── */}
+            <ParchmentCard style={s.sectionCard}>
+              <Text style={s.sectionTitle}>Harvest Summary</Text>
               {yieldHistoryLoading ? (
-                <Text className="mt-3 text-sm text-neutral-500">Loading harvest history...</Text>
+                <Text style={s.placeholderText}>Loading harvest history...</Text>
               ) : yieldHistoryError ? (
-                <Text className="mt-3 text-xs text-amber-300">{yieldHistoryError}</Text>
+                <Text style={s.warningText}>{yieldHistoryError}</Text>
               ) : (
                 <>
-                  <View className="mt-3 flex-row justify-between">
+                  <View style={s.summaryRow}>
                     <View>
-                      <Text className="text-xs uppercase text-neutral-500">Gross Yield</Text>
-                      <Text className="mt-1 text-lg font-bold text-white">
+                      <Text style={ts.cardLabel}>Gross Yield</Text>
+                      <Text style={s.summaryValue}>
                         {yieldHistory?.totalGrossYieldUi ?? '0'} USDC
                       </Text>
                     </View>
                     <View>
-                      <Text className="text-xs uppercase text-neutral-500">Platform Fee</Text>
-                      <Text className="mt-1 text-lg font-bold text-white">
+                      <Text style={ts.cardLabel}>Platform Fee</Text>
+                      <Text style={s.summaryValue}>
                         {yieldHistory?.totalPlatformFeeUi ?? '0'} USDC
                       </Text>
                     </View>
                   </View>
-                  <View className="mt-4 flex-row justify-between">
+                  <View style={s.summaryRowSecond}>
                     <View>
-                      <Text className="text-xs uppercase text-neutral-500">Redirected</Text>
-                      <Text className="mt-1 text-lg font-bold text-white">
+                      <Text style={ts.cardLabel}>Redirected</Text>
+                      <Text style={s.summaryValue}>
                         {yieldHistory?.totalRedirectedUi ?? '0'} USDC
                       </Text>
                     </View>
                     <View>
-                      <Text className="text-xs uppercase text-neutral-500">Ichor Awarded</Text>
-                      <Text className="mt-1 text-lg font-bold text-amber-400">
+                      <Text style={ts.cardLabel}>Ichor Awarded</Text>
+                      <Text style={s.summaryValueAmber}>
                         {Number(yieldHistory?.totalIchorAwarded ?? '0').toLocaleString()}
                       </Text>
                     </View>
                   </View>
-                  <Text className="mt-3 text-xs text-neutral-600">
+                  <Text style={s.footnote}>
                     Total harvests: {yieldHistory?.totalHarvests ?? 0}
                   </Text>
                 </>
               )}
-            </View>
+            </ParchmentCard>
 
-            <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-              <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
-                Redeem Amount
-              </Text>
+            {/* ── Redeem Amount ── */}
+            <ParchmentCard style={s.sectionCard}>
+              <Text style={ts.sectionLabel}>Redeem Amount</Text>
               <TextInput
-                className="mt-3 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-4 text-lg text-white"
+                style={s.textInput}
                 keyboardType="number-pad"
                 value={ichorAmount}
                 onChangeText={setIchorAmount}
                 placeholder="1000"
-                placeholderTextColor="#737373"
+                placeholderTextColor={T.textMuted}
               />
 
-              <Text className="mt-4 text-sm font-semibold text-neutral-400">
-                Quote
-              </Text>
-              <Text className="mt-2 text-lg text-white">
+              <Text style={[s.sectionTitle, { marginTop: 16 }]}>Quote</Text>
+              <Text style={s.quoteValue}>
                 {quote ? `${quote.usdcOutUi} USDC` : '--'}
               </Text>
-              <Text className="mt-1 text-xs text-neutral-600">
+              <Text style={s.footnote}>
                 Redemption is available only after gauntlet completion.
               </Text>
-            </View>
+            </ParchmentCard>
 
+            {/* ── Status message ── */}
             {statusMessage ? (
-              <View className="mt-5 rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-4">
-                <Text className="text-sm text-neutral-300">{statusMessage}</Text>
-              </View>
+              <ParchmentCard style={s.statusCard}>
+                <Text style={s.statusText}>{statusMessage}</Text>
+              </ParchmentCard>
             ) : null}
 
-            <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-              <Text className="text-sm font-semibold text-neutral-400">Recent Harvests</Text>
+            {/* ── Recent Harvests ── */}
+            <ParchmentCard style={s.sectionCard}>
+              <Text style={s.sectionTitle}>Recent Harvests</Text>
               {yieldHistoryLoading ? (
-                <Text className="mt-3 text-sm text-neutral-500">Loading harvest receipts...</Text>
+                <Text style={s.placeholderText}>Loading harvest receipts...</Text>
               ) : yieldHistoryError ? (
-                <Text className="mt-3 text-xs text-amber-300">{yieldHistoryError}</Text>
+                <Text style={s.warningText}>{yieldHistoryError}</Text>
               ) : recentHarvests.length === 0 ? (
-                <Text className="mt-3 text-sm text-neutral-500">No harvest history yet.</Text>
+                <Text style={s.placeholderText}>No harvest history yet.</Text>
               ) : (
                 recentHarvests.map((entry) => (
-                  <View
-                    key={entry.harvestId}
-                    className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 p-4"
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase text-neutral-500">
-                        {entry.kind}
-                      </Text>
-                      <Text className="text-xs text-neutral-500">
+                  <View key={entry.harvestId} style={s.harvestEntry}>
+                    <View style={s.harvestHeader}>
+                      <Text style={s.harvestKind}>{entry.kind}</Text>
+                      <Text style={s.harvestStatus}>
                         {renderHarvestStatus(entry.lockVaultStatus)}
                       </Text>
                     </View>
-                    <Text className="mt-2 text-sm font-semibold text-white">
+                    <Text style={s.harvestReason}>
                       {renderHarvestReason(entry.reason)}
                     </Text>
-                    <Text className="mt-1 text-xs text-neutral-600">
+                    <Text style={s.footnote}>
                       {new Date(entry.harvestedAt).toLocaleString()}
                     </Text>
-                    <Text className="mt-3 text-sm text-neutral-300">
+                    <Text style={s.harvestDetails}>
                       Gross: {entry.grossYieldAmountUi} USDC
                       {' \u00B7 '}Fee: {entry.platformFeeAmountUi} USDC
                       {' \u00B7 '}Redirect: {entry.redirectedAmountUi} USDC
                     </Text>
-                    <Text className="mt-1 text-sm text-amber-400">
+                    <Text style={s.harvestIchor}>
                       Ichor awarded: {Number(entry.ichorAwarded).toLocaleString()}
                     </Text>
-                    <Text className="mt-2 text-xs text-neutral-600">
+                    <Text style={s.footnote}>
                       Splitter: {renderSplitterStatus(entry)}
                       {' \u00B7 '}LockVault: {renderHarvestStatus(entry.lockVaultStatus)}
                       {' \u00B7 '}Pot: {renderHarvestStatus(entry.communityPotStatus)}
                     </Text>
                     {entry.lockVaultTransactionSignature ? (
-                      <Text className="mt-1 text-xs text-neutral-600">
+                      <Text style={s.footnote}>
                         Lock tx: {entry.lockVaultTransactionSignature.slice(0, 12)}...
                       </Text>
                     ) : null}
                   </View>
                 ))
               )}
-            </View>
+            </ParchmentCard>
 
+            {/* ── Redeem button ── */}
             <Pressable
-              className={`mt-6 mb-8 rounded-xl py-4 ${
-                canRedeem ? 'bg-purple-700 active:opacity-80' : 'bg-neutral-700'
-              }`}
+              style={({ pressed }) => [
+                ts.primaryBtn,
+                s.redeemBtn,
+                !canRedeem && s.redeemBtnDisabled,
+                pressed && canRedeem && { opacity: 0.8 },
+              ]}
               disabled={!canRedeem}
               onPress={() => {
                 void handleRedeem();
               }}
             >
-              <Text className="text-center text-base font-bold text-white">
+              <Text style={ts.primaryBtnText}>
                 {isSubmitting ? 'Redeeming...' : 'EXCHANGE ICHOR'}
               </Text>
-              <Text className="mt-1 text-center text-xs text-purple-300">
+              <Text style={s.redeemSubText}>
                 {availableIchor <= 0
                   ? 'No Ichor available yet'
                   : redemptionVaultBalance <= 0
@@ -494,6 +491,191 @@ export function IchorShopScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  scroll: {
+    flex: 1,
+  },
+
+  // Loading
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 24,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: T.textSecondary,
+  },
+
+  // Hero card
+  heroCard: {
+    alignItems: 'center',
+    padding: 24,
+    marginTop: 8,
+    borderColor: T.borderAlive,
+  },
+  heroValue: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: T.amber,
+    marginTop: 8,
+  },
+  heroSub: {
+    fontSize: 12,
+    color: T.textSecondary,
+    marginTop: 8,
+  },
+
+  // Section cards
+  sectionCard: {
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textSecondary,
+  },
+
+  // Exchange rate
+  rateValue: {
+    fontSize: 18,
+    color: T.textPrimary,
+    marginTop: 8,
+  },
+
+  // Footnote
+  footnote: {
+    fontSize: 12,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+
+  // Summary
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  summaryRowSecond: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: T.textPrimary,
+    marginTop: 4,
+  },
+  summaryValueAmber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: T.amber,
+    marginTop: 4,
+  },
+
+  // Placeholder / warning
+  placeholderText: {
+    fontSize: 14,
+    color: T.textSecondary,
+    marginTop: 12,
+  },
+  warningText: {
+    fontSize: 12,
+    color: T.amber,
+    marginTop: 12,
+  },
+
+  // Text input
+  textInput: {
+    marginTop: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    backgroundColor: T.bg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 18,
+    color: T.textPrimary,
+  },
+
+  // Quote
+  quoteValue: {
+    fontSize: 18,
+    color: T.textPrimary,
+    marginTop: 8,
+  },
+
+  // Status
+  statusCard: {
+    marginTop: 20,
+  },
+  statusText: {
+    fontSize: 14,
+    color: T.textPrimary,
+  },
+
+  // Harvest entries
+  harvestEntry: {
+    marginTop: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    backgroundColor: T.bg,
+    padding: 14,
+  },
+  harvestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  harvestKind: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    fontWeight: '600',
+    color: T.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  harvestStatus: {
+    fontSize: 12,
+    color: T.textSecondary,
+  },
+  harvestReason: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+    marginTop: 8,
+  },
+  harvestDetails: {
+    fontSize: 14,
+    color: T.textSecondary,
+    marginTop: 12,
+  },
+  harvestIchor: {
+    fontSize: 14,
+    color: T.amber,
+    marginTop: 4,
+  },
+
+  // Redeem button
+  redeemBtn: {
+    marginTop: 24,
+    marginBottom: 32,
+  },
+  redeemBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: T.borderDormant,
+  },
+  redeemSubText: {
+    fontSize: 12,
+    color: T.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+});

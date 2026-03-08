@@ -1,15 +1,36 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ApiError, getLeaderboard, type LeaderboardEntry, type LeaderboardResponse } from '@/services/api';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { useUserStore } from '@/stores';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  CornerMarks,
+  T,
+  ts,
+} from '@/theme';
 
 const PAGE_SIZE = 10;
 
 function renderStatus(status: LeaderboardEntry['streakStatus']) {
   return status === 'active' ? 'Active' : 'Broken';
+}
+
+function rankColor(rank: number): string {
+  if (rank === 1) return T.amber;
+  if (rank === 2) return T.textSecondary;
+  if (rank === 3) return T.rust;
+  return T.textPrimary;
+}
+
+function rankBorderColor(rank: number): string {
+  if (rank === 1) return 'rgba(212,160,74,0.4)';
+  if (rank === 2) return 'rgba(255,255,255,0.15)';
+  if (rank === 3) return 'rgba(232,132,90,0.35)';
+  return T.borderDormant;
 }
 
 export function LeaderboardScreen() {
@@ -108,18 +129,16 @@ export function LeaderboardScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={s.scroll} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">Leaderboard</Text>
-        <Text className="mt-1 text-sm text-neutral-500">
+        <Text style={[ts.pageTitle, s.titleSpacing]}>Leaderboard</Text>
+        <Text style={ts.pageSub}>
           Ranked by active streak, then locked principal, with Community Pot projection
         </Text>
         {leaderboard ? (
-          <Text className="mt-1 text-xs text-neutral-600">
+          <Text style={s.snapshotText}>
             {leaderboard.source === 'materialized' && leaderboard.snapshotAt
               ? `Snapshot updated ${new Date(leaderboard.snapshotAt).toLocaleString()}`
               : 'Live fallback view'}
@@ -127,127 +146,137 @@ export function LeaderboardScreen() {
         ) : null}
 
         {loading ? (
-          <Text className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-500">
-            Loading leaderboard...
-          </Text>
+          <ParchmentCard style={s.loadingCard}>
+            <Text style={s.loadingText}>Loading leaderboard...</Text>
+          </ParchmentCard>
         ) : errorMessage ? (
-          <Text className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-300">
-            {errorMessage}
-          </Text>
+          <ParchmentCard style={s.errorCard}>
+            <Text style={s.errorText}>{errorMessage}</Text>
+          </ParchmentCard>
         ) : leaderboard ? (
           <>
-            <View className="mt-6 flex-row gap-3">
-              <View className="flex-1 rounded-xl border border-purple-500/30 bg-purple-500/10 p-4">
-                <Text className="text-xs uppercase text-purple-300">Current Pot</Text>
-                <Text className="mt-2 text-2xl font-bold text-white">
+            {/* Summary cards */}
+            <View style={s.summaryRow}>
+              <ParchmentCard style={s.potCard}>
+                <Text style={[ts.cardLabel, { color: T.violet }]}>Current Pot</Text>
+                <Text style={[ts.cardValue, s.potValue]}>
                   {leaderboard.currentPotSizeUi} USDC
                 </Text>
-              </View>
-              <View className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-                <Text className="text-xs uppercase text-neutral-500">Next Window</Text>
-                <Text className="mt-2 text-lg font-semibold text-white">
+              </ParchmentCard>
+              <ParchmentCard style={s.windowCard}>
+                <Text style={ts.cardLabel}>Next Window</Text>
+                <Text style={[ts.cardValue, s.windowValue]}>
                   {leaderboard.nextDistributionWindowLabel ?? 'TBD'}
                 </Text>
-              </View>
+              </ParchmentCard>
             </View>
 
+            {/* Current user highlight */}
             {leaderboard.currentUser ? (
-              <View className="mt-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
-                <Text className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-                  Your Rank
-                </Text>
-                <View className="mt-3 flex-row items-center justify-between">
-                  <Text className="text-3xl font-bold text-white">
+              <ParchmentCard style={s.currentUserCard}>
+                <CornerMarks />
+                <Text style={[ts.cardLabel, { color: T.violet }]}>Your Rank</Text>
+                <View style={s.currentUserRow}>
+                  <Text style={s.currentUserRank}>
                     #{leaderboard.currentUser.rank}
                   </Text>
-                  <Text className="text-sm text-emerald-300">
+                  <Text style={s.currentUserProjected}>
                     {leaderboard.currentUser.projectedCommunityPotShareUi} USDC projected
                   </Text>
                 </View>
-                <Text className="mt-2 text-sm text-neutral-400">
+                <Text style={s.currentUserIdentity}>
                   {leaderboard.currentUser.displayIdentity}
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.currentUserStats}>
                   Streak: {leaderboard.currentUser.streakLength}
                   {' \u00B7 '}
                   Principal: {leaderboard.currentUser.lockedPrincipalAmountUi} USDC
                   {' \u00B7 '}
                   Courses: {leaderboard.currentUser.activeCourseCount}
                 </Text>
-              </View>
+              </ParchmentCard>
             ) : null}
 
-            <View className="mt-6 mb-8">
-              <View className="mb-3 flex-row items-center justify-between">
-                <Text className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-                  Rankings
-                </Text>
-                <Text className="text-xs text-neutral-500">
+            {/* Rankings section */}
+            <View style={s.rankingsSection}>
+              <View style={s.rankingsHeader}>
+                <Text style={ts.sectionLabel}>Rankings</Text>
+                <Text style={s.pageIndicator}>
                   Page {leaderboard.page} / {leaderboard.totalPages}
                   {' \u00B7 '}
                   {leaderboard.totalEntries} total
                 </Text>
               </View>
-              {leaderboard.entries.map((entry) => (
-                <View
-                  key={entry.walletAddress}
-                  className={`mb-3 rounded-xl border p-4 ${
-                    entry.isCurrentUser
-                      ? 'border-emerald-500/40 bg-emerald-500/5'
-                      : 'border-neutral-700 bg-neutral-900'
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-3">
-                      <Text className="text-lg font-bold text-white">#{entry.rank}</Text>
-                      <View>
-                        <Text className="text-base font-semibold text-white">
-                          {entry.displayIdentity}
-                        </Text>
-                        <Text className="text-xs text-neutral-500">
-                          {renderStatus(entry.streakStatus)}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text className="text-sm text-purple-300">
-                      {entry.projectedCommunityPotShareUi} USDC
-                    </Text>
-                  </View>
-                  <Text className="mt-3 text-xs text-neutral-500">
-                    Streak: {entry.streakLength}
-                    {' \u00B7 '}
-                    Courses: {entry.activeCourseCount}
-                    {' \u00B7 '}
-                    Principal: {entry.lockedPrincipalAmountUi} USDC
-                  </Text>
-                  {entry.recentActivityDate ? (
-                    <Text className="mt-1 text-xs text-neutral-500">
-                      Last active: {entry.recentActivityDate}
-                    </Text>
-                  ) : null}
-                </View>
-              ))}
 
-              <View className="mt-2 flex-row gap-3">
+              {leaderboard.entries.map((entry) => {
+                const isTop3 = entry.rank <= 3;
+                const isCurrentUser = entry.isCurrentUser;
+
+                return (
+                  <ParchmentCard
+                    key={entry.walletAddress}
+                    style={[
+                      s.entryCard,
+                      isTop3 && { borderColor: rankBorderColor(entry.rank) },
+                      isCurrentUser && s.entryCardCurrentUser,
+                    ]}
+                  >
+                    {isTop3 && <CornerMarks />}
+                    <View style={s.entryTopRow}>
+                      <View style={s.entryIdentity}>
+                        <Text style={[s.entryRank, { color: rankColor(entry.rank) }]}>
+                          #{entry.rank}
+                        </Text>
+                        <View>
+                          <Text style={s.entryName}>{entry.displayIdentity}</Text>
+                          <Text style={s.entryStatus}>
+                            {renderStatus(entry.streakStatus)}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={s.entryProjected}>
+                        {entry.projectedCommunityPotShareUi} USDC
+                      </Text>
+                    </View>
+                    <Text style={s.entryStats}>
+                      Streak: {entry.streakLength}
+                      {' \u00B7 '}
+                      Courses: {entry.activeCourseCount}
+                      {' \u00B7 '}
+                      Principal: {entry.lockedPrincipalAmountUi} USDC
+                    </Text>
+                    {entry.recentActivityDate ? (
+                      <Text style={s.entryLastActive}>
+                        Last active: {entry.recentActivityDate}
+                      </Text>
+                    ) : null}
+                  </ParchmentCard>
+                );
+              })}
+
+              {/* Pagination */}
+              <View style={s.paginationRow}>
                 <Pressable
-                  className={`flex-1 rounded-xl border px-4 py-3 ${
-                    page <= 1
-                      ? 'border-neutral-800 bg-neutral-900'
-                      : 'border-neutral-700 bg-neutral-900 active:opacity-80'
-                  }`}
+                  style={({ pressed }) => [
+                    ts.secondaryBtn,
+                    s.paginationBtn,
+                    page <= 1 && s.paginationBtnDisabled,
+                    pressed && page > 1 && { opacity: 0.7 },
+                  ]}
                   disabled={page <= 1}
                   onPress={() => setPage((current) => Math.max(1, current - 1))}
                 >
-                  <Text className="text-center text-sm font-semibold text-white">
+                  <Text style={[ts.secondaryBtnText, page <= 1 && s.paginationBtnTextDisabled]}>
                     Previous
                   </Text>
                 </Pressable>
                 <Pressable
-                  className={`flex-1 rounded-xl border px-4 py-3 ${
-                    leaderboard.page >= leaderboard.totalPages
-                      ? 'border-neutral-800 bg-neutral-900'
-                      : 'border-neutral-700 bg-neutral-900 active:opacity-80'
-                  }`}
+                  style={({ pressed }) => [
+                    ts.secondaryBtn,
+                    s.paginationBtn,
+                    leaderboard.page >= leaderboard.totalPages && s.paginationBtnDisabled,
+                    pressed && leaderboard.page < leaderboard.totalPages && { opacity: 0.7 },
+                  ]}
                   disabled={leaderboard.page >= leaderboard.totalPages}
                   onPress={() =>
                     setPage((current) =>
@@ -255,13 +284,196 @@ export function LeaderboardScreen() {
                     )
                   }
                 >
-                  <Text className="text-center text-sm font-semibold text-white">Next</Text>
+                  <Text
+                    style={[
+                      ts.secondaryBtnText,
+                      leaderboard.page >= leaderboard.totalPages && s.paginationBtnTextDisabled,
+                    ]}
+                  >
+                    Next
+                  </Text>
                 </Pressable>
               </View>
             </View>
           </>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  scroll: {
+    flex: 1,
+  },
+  titleSpacing: {
+    marginTop: 8,
+  },
+
+  // Snapshot line
+  snapshotText: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 2,
+  },
+
+  // Loading / error cards
+  loadingCard: {
+    marginTop: 20,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: T.textSecondary,
+  },
+  errorCard: {
+    marginTop: 20,
+    borderColor: 'rgba(212,160,74,0.25)',
+  },
+  errorText: {
+    fontSize: 12,
+    color: T.amber,
+  },
+
+  // Summary row
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  potCard: {
+    flex: 1,
+    borderColor: `${T.violet}30`,
+  },
+  potValue: {
+    fontSize: 20,
+    marginTop: 6,
+  },
+  windowCard: {
+    flex: 1,
+  },
+  windowValue: {
+    fontSize: 16,
+    marginTop: 6,
+  },
+
+  // Current user card
+  currentUserCard: {
+    marginTop: 20,
+    borderColor: `${T.violet}40`,
+  },
+  currentUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  currentUserRank: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: T.textPrimary,
+  },
+  currentUserProjected: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: T.violet,
+  },
+  currentUserIdentity: {
+    fontSize: 13,
+    color: T.textSecondary,
+    marginTop: 6,
+  },
+  currentUserStats: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 4,
+    letterSpacing: 0.3,
+  },
+
+  // Rankings section
+  rankingsSection: {
+    marginTop: 20,
+    marginBottom: 32,
+  },
+  rankingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  pageIndicator: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+  },
+
+  // Entry card
+  entryCard: {
+    marginBottom: 10,
+  },
+  entryCardCurrentUser: {
+    borderColor: `${T.violet}55`,
+    borderWidth: 1.5,
+  },
+  entryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  entryIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  entryRank: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  entryName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  entryStatus: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 1,
+  },
+  entryProjected: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: T.violet,
+  },
+  entryStats: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 10,
+    letterSpacing: 0.3,
+  },
+  entryLastActive: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 3,
+    letterSpacing: 0.3,
+  },
+
+  // Pagination
+  paginationRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  paginationBtn: {
+    flex: 1,
+  },
+  paginationBtnDisabled: {
+    opacity: 0.35,
+  },
+  paginationBtnTextDisabled: {
+    color: T.textMuted,
+  },
+});

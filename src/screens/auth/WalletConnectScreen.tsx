@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { View, Text, Pressable, Alert, Linking, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, Alert, Linking, ActivityIndicator, StyleSheet } from 'react-native';
 import { fromByteArray } from 'base64-js';
 import { useUserStore } from '@/stores';
 import { connectWallet, signAuthChallengeMessage } from '@/services/solana';
 import { hasRemoteLessonApi } from '@/services/api';
 import { issueBackendSession } from '@/services/api/auth/backendAuth';
+import { ScreenBackground, T, ts } from '@/theme';
 
 export function WalletConnectScreen() {
   const setWallet = useUserStore((s) => s.setWallet);
@@ -81,27 +81,58 @@ export function WalletConnectScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <View className="flex-1 items-center justify-center px-8">
-        <Text className="text-4xl font-bold text-white">Locked In</Text>
-        <Text className="mt-3 text-center text-base text-neutral-400">
+    <ScreenBackground>
+      <View style={s.centered}>
+        <Text style={s.title}>Locked In</Text>
+        <Text style={s.subtitle}>
           Lock your funds. Light the flame. Learn or burn.
         </Text>
 
-        <Pressable
-          className="mt-12 w-full rounded-xl bg-purple-600 px-6 py-4 active:bg-purple-700"
-          onPress={handleConnect}
-          disabled={connecting}
-        >
-          {connecting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text className="text-center text-lg font-semibold text-white">
-              Connect Wallet
-            </Text>
-          )}
-        </Pressable>
+        <View style={s.connectBtnWrap}>
+          <Pressable
+            style={[ts.primaryBtn, s.connectBtn, connecting && { opacity: 0.6 }]}
+            onPress={handleConnect}
+            disabled={connecting}
+          >
+            {connecting ? (
+              <ActivityIndicator color="#1A1000" />
+            ) : (
+              <Text style={ts.primaryBtnText}>Connect Wallet</Text>
+            )}
+          </Pressable>
+        </View>
       </View>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  title: {
+    fontFamily: 'Georgia',
+    fontSize: 36,
+    fontWeight: '700',
+    color: T.textPrimary,
+    letterSpacing: 1,
+  },
+  subtitle: {
+    marginTop: 12,
+    textAlign: 'center',
+    fontSize: 15,
+    color: T.textSecondary,
+    lineHeight: 22,
+  },
+  connectBtnWrap: {
+    marginTop: 48,
+    width: '100%',
+  },
+  connectBtn: {
+    backgroundColor: T.violet,
+    borderColor: '#B06AFF',
+  },
+});

@@ -1,10 +1,10 @@
-import { View, Text, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { MainStackParamList } from '@/navigation/types';
 import { useStreakStore } from '@/stores/streakStore';
+import { ScreenBackground, ParchmentCard, T, ts } from '@/theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'LessonResult'>;
 type Route = RouteProp<MainStackParamList, 'LessonResult'>;
@@ -20,80 +20,143 @@ export function LessonResultScreen() {
 
   const scoreColor =
     score >= 80
-      ? 'text-green-400'
+      ? T.green
       : score >= 50
-        ? 'text-amber-400'
-        : 'text-red-400';
+        ? T.amber
+        : T.crimson;
   const subjectiveResults = questionResults.filter(
     (question) => typeof question.feedbackSummary === 'string' && question.feedbackSummary.length > 0,
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <View className="flex-1 items-center justify-center px-8">
+    <ScreenBackground>
+      <View style={s.container}>
         {/* Score */}
-        <Text className={`text-6xl font-bold ${scoreColor}`}>{score}%</Text>
-        <Text className="mt-2 text-lg text-neutral-400">
+        <Text style={[s.scoreText, { color: scoreColor }]}>{score}%</Text>
+        <Text style={s.scoreSub}>
           {correctCount}/{totalQuestions} Questions Correct
         </Text>
 
         {/* Reward cards */}
-        <View className="mt-8 w-full gap-4">
+        <View style={s.cardGroup}>
           {/* Verification status */}
-          <View className="rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-            <Text className="text-sm text-neutral-500">Lesson Status</Text>
+          <ParchmentCard style={s.card}>
+            <Text style={ts.cardLabel}>Lesson Status</Text>
             <Text
-              className={`mt-1 text-2xl font-bold ${
-                accepted ? 'text-emerald-400' : 'text-amber-400'
-              }`}
+              style={[
+                s.cardValueLarge,
+                { color: accepted ? T.green : T.amber },
+              ]}
             >
               {accepted ? 'Verified' : 'Needs Improvement'}
             </Text>
-          </View>
+          </ParchmentCard>
 
           {/* Streak status */}
-          <View className="rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-            <Text className="text-sm text-neutral-500">Current Streak</Text>
-            <Text className="mt-1 text-2xl font-bold text-amber-400">
+          <ParchmentCard style={s.card}>
+            <Text style={ts.cardLabel}>Current Streak</Text>
+            <Text style={[s.cardValueLarge, { color: T.amber }]}>
               {currentStreak} day{currentStreak !== 1 ? 's' : ''}
             </Text>
-          </View>
+          </ParchmentCard>
         </View>
 
         {subjectiveResults.length > 0 && (
-          <View className="mt-6 w-full gap-3">
+          <View style={s.feedbackGroup}>
             {subjectiveResults.map((question) => (
-              <View
-                key={question.questionId}
-                className="rounded-xl border border-neutral-700 bg-neutral-900 p-4"
-              >
-                <Text className="text-xs uppercase text-neutral-500">Answer Feedback</Text>
-                <Text className="mt-2 text-sm font-semibold text-white">
+              <ParchmentCard key={question.questionId} style={s.feedbackCard}>
+                <Text style={ts.cardLabel}>Answer Feedback</Text>
+                <Text style={s.feedbackPrompt}>
                   {question.prompt}
                 </Text>
-                <Text className="mt-2 text-xs text-neutral-500">
+                <Text style={s.feedbackMeta}>
                   Score: {question.score}
                   {' \u00B7 '}
                   {question.accepted ? 'Accepted' : 'Not accepted yet'}
                 </Text>
-                <Text className="mt-3 text-sm leading-5 text-neutral-300">
+                <Text style={s.feedbackBody}>
                   {question.feedbackSummary}
                 </Text>
-              </View>
+              </ParchmentCard>
             ))}
           </View>
         )}
 
         {/* Return button */}
         <Pressable
-          className="mt-8 w-full rounded-xl bg-purple-600 px-6 py-4 active:bg-purple-700"
+          style={({ pressed }) => [ts.primaryBtn, s.returnBtn, pressed && s.returnBtnPressed]}
           onPress={() => navigation.navigate('DungeonHome')}
         >
-          <Text className="text-center text-lg font-semibold text-white">
-            Return to Hub
-          </Text>
+          <Text style={ts.primaryBtnText}>Return to Hub</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  scoreText: {
+    fontSize: 56,
+    fontWeight: '700',
+    fontFamily: 'Georgia',
+    letterSpacing: 1,
+  },
+  scoreSub: {
+    marginTop: 8,
+    fontSize: 16,
+    color: T.textSecondary,
+  },
+  cardGroup: {
+    marginTop: 28,
+    width: '100%',
+    gap: 14,
+  },
+  card: {
+    padding: 18,
+  },
+  cardValueLarge: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  feedbackGroup: {
+    marginTop: 20,
+    width: '100%',
+    gap: 12,
+  },
+  feedbackCard: {
+    padding: 16,
+  },
+  feedbackPrompt: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  feedbackMeta: {
+    marginTop: 8,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    color: T.textSecondary,
+    letterSpacing: 0.5,
+  },
+  feedbackBody: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    color: T.textPrimary,
+  },
+  returnBtn: {
+    marginTop: 28,
+    width: '100%',
+  },
+  returnBtnPressed: {
+    opacity: 0.85,
+  },
+});

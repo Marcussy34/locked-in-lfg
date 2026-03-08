@@ -14,7 +14,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '@/navigation/types';
-import { useCourseStore } from '@/stores';
+import { useCourseStore, useUserStore } from '@/stores';
+import {
+  fetchLockAccountSnapshot,
+  hasLockVaultConfig,
+} from '@/services/solana';
 import type { Course, CourseDifficulty, CourseCategory } from '@/types';
 
 const woodBg = require('../../../assets/wood.png');
@@ -330,13 +334,76 @@ export function CourseSelectionScreen() {
   const contentError = useCourseStore((s) => s.contentError);
   const contentInitialized = useCourseStore((s) => s.contentInitialized);
   const initializeContent = useCourseStore((s) => s.initializeContent);
+  const activateCourse = useCourseStore((s) => s.activateCourse);
+  const syncLockSnapshot = useCourseStore((s) => s.syncLockSnapshot);
+  const walletAddress = useUserStore((s) => s.walletAddress);
+  const completeGauntlet = useUserStore((s) => s.completeGauntlet);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [scanningLocks, setScanningLocks] = useState(false);
 
   useEffect(() => {
     if (!contentInitialized && !contentLoading) {
       void initializeContent(__DEV__);
     }
   }, [contentInitialized, contentLoading, initializeContent]);
+
+  // Auto-detect existing on-chain locks and restore state
+  useEffect(() => {
+    if (!walletAddress || !hasLockVaultConfig() || courses.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    setScanningLocks(true);
+
+    const scanCourses = async () => {
+      for (const course of courses) {
+        if (cancelled) return;
+        try {
+          const snapshot = await fetchLockAccountSnapshot({
+            ownerAddress: walletAddress,
+            courseId: course.id,
+          });
+
+          if (cancelled) return;
+
+          // Found an existing lock — restore state and navigate
+          const startMs = new Date(snapshot.lockStartDate).getTime();
+          const endMs = new Date(snapshot.lockEndDate).getTime();
+          const totalDays = Math.max(
+            14,
+            Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)) - snapshot.extensionDays,
+          );
+          const durations = [14, 30, 45, 60, 90, 180, 365] as const;
+          const closestDuration =
+            durations.find((d) => d === totalDays) ??
+            [...durations].reverse().find((d) => d <= totalDays) ??
+            14;
+
+          activateCourse(course.id, {
+            amount: Number(snapshot.principalAmountUi),
+            duration: closestDuration,
+            lockAccountAddress: snapshot.lockAccountAddress,
+            skrAmount: Number(snapshot.skrLockedAmountUi),
+          });
+          syncLockSnapshot(course.id, snapshot);
+          completeGauntlet();
+          return;
+        } catch {
+          // No lock found for this course — continue scanning
+        }
+      }
+
+      if (!cancelled) {
+        setScanningLocks(false);
+      }
+    };
+
+    void scanCourses();
+    return () => {
+      cancelled = true;
+    };
+  }, [activateCourse, completeGauntlet, courses, syncLockSnapshot, walletAddress]);
 
   const selectedCourse = selectedId ? courses.find((c) => c.id === selectedId) : null;
 
@@ -366,6 +433,13 @@ export function CourseSelectionScreen() {
               Mastering your craft through proof of effort.
             </Text>
           </View>
+
+          {/* Scanning for existing locks */}
+          {scanningLocks && (
+            <View style={s.statusBox}>
+              <Text style={s.statusText}>Scanning for existing on-chain locks...</Text>
+            </View>
+          )}
 
           {/* Loading / Error */}
           {contentLoading && courses.length === 0 && (
@@ -414,12 +488,13 @@ export function CourseSelectionScreen() {
         {selectedCourse && (
           <View style={s.ctaContainer}>
             <Pressable
-              style={({ pressed }) => [s.ctaBtn, pressed && { opacity: 0.8 }]}
               onPress={() => navigation.navigate('Deposit', { courseId: selectedCourse.id })}
             >
-              <Text style={s.ctaBtnText}>
-                {'\u25C6'}  BEGIN DESCENT  {'\u25C6'}
-              </Text>
+              <View style={s.ctaBtn}>
+                <Text style={s.ctaBtnText}>
+                  {'\u25C6'}  BEGIN DESCENT  {'\u25C6'}
+                </Text>
+              </View>
             </Pressable>
           </View>
         )}

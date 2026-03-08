@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, ActivityIndicator, View, Text, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, ActivityIndicator, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '@/navigation/types';
@@ -20,6 +19,15 @@ import {
 } from '@/services/solana';
 import { useResurfaceStore, useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
+import {
+  T,
+  ts,
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  MenuRow,
+  StatBox,
+} from '@/theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 
@@ -264,61 +272,40 @@ export function ProfileScreen() {
   };
 
   const menuItems = [
-    { label: 'Streak Status', screen: 'StreakStatus' as const, icon: '\u2739' },
-    { label: 'Leaderboard', screen: 'Leaderboard' as const, icon: '\u2694' },
-    { label: 'Ichor Shop', screen: 'IchorShop' as const, icon: '\u2697' },
-    { label: 'Community Pot', screen: 'CommunityPot' as const, icon: '\u26b2' },
-    { label: 'Inventory', screen: 'Inventory' as const, icon: '\u2692' },
-    { label: 'Resurface Receipts', screen: 'ResurfaceHistory' as const, icon: '\u21ba' },
+    { label: 'Streak Status', screen: 'StreakStatus' as const, icon: '\u2739', color: T.amber },
+    { label: 'Leaderboard', screen: 'Leaderboard' as const, icon: '\u2694', color: T.amber },
+    { label: 'Ichor Shop', screen: 'IchorShop' as const, icon: '\u2697', color: T.teal },
+    { label: 'Community Pot', screen: 'CommunityPot' as const, icon: '\u26b2', color: T.amber },
+    { label: 'Inventory', screen: 'Inventory' as const, icon: '\u2692', color: T.rust },
+    { label: 'Resurface Receipts', screen: 'ResurfaceHistory' as const, icon: '\u21ba', color: T.teal },
   ];
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={s.scrollView} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">Profile</Text>
+        <Text style={ts.pageTitle}>Profile</Text>
         {activeCourse && (
-          <Text className="mt-1 text-sm text-neutral-500">
-            {activeCourse.title}
-          </Text>
+          <Text style={s.courseSubtitle}>{activeCourse.title}</Text>
         )}
 
         {/* Stats row */}
-        <View className="mt-6 flex-row gap-3">
-          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
-            <Text className="text-xs uppercase text-neutral-500">Streak</Text>
-            <Text className="mt-1 text-xl font-bold text-white">{streak}</Text>
-          </View>
-          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
-            <Text className="text-xs uppercase text-neutral-500">Ichor</Text>
-            <Text className="mt-1 text-xl font-bold text-amber-400">
-              {Math.floor(ichor)}
-            </Text>
-          </View>
-          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
-            <Text className="text-xs uppercase text-neutral-500">Fuel</Text>
-            <Text className="mt-1 text-xl font-bold text-orange-400">
-              {fuel}
-              <Text className="text-sm text-neutral-600">/{fuelCap}</Text>
-            </Text>
-          </View>
-          <View className="flex-1 items-center rounded-xl border border-neutral-700 bg-neutral-900 p-3">
-            <Text className="text-xs uppercase text-neutral-500">Savers</Text>
-            <Text className="mt-1 text-xl font-bold text-purple-400">
-              {3 - saverCount}/3
-            </Text>
-          </View>
+        <View style={s.statsRow}>
+          <StatBox label="Streak" value={streak} color={T.amber} />
+          <StatBox label="Ichor" value={Math.floor(ichor)} color={T.teal} />
+          <StatBox
+            label="Fuel"
+            value={`${fuel}/${fuelCap}`}
+            color={T.rust}
+          />
+          <StatBox label="Savers" value={`${3 - saverCount}/3`} color={T.violet} />
         </View>
 
         {/* Course Switcher */}
         {lockedCourseIds.length > 1 && (
-          <View className="mt-6">
-            <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-500">
-              Switch Course
-            </Text>
+          <View style={s.section}>
+            <Text style={ts.sectionLabel}>Switch Course</Text>
             {lockedCourseIds.map((courseId) => {
               const course = courses.find((c) => c.id === courseId);
               if (!course) return null;
@@ -326,24 +313,31 @@ export function ProfileScreen() {
               return (
                 <Pressable
                   key={courseId}
-                  className={`mb-2 rounded-xl border p-3 ${
-                    isActive
-                      ? 'border-amber-500/50 bg-amber-500/10'
-                      : 'border-neutral-700 bg-neutral-900'
-                  } active:opacity-80`}
                   onPress={() => {
                     setActiveCourse(courseId);
                     navigation.goBack();
                   }}
                 >
-                  <Text
-                    className={`text-sm font-semibold ${
-                      isActive ? 'text-amber-400' : 'text-white'
-                    }`}
-                  >
-                    {course.title}
-                    {isActive ? ' (active)' : ''}
-                  </Text>
+                  {({ pressed }) => (
+                    <ParchmentCard
+                      style={[
+                        s.courseSwitcherItem,
+                        isActive ? s.courseSwitcherItemActive : {},
+                      ]}
+                      opacity={isActive ? 0.45 : 0.25}
+                    >
+                      <Text
+                        style={[
+                          s.courseSwitcherText,
+                          isActive ? { color: T.amber } : null,
+                          pressed ? { opacity: 0.8 } : null,
+                        ]}
+                      >
+                        {course.title}
+                        {isActive ? ' (active)' : ''}
+                      </Text>
+                    </ParchmentCard>
+                  )}
                 </Pressable>
               );
             })}
@@ -351,90 +345,90 @@ export function ProfileScreen() {
         )}
 
         {/* Menu Items */}
-        <View className="mt-6">
+        <View style={s.section}>
           {menuItems.map((item) => (
-            <Pressable
+            <MenuRow
               key={item.screen}
-              className="flex-row items-center gap-4 border-b border-neutral-800 py-4 active:opacity-70"
+              icon={item.icon}
+              label={item.label}
+              color={item.color}
               onPress={() => navigation.navigate(item.screen)}
-            >
-              <Text className="w-6 text-center text-lg text-neutral-500">
-                {item.icon}
-              </Text>
-              <Text className="text-base font-medium text-white">
-                {item.label}
-              </Text>
-              <Text className="ml-auto text-neutral-600">{'\u203A'}</Text>
-            </Pressable>
+            />
           ))}
         </View>
 
+        {/* Resurface section */}
         {activeLockAccountAddress ? (
-          <View className="mt-6 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-5">
-            <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
-              Resurface
-            </Text>
-            <Text className="mt-2 text-lg font-semibold text-white">
+          <ParchmentCard style={s.resurfaceCard} opacity={0.3}>
+            <Text style={ts.sectionLabel}>Resurface</Text>
+            <Text style={s.resurfaceTitle}>
               Unlock & reclaim your locked funds
             </Text>
 
             {isLoadingLock ? (
-              <View className="mt-4 flex-row items-center gap-3">
-                <ActivityIndicator size="small" color="#a3a3a3" />
-                <Text className="text-sm text-neutral-400">Reading live lock state...</Text>
+              <View style={s.loadingRow}>
+                <ActivityIndicator size="small" color={T.textSecondary} />
+                <Text style={s.loadingText}>Reading live lock state...</Text>
               </View>
             ) : lockSnapshot ? (
               <>
-                <Text className="mt-3 text-sm text-neutral-300">
+                <Text style={s.lockDetail}>
                   Principal: {lockSnapshot.principalAmountUi} USDC
                 </Text>
-                <Text className="mt-1 text-sm text-neutral-300">
+                <Text style={s.lockDetail}>
                   Locked SKR: {lockSnapshot.skrLockedAmountUi}
                 </Text>
-                <Text className="mt-1 text-sm text-neutral-300">
+                <Text style={s.lockDetail}>
                   Unlock at: {new Date(lockSnapshot.lockEndDate).toLocaleString()}
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.lockHint}>
                   {lockSnapshot.unlockEligible
                     ? 'This lock can be resurfaced now.'
                     : 'This lock is still active on-chain.'}
                 </Text>
               </>
             ) : (
-              <Text className="mt-3 text-sm text-neutral-500">
+              <Text style={s.lockUnavailable}>
                 Live lock state is unavailable right now.
               </Text>
             )}
 
             {unlockStatusMessage ? (
-              <View className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-3">
-                <Text className="text-sm text-neutral-300">{unlockStatusMessage}</Text>
+              <View style={s.statusMessageBox}>
+                <Text style={s.statusMessageText}>{unlockStatusMessage}</Text>
               </View>
             ) : null}
 
             <Pressable
-              className={`mt-4 rounded-xl px-4 py-4 ${
-                isUnlocking || !lockSnapshot?.unlockEligible
-                  ? 'bg-neutral-700'
-                  : 'bg-sky-600 active:bg-sky-700'
-              }`}
               disabled={isUnlocking || !lockSnapshot?.unlockEligible}
               onPress={() => {
                 void handleUnlock();
               }}
             >
-              <Text className="text-center text-base font-semibold text-white">
-                {isUnlocking ? 'Unlocking...' : 'Unlock & Resurface'}
-              </Text>
+              <View
+                style={[
+                  ts.primaryBtn,
+                  s.unlockBtn,
+                  (isUnlocking || !lockSnapshot?.unlockEligible) ? s.unlockBtnDisabled : {},
+                ]}
+              >
+                <Text
+                  style={[
+                    ts.primaryBtnText,
+                    (isUnlocking || !lockSnapshot?.unlockEligible) ? { color: T.textSecondary } : {},
+                  ]}
+                >
+                  {isUnlocking ? 'Unlocking...' : 'Unlock & Resurface'}
+                </Text>
+              </View>
             </Pressable>
-          </View>
+          </ParchmentCard>
         ) : null}
 
         {/* Danger zone */}
-        <View className="mt-6 gap-3 pb-8">
+        <View style={s.dangerZone}>
           {__DEV__ && activeCourseId && activeState?.gauntletActive && (
             <Pressable
-              className="rounded-xl border border-purple-500/30 bg-purple-500/10 py-3 active:opacity-80"
               onPress={() => {
                 Alert.alert(
                   'Skip Gauntlet (DEV)',
@@ -452,14 +446,16 @@ export function ProfileScreen() {
                 );
               }}
             >
-              <Text className="text-center text-sm font-semibold text-purple-300">
-                Skip Gauntlet (DEV)
-              </Text>
+              <View style={[ts.secondaryBtn, s.actionBtn, s.devBtnViolet]}>
+                <Text style={s.actionBtnIcon}>{'\u269B'}</Text>
+                <Text style={[s.actionBtnText, { color: T.violet }]}>
+                  Skip Gauntlet (DEV)
+                </Text>
+              </View>
             </Pressable>
           )}
           {__DEV__ && activeCourseId && (
             <Pressable
-              className="rounded-xl border border-amber-500/30 bg-amber-500/10 py-3 active:opacity-80"
               onPress={() => {
                 Alert.alert(
                   'Reset Lesson Progress',
@@ -478,23 +474,28 @@ export function ProfileScreen() {
                 );
               }}
             >
-              <Text className="text-center text-sm font-semibold text-amber-300">
-                Reset Lesson Progress
-              </Text>
+              <View style={[ts.secondaryBtn, s.actionBtn, s.devBtnAmber]}>
+                <Text style={s.actionBtnIcon}>{'\u21BA'}</Text>
+                <Text style={[s.actionBtnText, { color: T.amber }]}>
+                  Reset Lesson Progress
+                </Text>
+              </View>
             </Pressable>
           )}
+
+          <View style={ts.divider} />
+
           <Pressable
-            className="rounded-xl border border-neutral-700 bg-neutral-900 py-3 active:opacity-80"
             onPress={() => {
               navigation.replace('CourseBrowser');
             }}
           >
-            <Text className="text-center text-sm font-semibold text-neutral-400">
-              Browse Courses
-            </Text>
+            <View style={[ts.secondaryBtn, s.actionBtn]}>
+              <Text style={s.actionBtnIcon}>{'\u2637'}</Text>
+              <Text style={s.actionBtnText}>Browse Courses</Text>
+            </View>
           </Pressable>
           <Pressable
-            className="rounded-xl border border-red-500/30 bg-red-500/10 py-3 active:opacity-80"
             onPress={() => {
               Alert.alert(
                 'Disconnect Wallet',
@@ -514,12 +515,128 @@ export function ProfileScreen() {
               );
             }}
           >
-            <Text className="text-center text-sm font-semibold text-red-400">
-              Disconnect
-            </Text>
+            <View style={[ts.secondaryBtn, s.actionBtn, { borderColor: 'rgba(255,68,102,0.15)' }]}>
+              <Text style={s.actionBtnIcon}>{'\u2715'}</Text>
+              <Text style={[s.actionBtnText, { color: T.crimson }]}>Disconnect</Text>
+            </View>
           </Pressable>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  courseSubtitle: {
+    fontSize: 13,
+    color: T.textSecondary,
+    marginTop: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 20,
+  },
+  section: {
+    marginTop: 20,
+  },
+  courseSwitcherItem: {
+    marginBottom: 8,
+    padding: 14,
+  },
+  courseSwitcherItemActive: {
+    borderColor: `${T.amber}50`,
+  },
+  courseSwitcherText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  resurfaceCard: {
+    marginTop: 20,
+    padding: 18,
+  },
+  resurfaceTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: T.textPrimary,
+    marginTop: 6,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: T.textSecondary,
+  },
+  lockDetail: {
+    fontSize: 13,
+    color: T.textPrimary,
+    marginTop: 8,
+  },
+  lockHint: {
+    fontSize: 11,
+    color: T.textSecondary,
+    marginTop: 6,
+  },
+  lockUnavailable: {
+    fontSize: 13,
+    color: T.textSecondary,
+    marginTop: 10,
+  },
+  statusMessageBox: {
+    marginTop: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    backgroundColor: T.bgCard,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  statusMessageText: {
+    fontSize: 13,
+    color: T.textPrimary,
+  },
+  unlockBtn: {
+    marginTop: 14,
+  },
+  unlockBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: T.borderDormant,
+  },
+  dangerZone: {
+    marginTop: 20,
+    gap: 10,
+    paddingBottom: 32,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  actionBtnIcon: {
+    fontSize: 16,
+    color: T.textMuted,
+    width: 22,
+    textAlign: 'center',
+  },
+  actionBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textSecondary,
+  },
+  devBtnViolet: {
+    borderColor: 'rgba(153,69,255,0.2)',
+  },
+  devBtnAmber: {
+    borderColor: 'rgba(212,160,74,0.2)',
+  },
+});

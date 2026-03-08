@@ -4,11 +4,11 @@ import {
   Alert,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -22,6 +22,13 @@ import { hasRemoteLessonApi, startLesson, submitLesson } from '@/services/api';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { ApiError } from '@/services/api/errors';
 import { getLessonReadableContent } from '@/utils/lessonContent';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  T,
+  ts,
+} from '@/theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'Lesson'>;
 type Route = RouteProp<MainStackParamList, 'Lesson'>;
@@ -325,98 +332,101 @@ export function LessonScreen() {
 
   if (!lesson) {
     return (
-      <SafeAreaView className="flex-1 bg-neutral-950">
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-neutral-400">Lesson not found</Text>
+      <ScreenBackground>
+        <View style={s.centered}>
+          <Text style={s.notFoundText}>Lesson not found</Text>
         </View>
-      </SafeAreaView>
+      </ScreenBackground>
     );
   }
 
   if (phase === 'reading') {
     return (
-      <SafeAreaView className="flex-1 bg-neutral-950">
-        <ScrollView className="flex-1 px-6 pt-4">
-          <Pressable onPress={() => navigation.goBack()}>
-            <Text className="text-neutral-400">{'\u2190'} Back</Text>
-          </Pressable>
+      <ScreenBackground>
+        <ScrollView style={s.scrollView} contentContainerStyle={s.scrollContent}>
+          <BackButton onPress={() => navigation.goBack()} />
 
-          <Text className="mt-1 text-sm text-neutral-500">
+          <Text style={s.lessonCounter}>
             Lesson {lessonOrder} of {totalLessonsInCourse}
           </Text>
 
-          <Text className="mt-3 text-2xl font-bold text-white">{lesson.title}</Text>
+          <Text style={[ts.pageTitle, s.readingTitle]}>{lesson.title}</Text>
 
-          <Text className="mt-4 text-base leading-6 text-neutral-300">
+          <Text style={s.readingBody}>
             {getLessonReadableContent(lesson)}
           </Text>
 
-          <Pressable
-            className="mb-8 mt-8 rounded-xl bg-amber-600 px-6 py-4 active:bg-amber-700"
-            onPress={handleStartQuestions}
-          >
-            <Text className="text-center text-lg font-semibold text-white">
-              Start Questions
-            </Text>
+          <Pressable onPress={handleStartQuestions}>
+            <View style={[ts.primaryBtn, s.actionBtnSpacing]}>
+              <Text style={ts.primaryBtnText}>Start Questions</Text>
+            </View>
           </Pressable>
         </ScrollView>
-      </SafeAreaView>
+      </ScreenBackground>
     );
   }
 
+  const progressPercent =
+    ((currentQuestionIndex + 1) / Math.max(totalQuestions, 1)) * 100;
+
+  const isActionEnabled =
+    supportsLocalChecking && !hasChecked
+      ? canContinue
+      : canContinue || (supportsLocalChecking && hasChecked);
+
+  const isAdvanceDisabled =
+    submitting || (!supportsLocalChecking && !canContinue);
+
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-sm text-neutral-400">
+    <ScreenBackground>
+      <ScrollView style={s.scrollView} contentContainerStyle={s.scrollContent}>
+        <View style={s.questionHeader}>
+          <Text style={s.questionCounter}>
             Question {currentQuestionIndex + 1} of {totalQuestions}
           </Text>
           {usesRemoteVerification && (
-            <Text className="text-xs text-neutral-500">Scored on submit</Text>
+            <Text style={s.scoredOnSubmit}>Scored on submit</Text>
           )}
         </View>
 
-        <View className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-800">
+        <View style={[ts.progressBarBg, s.progressBarMargin]}>
           <View
-            className="h-full rounded-full bg-amber-500"
-            style={{
-              width: `${((currentQuestionIndex + 1) / Math.max(totalQuestions, 1)) * 100}%`,
-            }}
+            style={[ts.progressBarFill, { width: `${progressPercent}%` }]}
           />
         </View>
 
-        <Text className="mt-6 text-lg font-semibold text-white">
+        <Text style={[ts.pageTitle, s.promptText]}>
           {currentQuestion?.prompt}
         </Text>
 
         {currentQuestion?.type === 'mcq' && (
-          <View className="mt-4 gap-3">
+          <View style={s.optionsContainer}>
             {currentQuestion.options?.map((option) => {
               const optionId = typeof option === 'string' ? option : option.id;
               const optionText = typeof option === 'string' ? option : option.text;
-              let borderColor = 'border-neutral-700';
-              let bgColor = 'bg-neutral-900';
+
+              let borderColor = T.borderDormant;
+              let bgColor = T.bgCard;
 
               if (supportsLocalChecking && hasChecked && currentQuestion.correctAnswer) {
                 if (optionText === currentQuestion.correctAnswer) {
-                  borderColor = 'border-green-500';
-                  bgColor = 'bg-green-950';
+                  borderColor = T.green;
+                  bgColor = 'rgba(62,230,138,0.08)';
                 } else if (
                   optionText === selectedOption &&
                   optionText !== currentQuestion.correctAnswer
                 ) {
-                  borderColor = 'border-red-500';
-                  bgColor = 'bg-red-950';
+                  borderColor = T.crimson;
+                  bgColor = 'rgba(255,68,102,0.08)';
                 }
               } else if (optionText === selectedOption) {
-                borderColor = 'border-amber-500';
-                bgColor = 'bg-neutral-800';
+                borderColor = T.amber;
+                bgColor = T.bgCardActive;
               }
 
               return (
                 <Pressable
                   key={optionId}
-                  className={`rounded-xl border p-4 ${borderColor} ${bgColor}`}
                   onPress={() => {
                     if (!hasChecked || !supportsLocalChecking) {
                       setSelectedOption(optionText);
@@ -424,7 +434,15 @@ export function LessonScreen() {
                   }}
                   disabled={supportsLocalChecking && hasChecked}
                 >
-                  <Text className="text-base text-white">{optionText}</Text>
+                  <ParchmentCard
+                    style={{
+                      borderColor,
+                      backgroundColor: bgColor,
+                    }}
+                    opacity={0.2}
+                  >
+                    <Text style={s.optionText}>{optionText}</Text>
+                  </ParchmentCard>
                 </Pressable>
               );
             })}
@@ -432,16 +450,17 @@ export function LessonScreen() {
         )}
 
         {currentQuestion?.type === 'short_text' && (
-          <View className="mt-4">
+          <View style={s.shortTextContainer}>
             <TextInput
-              className={`rounded-xl border p-4 text-white ${
+              style={[
+                s.textInput,
                 supportsLocalChecking && hasChecked
                   ? isCorrect
-                    ? 'border-green-500 bg-green-950'
-                    : 'border-red-500 bg-red-950'
-                  : 'border-neutral-700 bg-neutral-900'
-              }`}
-              placeholderTextColor="#737373"
+                    ? s.textInputCorrect
+                    : s.textInputIncorrect
+                  : null,
+              ]}
+              placeholderTextColor={T.textMuted}
               placeholder="Type your answer..."
               value={textAnswer}
               onChangeText={(value) => {
@@ -454,9 +473,9 @@ export function LessonScreen() {
               autoCorrect={false}
             />
             {supportsLocalChecking && hasChecked && !isCorrect && currentQuestion.correctAnswer && (
-              <Text className="mt-2 text-sm text-neutral-400">
+              <Text style={s.correctAnswerHint}>
                 Correct answer:{' '}
-                <Text className="font-semibold text-green-400">
+                <Text style={s.correctAnswerValue}>
                   {currentQuestion.correctAnswer}
                 </Text>
               </Text>
@@ -466,60 +485,185 @@ export function LessonScreen() {
 
         {supportsLocalChecking && hasChecked && (
           <Text
-            className={`mt-4 text-base font-semibold ${
-              isCorrect ? 'text-green-400' : 'text-red-400'
-            }`}
+            style={[
+              s.feedbackText,
+              { color: isCorrect ? T.green : T.crimson },
+            ]}
           >
             {isCorrect ? 'Correct!' : 'Incorrect'}
           </Text>
         )}
 
         {usesRemoteVerification && (
-          <Text className="mt-4 text-sm text-neutral-500">
+          <Text style={s.remoteInfoText}>
             Answers are verified by the lesson API after you finish the lesson.
           </Text>
         )}
 
-        <View className="mb-8 mt-6">
+        <View style={s.actionBtnSpacing}>
           {supportsLocalChecking && !hasChecked ? (
             <Pressable
-              className={`rounded-xl px-6 py-4 ${
-                canContinue ? 'bg-amber-600 active:bg-amber-700' : 'bg-neutral-800'
-              }`}
               onPress={handleCheck}
               disabled={!canContinue}
             >
-              <Text
-                className={`text-center text-lg font-semibold ${
-                  canContinue ? 'text-white' : 'text-neutral-600'
-                }`}
-              >
-                {currentQuestion?.type === 'mcq' ? 'Check Answer' : 'Submit'}
-              </Text>
+              <View style={canContinue ? ts.primaryBtn : s.disabledBtn}>
+                <Text
+                  style={
+                    canContinue ? ts.primaryBtnText : s.disabledBtnText
+                  }
+                >
+                  {currentQuestion?.type === 'mcq' ? 'Check Answer' : 'Submit'}
+                </Text>
+              </View>
             </Pressable>
           ) : (
             <Pressable
-              className={`rounded-xl px-6 py-4 ${
-                canContinue || (supportsLocalChecking && hasChecked)
-                  ? 'bg-amber-600 active:bg-amber-700'
-                  : 'bg-neutral-800'
-              }`}
               onPress={() => {
                 void handleAdvance();
               }}
-              disabled={submitting || (!supportsLocalChecking && !canContinue)}
+              disabled={isAdvanceDisabled}
             >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-center text-lg font-semibold text-white">
-                  {isLastQuestion ? 'See Results' : 'Next Question'}
-                </Text>
-              )}
+              <View style={isActionEnabled ? ts.primaryBtn : s.disabledBtn}>
+                {submitting ? (
+                  <ActivityIndicator color={T.textPrimary} />
+                ) : (
+                  <Text
+                    style={
+                      isActionEnabled ? ts.primaryBtnText : s.disabledBtnText
+                    }
+                  >
+                    {isLastQuestion ? 'See Results' : 'Next Question'}
+                  </Text>
+                )}
+              </View>
             </Pressable>
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notFoundText: {
+    fontSize: 14,
+    color: T.textSecondary,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 18,
+    paddingBottom: 40,
+  },
+  lessonCounter: {
+    fontSize: 12,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+  readingTitle: {
+    marginTop: 12,
+    marginBottom: 0,
+  },
+  readingBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: T.textSecondary,
+    marginTop: 16,
+  },
+  actionBtnSpacing: {
+    marginTop: 24,
+    marginBottom: 32,
+  },
+  btnPressed: {
+    opacity: 0.85,
+  },
+  questionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  questionCounter: {
+    fontSize: 12,
+    color: T.textSecondary,
+  },
+  scoredOnSubmit: {
+    fontSize: 11,
+    color: T.textMuted,
+  },
+  progressBarMargin: {
+    marginTop: 8,
+  },
+  promptText: {
+    marginTop: 24,
+    marginBottom: 0,
+    fontSize: 18,
+  },
+  optionsContainer: {
+    marginTop: 16,
+    gap: 12,
+  },
+  optionText: {
+    fontSize: 15,
+    color: T.textPrimary,
+  },
+  shortTextContainer: {
+    marginTop: 16,
+  },
+  textInput: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    backgroundColor: T.bgCard,
+    color: T.textPrimary,
+    padding: 16,
+    fontSize: 15,
+  },
+  textInputCorrect: {
+    borderColor: T.green,
+    backgroundColor: 'rgba(62,230,138,0.08)',
+  },
+  textInputIncorrect: {
+    borderColor: T.crimson,
+    backgroundColor: 'rgba(255,68,102,0.08)',
+  },
+  correctAnswerHint: {
+    marginTop: 8,
+    fontSize: 13,
+    color: T.textSecondary,
+  },
+  correctAnswerValue: {
+    fontWeight: '600',
+    color: T.green,
+  },
+  feedbackText: {
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  remoteInfoText: {
+    marginTop: 16,
+    fontSize: 13,
+    color: T.textMuted,
+  },
+  disabledBtn: {
+    paddingVertical: 14,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledBtnText: {
+    fontFamily: 'Georgia',
+    fontSize: 14,
+    fontWeight: '800',
+    color: T.textMuted,
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+  },
+});

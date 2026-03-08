@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, View, Text, Pressable, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { PublicKey } from '@solana/web3.js';
@@ -17,6 +16,13 @@ import {
 import { SendTransactionError } from '@solana/web3.js';
 import { useCourseStore, useUserStore } from '@/stores';
 import { defaultCourseLockPolicyForDifficulty } from '@/types';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  T,
+  ts,
+} from '@/theme';
 
 type SharedDepositParamList = OnboardingStackParamList & MainStackParamList;
 type Nav = NativeStackNavigationProp<SharedDepositParamList, 'Deposit'>;
@@ -457,50 +463,52 @@ export function DepositScreen() {
     }
   };
 
+  const isDisabled =
+    isSubmitting ||
+    isRestoringExistingLock ||
+    Boolean(configMessage) ||
+    Boolean(policyConfigMessage);
+
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
+    <ScreenBackground>
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 24,
-          paddingTop: 32,
-          paddingBottom: 48,
-        }}
+        style={{ flex: 1 }}
+        contentContainerStyle={ts.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text className="text-2xl font-bold text-white">Lock Your Funds</Text>
-        <Text className="mt-2 text-neutral-400">
-          {course?.title ?? 'Selected Course'}
-        </Text>
-        <Text className="mt-1 text-sm text-neutral-500">
+        <BackButton onPress={() => navigation.goBack()} />
+
+        <Text style={ts.pageTitle}>Lock Your Funds</Text>
+        <Text style={s.courseLabel}>{course?.title ?? 'Selected Course'}</Text>
+        <Text style={ts.pageSub}>
           Create the on-chain lock that starts the gauntlet.
         </Text>
 
-        <View className="mt-8 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-          <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
-            Course Lock Policy
-          </Text>
-          <View className="mt-3 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-4">
-            <Text className="text-sm text-neutral-300">
+        {/* Course Lock Policy */}
+        <ParchmentCard style={s.sectionCard}>
+          <Text style={ts.sectionLabel}>Course Lock Policy</Text>
+
+          <View style={s.policyBox}>
+            <Text style={s.policyText}>
               Minimum deposit: {courseLockPolicy.minPrincipalAmountUi} USDC
             </Text>
-            <Text className="mt-1 text-sm text-neutral-300">
+            <Text style={s.policyText}>
               Maximum deposit:{' '}
               {courseLockPolicy.maxPrincipalAmountUi
                 ? `${courseLockPolicy.maxPrincipalAmountUi} USDC`
                 : 'No course max'}
             </Text>
-            <Text className="mt-1 text-sm text-neutral-300">
+            <Text style={s.policyText}>
               Demo preset:{' '}
               {courseLockPolicy.demoPrincipalAmountUi
                 ? `${courseLockPolicy.demoPrincipalAmountUi} USDC`
                 : 'None'}
             </Text>
-            <Text className="mt-1 text-sm text-neutral-300">
+            <Text style={s.policyText}>
               Policy duration: {courseLockPolicy.minLockDurationDays}-
               {courseLockPolicy.maxLockDurationDays} days
             </Text>
-            <Text className="mt-1 text-sm text-neutral-500">
+            <Text style={[s.policyText, { color: T.textMuted }]}>
               Current on-chain presets:{' '}
               {availableLockDurations.length > 0
                 ? availableLockDurations.map((duration) => `${duration}d`).join(' / ')
@@ -508,77 +516,67 @@ export function DepositScreen() {
             </Text>
           </View>
 
-          <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
-            Stablecoin
-          </Text>
-          <View className="mt-3 rounded-xl border border-emerald-500 bg-emerald-500/10 px-4 py-3">
-            <Text className="text-center font-semibold text-emerald-300">
-              USDC only
-            </Text>
+          {/* Stablecoin */}
+          <Text style={ts.sectionLabel}>Stablecoin</Text>
+          <View style={s.stablecoinBadge}>
+            <Text style={s.stablecoinText}>USDC only</Text>
           </View>
 
-          <Text className="mt-5 text-xs uppercase tracking-[2px] text-neutral-500">
-            Principal Amount
-          </Text>
+          {/* Principal Amount */}
+          <Text style={[ts.sectionLabel, { marginTop: 16 }]}>Principal Amount</Text>
           <TextInput
-            className="mt-3 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-4 text-lg text-white"
+            style={s.textInput}
             keyboardType="decimal-pad"
             value={principalAmount}
             onChangeText={setPrincipalAmount}
             placeholder={courseLockPolicy.minPrincipalAmountUi}
-            placeholderTextColor="#737373"
+            placeholderTextColor={T.textMuted}
           />
-          <View className="mt-3 flex-row flex-wrap gap-2">
+          <View style={s.pillRow}>
             {principalPresets.map((value) => {
               const selected = Number(principalAmount) === value;
               return (
                 <Pressable
                   key={value}
-                  className={`rounded-full border px-3 py-2 ${selected ? 'border-emerald-500 bg-emerald-500/10' : 'border-neutral-700 bg-neutral-950'}`}
+                  style={[s.pill, selected ? s.pillSelected : {}]}
                   onPress={() => setPrincipalAmount(String(value))}
                 >
-                  <Text
-                    className={`text-sm font-semibold ${selected ? 'text-emerald-300' : 'text-neutral-300'}`}
-                  >
+                  <Text style={[s.pillText, selected ? s.pillTextSelected : {}]}>
                     {value} USDC
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-          <Text className="mt-2 text-xs text-neutral-500">
+          <Text style={s.hintText}>
             {courseLockPolicy.demoPrincipalAmountUi
               ? `${courseLockPolicy.demoPrincipalAmountUi} USDC stays available as the demo preset for this course.`
               : 'Course minimums apply to all lock amounts.'}
           </Text>
 
-          <Text className="mt-5 text-xs uppercase tracking-[2px] text-neutral-500">
-            Optional SKR Amount
-          </Text>
+          {/* Optional SKR */}
+          <Text style={[ts.sectionLabel, { marginTop: 16 }]}>Optional SKR Amount</Text>
           <TextInput
-            className="mt-3 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-4 text-lg text-white"
+            style={s.textInput}
             keyboardType="decimal-pad"
             value={skrAmount}
             onChangeText={setSkrAmount}
             placeholder="0"
-            placeholderTextColor="#737373"
+            placeholderTextColor={T.textMuted}
           />
 
-          <Text className="mt-5 text-xs uppercase tracking-[2px] text-neutral-500">
-            Lock Duration
-          </Text>
-          <View className="mt-3 flex-row gap-3">
+          {/* Lock Duration */}
+          <Text style={[ts.sectionLabel, { marginTop: 16 }]}>Lock Duration</Text>
+          <View style={s.durationRow}>
             {availableLockDurations.map((duration) => {
               const selected = lockDuration === duration;
               return (
                 <Pressable
                   key={duration}
-                  className={`flex-1 rounded-xl border px-3 py-3 ${selected ? 'border-sky-500 bg-sky-500/10' : 'border-neutral-700 bg-neutral-950'}`}
+                  style={[s.durationPill, selected ? s.durationPillSelected : {}]}
                   onPress={() => setLockDuration(duration)}
                 >
-                  <Text
-                    className={`text-center font-semibold ${selected ? 'text-sky-300' : 'text-white'}`}
-                  >
+                  <Text style={[s.durationText, selected ? s.durationTextSelected : {}]}>
                     {duration}d
                   </Text>
                 </Pressable>
@@ -586,63 +584,208 @@ export function DepositScreen() {
             })}
           </View>
 
-          <View className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-4">
-            <Text className="text-xs uppercase tracking-[2px] text-neutral-500">
-              Wallet Balances
-            </Text>
-            <Text className="mt-3 text-sm text-neutral-300">
-              USDC: {balances.stable}
-            </Text>
-            <Text className="mt-1 text-sm text-neutral-300">SKR: {balances.skr}</Text>
-            <Text className="mt-1 text-sm text-neutral-300">SOL: {balances.sol}</Text>
+          {/* Wallet Balances */}
+          <View style={s.balancesBox}>
+            <Text style={ts.sectionLabel}>Wallet Balances</Text>
+            <Text style={s.balanceText}>USDC: {balances.stable}</Text>
+            <Text style={s.balanceText}>SKR: {balances.skr}</Text>
+            <Text style={s.balanceText}>SOL: {balances.sol}</Text>
             {isRefreshingBalances ? (
-              <View className="mt-3 flex-row items-center gap-2">
-                <ActivityIndicator size="small" color="#a3a3a3" />
-                <Text className="text-xs text-neutral-500">Refreshing balances...</Text>
+              <View style={s.refreshRow}>
+                <ActivityIndicator size="small" color={T.textMuted} />
+                <Text style={s.hintText}>Refreshing balances...</Text>
               </View>
             ) : null}
           </View>
-        </View>
+        </ParchmentCard>
 
+        {/* Config warnings */}
         {configMessage ? (
-          <View className="mt-5 rounded-xl border border-amber-700 bg-amber-950/40 p-4">
-            <Text className="text-sm text-amber-200">{configMessage}</Text>
-          </View>
+          <ParchmentCard style={s.warningCard}>
+            <Text style={s.warningText}>{configMessage}</Text>
+          </ParchmentCard>
         ) : null}
 
         {policyConfigMessage ? (
-          <View className="mt-5 rounded-xl border border-amber-700 bg-amber-950/40 p-4">
-            <Text className="text-sm text-amber-200">{policyConfigMessage}</Text>
-          </View>
+          <ParchmentCard style={s.warningCard}>
+            <Text style={s.warningText}>{policyConfigMessage}</Text>
+          </ParchmentCard>
         ) : null}
 
+        {/* Status message */}
         {statusMessage ? (
-          <View className="mt-5 rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-4">
-            <Text className="text-sm text-neutral-300">{statusMessage}</Text>
-          </View>
+          <ParchmentCard style={{ marginTop: 16 }}>
+            <Text style={s.statusText}>{statusMessage}</Text>
+          </ParchmentCard>
         ) : null}
 
-        <Pressable
-          className={`mt-6 rounded-xl px-6 py-4 ${isSubmitting || isRestoringExistingLock || Boolean(configMessage) || Boolean(policyConfigMessage) ? 'bg-neutral-700' : 'bg-emerald-600 active:bg-emerald-700'}`}
-          disabled={
-            isSubmitting ||
-            isRestoringExistingLock ||
-            Boolean(configMessage) ||
-            Boolean(policyConfigMessage)
-          }
-          onPress={() => {
-            void handleDeposit();
-          }}
-        >
-          <Text className="text-center text-lg font-semibold text-white">
-            {isRestoringExistingLock
-              ? 'Checking Existing Lock...'
-              : isSubmitting
-                ? 'Creating Lock...'
-                : 'Deposit & Start Gauntlet'}
-          </Text>
-        </Pressable>
+        {/* Deposit button */}
+        <View style={s.depositBtnWrap}>
+          <Pressable
+            style={[ts.primaryBtn, isDisabled ? s.depositBtnDisabled : {}]}
+            disabled={isDisabled}
+            onPress={() => {
+              void handleDeposit();
+            }}
+          >
+            <Text style={[ts.primaryBtnText, isDisabled ? { color: T.textSecondary } : {}]}>
+              {isRestoringExistingLock
+                ? 'Checking Existing Lock...'
+                : isSubmitting
+                  ? 'Creating Lock...'
+                  : 'Deposit & Start Gauntlet'}
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  courseLabel: {
+    fontSize: 14,
+    color: T.textSecondary,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  sectionCard: {
+    marginTop: 16,
+  },
+  policyBox: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  policyText: {
+    fontSize: 13,
+    color: T.textSecondary,
+    marginTop: 2,
+  },
+  stablecoinBadge: {
+    backgroundColor: `${T.green}12`,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: `${T.green}30`,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  stablecoinText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.green,
+  },
+  textInput: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 17,
+    color: T.textPrimary,
+    marginTop: 6,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  pill: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  pillSelected: {
+    borderColor: T.amber,
+    backgroundColor: `${T.amber}15`,
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: T.textSecondary,
+  },
+  pillTextSelected: {
+    color: T.amber,
+  },
+  hintText: {
+    fontSize: 11,
+    color: T.textMuted,
+    marginTop: 6,
+  },
+  durationRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  durationPill: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  durationPillSelected: {
+    borderColor: T.teal,
+    backgroundColor: `${T.teal}12`,
+  },
+  durationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  durationTextSelected: {
+    color: T.teal,
+  },
+  balancesBox: {
+    marginTop: 20,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: T.borderDormant,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  balanceText: {
+    fontSize: 13,
+    color: T.textSecondary,
+    marginTop: 4,
+  },
+  refreshRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  warningCard: {
+    marginTop: 16,
+    borderColor: `${T.amber}40`,
+  },
+  warningText: {
+    fontSize: 13,
+    color: T.amber,
+  },
+  statusText: {
+    fontSize: 13,
+    color: T.textSecondary,
+  },
+  depositBtnWrap: {
+    marginTop: 20,
+    marginBottom: 32,
+  },
+  depositBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: T.borderDormant,
+  },
+});

@@ -1,5 +1,4 @@
-import { ScrollView, View, Text, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import {
@@ -11,6 +10,14 @@ import {
 import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  StatBox,
+  T,
+  ts,
+} from '@/theme';
 
 function renderEventTitle(event: RuntimeAuditEvent) {
   if (event.eventType === 'FUEL_BURN') {
@@ -182,128 +189,111 @@ export function StreakStatusScreen() {
   const flameState = streak >= 3 ? 'BURNING' : streak >= 1 ? 'LIT' : 'COLD';
   const flameColor =
     flameState === 'BURNING'
-      ? 'text-amber-400'
+      ? T.amber
       : flameState === 'LIT'
-        ? 'text-orange-400'
-        : 'text-neutral-600';
+        ? T.rust
+        : T.textMuted;
 
   const lampsLit = saversRemaining;
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={s.scrollView} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">
-          Streak Status
-        </Text>
+        <Text style={ts.pageTitle}>Streak Status</Text>
         {activeCourse && (
-          <Text className="mt-1 text-sm text-neutral-500">
-            {activeCourse.title}
-          </Text>
+          <Text style={s.courseSubtitle}>{activeCourse.title}</Text>
         )}
 
         {/* Flame state */}
-        <View className="mt-6 items-center rounded-2xl border border-neutral-700 bg-neutral-900 p-6">
-          <Text className={`text-4xl font-bold ${flameColor}`}>
+        <ParchmentCard style={s.flameCard}>
+          <Text style={[s.flameStateText, { color: flameColor }]}>
             {flameState}
           </Text>
-          <Text className="mt-2 text-sm text-neutral-500">
+          <Text style={s.flameDescription}>
             {flameState === 'BURNING'
               ? 'Your flame burns bright'
               : flameState === 'LIT'
                 ? 'Your flame is lit'
                 : 'Your flame is cold'}
           </Text>
-        </View>
+        </ParchmentCard>
 
         {/* Streak info */}
-        <View className="mt-4 flex-row gap-3">
-          <View className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-            <Text className="text-xs uppercase tracking-wide text-neutral-500">
-              Current Streak
-            </Text>
-            <Text className="mt-1 text-2xl font-bold text-white">
-              {streak}
-            </Text>
-            <Text className="mt-0.5 text-xs text-neutral-600">days</Text>
-          </View>
-          <View className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-            <Text className="text-xs uppercase tracking-wide text-neutral-500">
-              Longest Streak
-            </Text>
-            <Text className="mt-1 text-2xl font-bold text-amber-400">
-              {longestStreak}
-            </Text>
-            <Text className="mt-0.5 text-xs text-neutral-600">days</Text>
-          </View>
+        <View style={s.streakRow}>
+          <StatBox label="Current Streak" value={`${streak}`} color={T.amber} />
+          <StatBox label="Longest Streak" value={`${longestStreak}`} color={T.amber} />
         </View>
 
         {/* Saver Lamps */}
-        <View className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-          <Text className="text-xs uppercase tracking-wide text-neutral-500">
-            Saver Lamps
-          </Text>
-          <View className="mt-3 flex-row justify-center gap-6">
+        <ParchmentCard style={s.sectionCard}>
+          <Text style={ts.sectionLabel}>Saver Lamps</Text>
+          <View style={s.lampsRow}>
             {[0, 1, 2].map((i) => (
-              <View key={i} className="items-center">
-                <Text className="text-3xl">
+              <View key={i} style={s.lampItem}>
+                <Text style={s.lampIcon}>
                   {i < lampsLit ? '\u{1F525}' : '\u{1F4A8}'}
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-600">
+                <Text style={[s.lampLabel, { color: i < lampsLit ? T.violet : T.textMuted }]}>
                   {i < lampsLit ? 'Active' : 'Used'}
                 </Text>
               </View>
             ))}
           </View>
-          <Text className="mt-3 text-center text-xs text-neutral-500">
+          <Text style={s.saverSummary}>
             {saversRemaining}/3 savers remaining
             {gauntletActive
               ? ` \u00B7 Locked during gauntlet (Day ${gauntletDay}/7)`
               : ''}
           </Text>
-        </View>
+        </ParchmentCard>
 
-        <View className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-          <Text className="text-xs uppercase tracking-wide text-neutral-500">
-            Consequence State
-          </Text>
-          <Text className="mt-2 text-sm text-neutral-300">
-            Yield redirect: {redirectPercent}%
-          </Text>
-          <Text className="mt-1 text-sm text-neutral-300">
-            Saver recovery: {saverRecoveryMode ? 'Active' : 'Inactive'}
-          </Text>
-          <Text className="mt-1 text-sm text-neutral-300">
-            Extension total: {extensionDays} day{extensionDays !== 1 ? 's' : ''}
-          </Text>
-        </View>
+        {/* Consequence State */}
+        <ParchmentCard style={s.sectionCard}>
+          <Text style={ts.sectionLabel}>Consequence State</Text>
+          <View style={s.consequenceRow}>
+            <Text style={ts.cardLabel}>Yield redirect</Text>
+            <Text style={[s.consequenceValue, redirectPercent > 0 ? { color: T.crimson } : null]}>
+              {redirectPercent}%
+            </Text>
+          </View>
+          <View style={ts.divider} />
+          <View style={s.consequenceRow}>
+            <Text style={ts.cardLabel}>Saver recovery</Text>
+            <Text style={[s.consequenceValue, saverRecoveryMode ? { color: T.green } : null]}>
+              {saverRecoveryMode ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+          <View style={ts.divider} />
+          <View style={s.consequenceRow}>
+            <Text style={ts.cardLabel}>Extension total</Text>
+            <Text style={[s.consequenceValue, extensionDays > 0 ? { color: T.crimson } : null]}>
+              {extensionDays} day{extensionDays !== 1 ? 's' : ''}
+            </Text>
+          </View>
+        </ParchmentCard>
 
         {/* Gauntlet status */}
         {gauntletActive && (
-          <View className="mt-4 rounded-xl border border-purple-500/30 bg-purple-500/10 p-4">
-            <Text className="text-sm font-semibold text-purple-400">
-              Gauntlet Active
-            </Text>
-            <Text className="mt-1 text-xs text-neutral-500">
+          <ParchmentCard style={s.gauntletCard}>
+            <Text style={s.gauntletTitle}>Gauntlet Active</Text>
+            <Text style={s.gauntletSub}>
               Day {gauntletDay} of 7 — no savers allowed
             </Text>
-          </View>
+          </ParchmentCard>
         )}
 
-        <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-          <Text className="text-xs uppercase tracking-wide text-neutral-500">
-            Runtime Audit
-          </Text>
+        {/* Runtime Audit */}
+        <ParchmentCard style={s.sectionCard}>
+          <Text style={ts.sectionLabel}>Runtime Audit</Text>
           {historyLoading ? (
-            <Text className="mt-3 text-sm text-neutral-500">Loading runtime history...</Text>
+            <Text style={s.loadingText}>Loading runtime history...</Text>
           ) : historyError ? (
-            <Text className="mt-3 text-xs text-amber-300">{historyError}</Text>
+            <Text style={s.errorText}>{historyError}</Text>
           ) : (
             <>
-              <Text className="mt-2 text-sm text-neutral-300">
+              <Text style={s.auditSummary}>
                 Burns: {history?.burnCount ?? 0}
                 {' \u00B7 '}Misses: {history?.missCount ?? 0}
                 {' \u00B7 '}Extensions added: {history?.extensionDaysAdded ?? 0} day
@@ -321,63 +311,221 @@ export function StreakStatusScreen() {
                       : 0;
 
                   return (
-                    <View
-                      key={event.eventId}
-                      className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 p-4"
-                    >
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-sm font-semibold text-white">
+                    <ParchmentCard key={event.eventId} style={s.eventCard} opacity={0.2}>
+                      <View style={s.eventHeader}>
+                        <Text style={s.eventTitle}>
                           {renderEventTitle(event)}
                         </Text>
-                        <Text className="text-xs text-neutral-500">
+                        <Text style={s.eventRelayStatus}>
                           {renderEventRelayStatus(event)}
                         </Text>
                       </View>
-                      <Text className="mt-1 text-xs text-neutral-600">
+                      <Text style={s.eventTimestamp}>
                         {new Date(event.occurredAt).toLocaleString()}
                         {event.eventDay ? ` \u00B7 Day ${event.eventDay}` : ''}
                       </Text>
                       {event.eventType === 'FUEL_BURN' ? (
-                        <Text className="mt-3 text-sm text-neutral-300">
+                        <Text style={s.eventDetail}>
                           Fuel: {event.fuelBefore ?? '--'} {'\u2192'} {event.fuelAfter ?? '--'}
                         </Text>
                       ) : (
                         <>
-                          <Text className="mt-3 text-sm text-neutral-300">
+                          <Text style={s.eventDetail}>
                             Savers remaining: {saversBefore ?? '--'} {'\u2192'} {saversAfter ?? '--'}
                           </Text>
-                          <Text className="mt-1 text-sm text-neutral-300">
+                          <Text style={s.eventDetailSub}>
                             Redirect: {Math.round((event.redirectBpsBefore ?? 0) / 100)}%
-                            {'\u2192'}
+                            {' \u2192 '}
                             {Math.round((event.redirectBpsAfter ?? 0) / 100)}%
                           </Text>
-                          <Text className="mt-1 text-sm text-neutral-300">
+                          <Text style={s.eventDetailSub}>
                             Extension: +{extensionDelta} day{extensionDelta === 1 ? '' : 's'}
                           </Text>
                         </>
                       )}
                       {event.lockVaultTransactionSignature ? (
-                        <Text className="mt-2 text-xs text-neutral-600">
+                        <Text style={s.txHash}>
                           Tx: {event.lockVaultTransactionSignature.slice(0, 12)}...
                         </Text>
                       ) : null}
                       {event.lockVaultLastError ? (
-                        <Text className="mt-2 text-xs text-amber-300">
-                          {event.lockVaultLastError}
-                        </Text>
+                        <Text style={s.errorText}>{event.lockVaultLastError}</Text>
                       ) : null}
-                    </View>
+                    </ParchmentCard>
                   );
                 })
               ) : (
-                <Text className="mt-3 text-sm text-neutral-500">
+                <Text style={s.emptyText}>
                   No runtime events recorded yet.
                 </Text>
               )}
             </>
           )}
-        </View>
+        </ParchmentCard>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  courseSubtitle: {
+    fontSize: 12,
+    color: T.textSecondary,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+
+  // Flame card
+  flameCard: {
+    alignItems: 'center' as const,
+    paddingVertical: 24,
+    marginTop: 16,
+  },
+  flameStateText: {
+    fontFamily: 'Georgia',
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  flameDescription: {
+    fontSize: 12,
+    color: T.textSecondary,
+    marginTop: 8,
+  },
+
+  // Streak row
+  streakRow: {
+    flexDirection: 'row' as const,
+    gap: 10,
+    marginTop: 12,
+  },
+
+  // Section cards
+  sectionCard: {
+    marginTop: 12,
+  },
+
+  // Lamps
+  lampsRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    gap: 28,
+    marginTop: 8,
+  },
+  lampItem: {
+    alignItems: 'center' as const,
+  },
+  lampIcon: {
+    fontSize: 28,
+  },
+  lampLabel: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    marginTop: 4,
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+  },
+  saverSummary: {
+    fontSize: 11,
+    color: T.textSecondary,
+    textAlign: 'center' as const,
+    marginTop: 12,
+  },
+
+  // Consequence
+  consequenceRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  consequenceValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+
+  // Gauntlet
+  gauntletCard: {
+    marginTop: 12,
+    borderColor: `${T.violet}30`,
+  },
+  gauntletTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: T.violet,
+  },
+  gauntletSub: {
+    fontSize: 11,
+    color: T.textSecondary,
+    marginTop: 4,
+  },
+
+  // Audit
+  loadingText: {
+    fontSize: 12,
+    color: T.textSecondary,
+    marginTop: 8,
+  },
+  errorText: {
+    fontSize: 11,
+    color: T.amber,
+    marginTop: 6,
+  },
+  auditSummary: {
+    fontSize: 13,
+    color: T.textPrimary,
+    marginTop: 4,
+  },
+  emptyText: {
+    fontSize: 12,
+    color: T.textSecondary,
+    marginTop: 8,
+  },
+
+  // Event cards
+  eventCard: {
+    marginTop: 10,
+    padding: 12,
+  },
+  eventHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  eventTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: T.textPrimary,
+  },
+  eventRelayStatus: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textSecondary,
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+  },
+  eventTimestamp: {
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+  eventDetail: {
+    fontSize: 12,
+    color: T.textPrimary,
+    marginTop: 10,
+  },
+  eventDetailSub: {
+    fontSize: 12,
+    color: T.textPrimary,
+    marginTop: 4,
+  },
+  txHash: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 8,
+  },
+});

@@ -1,5 +1,4 @@
-import { ScrollView, View, Text, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,6 +8,14 @@ import { ApiError, getUnlockReceipts } from '@/services/api';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { useResurfaceStore, useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  CornerMarks,
+  T,
+  ts,
+} from '@/theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 type HistoryRoute = RouteProp<MainStackParamList, 'ResurfaceHistory'>;
@@ -155,91 +162,122 @@ export function ResurfaceHistoryScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">Resurface Receipts</Text>
-        <Text className="mt-1 text-sm text-neutral-500">
+        <Text style={ts.pageTitle}>Resurface Receipts</Text>
+        <Text style={ts.pageSub}>
           Unlock confirmations and returned-funds history
         </Text>
 
         {loading ? (
-          <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-            <Text className="text-sm text-neutral-400">Loading resurface receipts...</Text>
-          </View>
+          <ParchmentCard style={{ marginTop: 16 }}>
+            <Text style={s.infoText}>Loading resurface receipts...</Text>
+          </ParchmentCard>
         ) : errorMessage ? (
-          <View className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
-            <Text className="text-xs text-amber-300">{errorMessage}</Text>
-          </View>
+          <ParchmentCard style={{ marginTop: 16, borderColor: `${T.amber}30` }}>
+            <Text style={[s.infoText, { color: T.amber }]}>{errorMessage}</Text>
+          </ParchmentCard>
         ) : receipts.length === 0 ? (
-          <View className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-            <Text className="text-sm text-neutral-400">No resurface receipts yet.</Text>
-          </View>
+          <ParchmentCard style={{ marginTop: 16 }}>
+            <Text style={s.infoText}>No resurface receipts yet.</Text>
+          </ParchmentCard>
         ) : (
           receipts.map((receipt) => {
             const isLatest = route.params?.receiptId === receipt.id;
             return (
-              <View
+              <ParchmentCard
                 key={receipt.id}
-                className={`mt-6 rounded-2xl border p-5 ${
-                  isLatest
-                    ? 'border-emerald-500/40 bg-emerald-500/5'
-                    : 'border-neutral-700 bg-neutral-900'
-                }`}
+                style={[
+                  { marginTop: 16 },
+                  isLatest ? { borderColor: `${T.green}40` } : {},
+                ]}
+                opacity={isLatest ? 0.4 : 0.3}
               >
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-lg font-semibold text-white">{receipt.courseTitle}</Text>
-                  <Text
-                    className={`text-xs uppercase tracking-wide ${
-                      isLatest ? 'text-emerald-300' : 'text-neutral-500'
-                    }`}
-                  >
+                {isLatest && <CornerMarks />}
+                <View style={s.receiptHeader}>
+                  <Text style={s.receiptTitle}>{receipt.courseTitle}</Text>
+                  <Text style={[s.receiptBadge, isLatest ? { color: T.green } : {}]}>
                     {isLatest ? 'Latest' : 'Receipt'}
                   </Text>
                 </View>
-                <Text className="mt-3 text-sm text-neutral-300">
+                <Text style={s.receiptRow}>
                   Principal returned: {receipt.principalAmountUi} USDC
                 </Text>
-                <Text className="mt-1 text-sm text-neutral-300">
+                <Text style={s.receiptRow}>
                   SKR returned: {receipt.skrLockedAmountUi}
                 </Text>
-                <Text className="mt-1 text-sm text-neutral-300">
+                <Text style={s.receiptRow}>
                   Unlock target: {new Date(receipt.lockEndDate).toLocaleString()}
                 </Text>
-                <Text className="mt-1 text-sm text-neutral-300">
+                <Text style={s.receiptRow}>
                   Unlocked at: {new Date(receipt.unlockedAt).toLocaleString()}
                 </Text>
                 {receipt.verifiedBlockTime ? (
-                  <Text className="mt-1 text-sm text-neutral-300">
+                  <Text style={s.receiptRow}>
                     Verified at: {new Date(receipt.verifiedBlockTime).toLocaleString()}
                   </Text>
                 ) : null}
-                <Text className="mt-3 text-xs text-neutral-500">
+                <Text style={s.receiptMeta}>
                   Lock account: {receipt.lockAccountAddress}
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.receiptMeta}>
                   Tx: {receipt.unlockTxSignature}
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.receiptMeta}>
                   Source: {receipt.source === 'backend' ? 'Backend verified' : 'Local pending sync'}
                 </Text>
-              </View>
+              </ParchmentCard>
             );
           })
         )}
 
-        <Pressable
-          className="mt-6 mb-8 rounded-xl bg-neutral-900 py-4 active:opacity-80"
-          onPress={() => navigation.navigate('CourseBrowser')}
-        >
-          <Text className="text-center text-sm font-semibold text-neutral-300">
-            Browse Courses
-          </Text>
-        </Pressable>
+        <View style={{ marginTop: 24, marginBottom: 32 }}>
+          <Pressable
+            style={({ pressed }) => [ts.secondaryBtn, pressed && { opacity: 0.8 }]}
+            onPress={() => navigation.navigate('CourseBrowser')}
+          >
+            <Text style={ts.secondaryBtnText}>Browse Courses</Text>
+          </Pressable>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  infoText: {
+    fontSize: 13,
+    color: T.textSecondary,
+  },
+  receiptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  receiptTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  receiptBadge: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.textMuted,
+  },
+  receiptRow: {
+    fontSize: 13,
+    color: T.textSecondary,
+    marginTop: 4,
+  },
+  receiptMeta: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+});

@@ -258,7 +258,7 @@ export function UndergroundHubScreen() {
             pointerEvents={cinematicPhase === 'text' ? 'auto' : 'none'}
           >
             <Animated.Text style={[overlayStyles.cinematicText, { opacity: textOpacity }]}>
-              The dungeon recognises{'\n'}your efforts...
+              THE DUNGEON RECOGNISES{'\n'}YOUR EFFORTS...
             </Animated.Text>
           </Animated.View>
         )}
@@ -311,7 +311,7 @@ function BookModal({
       onRequestClose={onClose}
     >
       <Pressable style={overlayStyles.modalBackdrop} onPress={onClose}>
-        <Pressable style={overlayStyles.modalContent} onPress={() => {}}>
+        <Pressable style={overlayStyles.modalContent} onPress={() => { }}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={overlayStyles.modalTitle}>
               {course?.title ?? 'No Course'}
@@ -354,15 +354,15 @@ function BookModal({
             </View>
 
             <View style={overlayStyles.actionGrid}>
-              <Pressable style={overlayStyles.actionBtn} onPress={() => {}}>
+              <Pressable style={overlayStyles.actionBtn} onPress={() => { }}>
                 <Text style={overlayStyles.actionIcon}>{'\u{1F3CB}\uFE0F'}</Text>
                 <Text style={overlayStyles.actionLabel}>Practice</Text>
               </Pressable>
-              <Pressable style={overlayStyles.actionBtn} onPress={() => {}}>
+              <Pressable style={overlayStyles.actionBtn} onPress={() => { }}>
                 <Text style={overlayStyles.actionIcon}>{'\u{1F9E9}'}</Text>
                 <Text style={overlayStyles.actionLabel}>Puzzle</Text>
               </Pressable>
-              <Pressable style={overlayStyles.actionBtn} onPress={() => {}}>
+              <Pressable style={overlayStyles.actionBtn} onPress={() => { }}>
                 <Text style={overlayStyles.actionIcon}>{'\u{1F4D6}'}</Text>
                 <Text style={overlayStyles.actionLabel}>Dictionary</Text>
               </Pressable>

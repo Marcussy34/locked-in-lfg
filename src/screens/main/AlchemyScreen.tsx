@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useCourseStore } from '@/stores/courseStore';
 import { BREW_MODE_LIST, type BrewModeId } from '@/types';
+import {
+  ScreenBackground,
+  BackButton,
+  PageHeader,
+  ParchmentCard,
+  StatBox,
+  T,
+  ts,
+} from '@/theme';
 
 function formatTime(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -105,149 +113,131 @@ export function AlchemyScreen() {
   }, [activeCourseId, cancelBrewForCourse]);
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={s.scrollView} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">Brew Ichor</Text>
-        <Text className="mt-1 text-sm text-neutral-500">
-          Fuel powers the Brewer. Ichor accrues while the brew is active.
-        </Text>
+        <PageHeader
+          title="Brew Ichor"
+          subtitle="Fuel powers the Brewer. Ichor accrues while the brew is active."
+          accentWord="Ichor"
+        />
 
-        <View className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-          <View className="flex-row justify-between">
-            <View>
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Current Brew
-              </Text>
-              <Text className="mt-1 text-base font-semibold text-white">
-                {brewStatus === 'BREWING' && activeMode ? activeMode.label : 'None'}
-              </Text>
-            </View>
-            <View className="items-end">
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Ichor Balance
-              </Text>
-              <Text className="mt-1 text-base font-bold text-emerald-400">
-                {Math.floor(ichorBalance)}
-              </Text>
-            </View>
+        {/* Status grid */}
+        <View style={s.statGrid}>
+          <View style={s.statRow}>
+            <StatBox
+              label="Current Brew"
+              value={brewStatus === 'BREWING' && activeMode ? activeMode.label : 'None'}
+              color={T.textPrimary}
+            />
+            <View style={s.statGap} />
+            <StatBox
+              label="Ichor Balance"
+              value={Math.floor(ichorBalance)}
+              color={T.green}
+            />
           </View>
-
-          <View className="mt-4 flex-row justify-between">
-            <View>
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Fuel
-              </Text>
-              <Text className="mt-1 text-base font-bold text-orange-400">
-                {fuelBalance}/{fuelCap}
-              </Text>
-            </View>
-            <View className="items-end">
-              <Text className="text-xs uppercase tracking-wide text-neutral-500">
-                Brewer
-              </Text>
-              <Text className="mt-1 text-base font-semibold text-white">
-                {gauntletActive ? 'Locked' : canBrew ? 'Ready' : 'Stopped'}
-              </Text>
-            </View>
+          <View style={s.statRow}>
+            <StatBox
+              label="Fuel"
+              value={`${fuelBalance}/${fuelCap}`}
+              color={T.rust}
+            />
+            <View style={s.statGap} />
+            <StatBox
+              label="Brewer"
+              value={gauntletActive ? 'Locked' : canBrew ? 'Ready' : 'Stopped'}
+              color={T.textPrimary}
+            />
           </View>
         </View>
 
         {brewStatus === 'BREWING' ? (
-          <View className="mt-4">
-            <View className="rounded-xl border border-amber-800 bg-amber-950/30 p-5">
-              <Text className="text-center text-lg font-bold text-amber-400">
+          <View style={s.sectionWrap}>
+            <ParchmentCard style={s.activeBrewCard}>
+              <Text style={s.activeBrewTitle}>
                 {activeMode?.symbol} {activeMode?.label ?? 'Active Brew'}
               </Text>
 
-              <Text className="mt-4 text-center text-3xl font-bold text-white">
-                {formatTime(remainingMs)}
-              </Text>
-              <Text className="mt-1 text-center text-xs text-neutral-500">remaining</Text>
+              <Text style={s.countdownText}>{formatTime(remainingMs)}</Text>
+              <Text style={s.remainingLabel}>remaining</Text>
 
-              <View className="mt-4 h-2 overflow-hidden rounded-full bg-neutral-800">
+              <View style={[ts.progressBarBg, s.progressBar]}>
                 <View
-                  className="h-full rounded-full bg-amber-500"
-                  style={{ width: `${Math.round(progress * 100)}%` }}
+                  style={[
+                    ts.progressBarFill,
+                    { width: `${Math.round(progress * 100)}%` },
+                  ]}
                 />
               </View>
 
-              <Text className="mt-4 text-center text-sm text-neutral-400">
-                Ichor accumulating:
-              </Text>
-              <Text className="mt-1 text-center text-xl font-bold text-emerald-400">
-                +{accrued}
-              </Text>
+              <Text style={s.accruingLabel}>Ichor accumulating:</Text>
+              <Text style={s.accruedValue}>+{accrued}</Text>
 
-              <Pressable
-                className="mt-5 rounded-lg border border-red-900 bg-red-950/30 py-3"
-                onPress={handleCancel}
-              >
-                <Text className="text-center text-sm font-semibold text-red-400">
-                  Cancel Brew
-                </Text>
+              <Pressable style={ts.dangerBtn} onPress={handleCancel}>
+                <Text style={ts.dangerBtnText}>Cancel Brew</Text>
               </Pressable>
-            </View>
+            </ParchmentCard>
           </View>
         ) : (
-          <View className="mt-4">
+          <View style={s.sectionWrap}>
             {BREW_MODE_LIST.map((mode) => {
               const isSelected = selectedMode === mode.id;
               return (
                 <Pressable
                   key={mode.id}
                   onPress={() => canBrew && setSelectedMode(mode.id)}
-                  className={`mt-3 rounded-xl border p-4 ${
-                    isSelected
-                      ? 'border-amber-500 bg-amber-950/30'
-                      : 'border-neutral-700 bg-neutral-900'
-                  } ${!canBrew ? 'opacity-40' : ''}`}
+                  style={{ opacity: !canBrew ? 0.4 : 1 }}
                 >
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-3">
-                      <Text className="text-2xl">{mode.symbol}</Text>
-                      <View>
-                        <Text
-                          className={`text-base font-semibold ${
-                            isSelected ? 'text-amber-400' : 'text-white'
-                          }`}
-                        >
-                          {mode.label}
-                        </Text>
-                        <Text className="text-xs text-neutral-500">
-                          {mode.durationLabel}
-                        </Text>
+                  <ParchmentCard
+                    style={[
+                      s.modeCard,
+                      isSelected ? s.modeCardSelected : {},
+                    ]}
+                  >
+                    <View style={s.modeRow}>
+                      <View style={s.modeLeft}>
+                        <Text style={s.modeSymbol}>{mode.symbol}</Text>
+                        <View>
+                          <Text
+                            style={[
+                              s.modeLabel,
+                              isSelected && { color: T.amber },
+                            ]}
+                          >
+                            {mode.label}
+                          </Text>
+                          <Text style={s.modeDuration}>{mode.durationLabel}</Text>
+                        </View>
+                      </View>
+                      <View style={s.modeRight}>
+                        <Text style={s.modeRate}>{mode.ichorPerHour}/hr</Text>
+                        {mode.bonusPercent > 0 && (
+                          <Text style={s.modeBonus}>
+                            +{mode.bonusPercent}% rate
+                          </Text>
+                        )}
                       </View>
                     </View>
-                    <View className="items-end">
-                      <Text className="text-sm font-bold text-emerald-400">
-                        {mode.ichorPerHour}/hr
-                      </Text>
-                      {mode.bonusPercent > 0 && (
-                        <Text className="text-xs text-amber-400">
-                          +{mode.bonusPercent}% rate
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  <Text className="mt-2 text-xs text-neutral-500">
-                    Total: {Math.round(mode.ichorPerHour * (mode.durationMs / (60 * 60 * 1000)))} Ichor
-                  </Text>
+                    <Text style={s.modeTotal}>
+                      Total: {Math.round(mode.ichorPerHour * (mode.durationMs / (60 * 60 * 1000)))} Ichor
+                    </Text>
+                  </ParchmentCard>
                 </Pressable>
               );
             })}
 
             <Pressable
-              className={`mt-5 rounded-xl py-4 ${
-                canBrew ? 'bg-purple-700' : 'bg-neutral-800'
-              }`}
+              style={[
+                ts.primaryBtn,
+                s.confirmBtn,
+                !canBrew && s.confirmBtnDisabled,
+              ]}
               onPress={handleConfirmBrew}
               disabled={!canBrew}
             >
-              <Text className="text-center text-base font-bold text-white">
+              <Text style={[ts.primaryBtnText, !canBrew && { color: T.textSecondary }]}>
                 {gauntletActive
                   ? 'GAUNTLET LOCKED'
                   : fuelBalance <= 0
@@ -258,12 +248,153 @@ export function AlchemyScreen() {
           </View>
         )}
 
-        <View className="mb-8 mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
-          <Text className="text-center text-sm text-neutral-500">
+        <ParchmentCard style={s.footerCard}>
+          <Text style={s.footerText}>
             Fuel is the brewing resource for this course.
           </Text>
-        </View>
+        </ParchmentCard>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+
+  /* Stat grid */
+  statGrid: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  statRow: {
+    flexDirection: 'row',
+  },
+  statGap: {
+    width: 10,
+  },
+
+  /* Section wrapper */
+  sectionWrap: {
+    marginBottom: 16,
+  },
+
+  /* Active brew card */
+  activeBrewCard: {
+    borderColor: T.amberDim,
+    padding: 20,
+    alignItems: 'center',
+  },
+  activeBrewTitle: {
+    fontFamily: 'Georgia',
+    fontSize: 18,
+    fontWeight: '700',
+    color: T.amber,
+    textAlign: 'center',
+  },
+  countdownText: {
+    fontFamily: 'monospace',
+    fontSize: 30,
+    fontWeight: '700',
+    color: T.textPrimary,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  remainingLabel: {
+    fontSize: 11,
+    color: T.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  progressBar: {
+    width: '100%',
+    marginTop: 16,
+  },
+  accruingLabel: {
+    fontSize: 13,
+    color: T.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  accruedValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: T.green,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+
+  /* Brew mode cards */
+  modeCard: {
+    marginTop: 10,
+  },
+  modeCardSelected: {
+    borderColor: T.amber + '35',
+  },
+  modeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modeSymbol: {
+    fontSize: 24,
+  },
+  modeLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  modeDuration: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: T.textSecondary,
+    marginTop: 2,
+  },
+  modeRight: {
+    alignItems: 'flex-end',
+  },
+  modeRate: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: T.green,
+  },
+  modeBonus: {
+    fontSize: 11,
+    color: T.amber,
+    marginTop: 2,
+  },
+  modeTotal: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: T.textSecondary,
+    marginTop: 8,
+  },
+
+  /* Confirm button */
+  confirmBtn: {
+    marginTop: 20,
+  },
+  confirmBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: T.borderDormant,
+  },
+
+  /* Footer */
+  footerCard: {
+    marginBottom: 32,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 13,
+    color: T.textSecondary,
+    textAlign: 'center',
+  },
+});

@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,6 +7,14 @@ import { ApiError, getCommunityPotWindowDetail, type CommunityPotWindowDetailRes
 import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { useUserStore } from '@/stores';
 import type { MainStackParamList } from '@/navigation/types';
+import {
+  ScreenBackground,
+  BackButton,
+  ParchmentCard,
+  CornerMarks,
+  T,
+  ts,
+} from '@/theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 type WindowRoute = RouteProp<MainStackParamList, 'CommunityPotWindow'>;
@@ -118,59 +125,58 @@ export function CommunityPotWindowScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-950">
-      <ScrollView className="flex-1 px-6 pt-4">
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text className="text-neutral-400">{'\u2190'} Back</Text>
-        </Pressable>
+    <ScreenBackground>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={ts.scrollContent}>
+        <BackButton onPress={() => navigation.goBack()} />
 
-        <Text className="mt-4 text-2xl font-bold text-white">
-          {route.params.windowLabel}
-        </Text>
-        <Text className="mt-1 text-sm text-neutral-500">
+        <Text style={ts.pageTitle}>{route.params.windowLabel}</Text>
+        <Text style={ts.pageSub}>
           Community Pot window details and payout receipts
         </Text>
 
         {loading ? (
-          <Text className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-500">
-            Loading window details...
-          </Text>
+          <ParchmentCard style={{ marginTop: 16 }}>
+            <Text style={s.infoText}>Loading window details...</Text>
+          </ParchmentCard>
         ) : errorMessage ? (
-          <Text className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-300">
-            {errorMessage}
-          </Text>
+          <ParchmentCard style={{ marginTop: 16, borderColor: `${T.amber}30` }}>
+            <Text style={[s.infoText, { color: T.amber }]}>{errorMessage}</Text>
+          </ParchmentCard>
         ) : detail ? (
           <>
-            <View className="mt-6 rounded-2xl border border-purple-500/30 bg-purple-500/10 p-5">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-xs font-semibold uppercase tracking-wider text-purple-300">
+            {/* Window Summary */}
+            <ParchmentCard style={s.summaryCard} opacity={0.35}>
+              <View style={s.summaryHeader}>
+                <Text style={[ts.sectionLabel, { marginBottom: 0, marginTop: 0 }]}>
                   Window Summary
                 </Text>
-                <Text className="text-xs uppercase text-purple-200">
+                <Text style={[s.statusBadge, { color: T.violet }]}>
                   {renderWindowStatus(detail.status)}
                 </Text>
               </View>
-              <View className="mt-4 flex-row justify-between">
-                <View>
-                  <Text className="text-xs uppercase text-neutral-500">Total</Text>
-                  <Text className="mt-1 text-xl font-bold text-white">
+
+              <View style={s.statRow}>
+                <View style={s.statCol}>
+                  <Text style={ts.cardLabel}>Total</Text>
+                  <Text style={[ts.cardValue, { color: T.textPrimary }]}>
                     {detail.totalRedirectedAmountUi} USDC
                   </Text>
                 </View>
-                <View>
-                  <Text className="text-xs uppercase text-neutral-500">Distributed</Text>
-                  <Text className="mt-1 text-xl font-bold text-white">
+                <View style={s.statCol}>
+                  <Text style={ts.cardLabel}>Distributed</Text>
+                  <Text style={[ts.cardValue, { color: T.green }]}>
                     {detail.distributedAmountUi} USDC
                   </Text>
                 </View>
-                <View>
-                  <Text className="text-xs uppercase text-neutral-500">Remaining</Text>
-                  <Text className="mt-1 text-xl font-bold text-white">
+                <View style={s.statCol}>
+                  <Text style={ts.cardLabel}>Remaining</Text>
+                  <Text style={[ts.cardValue, { color: T.amber }]}>
                     {detail.remainingAmountUi} USDC
                   </Text>
                 </View>
               </View>
-              <Text className="mt-4 text-xs text-neutral-500">
+
+              <Text style={s.metaText}>
                 Eligible: {detail.eligibleRecipientCount}
                 {' \u00B7 '}
                 Paid recipients: {detail.distributionCount}
@@ -178,74 +184,77 @@ export function CommunityPotWindowScreen() {
                 Redirects: {detail.redirectCount}
               </Text>
               {detail.closedAt ? (
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.metaText}>
                   Closed at: {new Date(detail.closedAt).toLocaleString()}
                 </Text>
               ) : null}
-            </View>
+            </ParchmentCard>
 
+            {/* User Receipt */}
             {detail.userEntry ? (
-              <View className="mt-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
-                <Text className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              <ParchmentCard style={s.userReceiptCard} opacity={0.4}>
+                <CornerMarks />
+                <Text style={[ts.sectionLabel, { marginBottom: 0, marginTop: 0 }]}>
                   Your Receipt
                 </Text>
-                <Text className="mt-3 text-2xl font-bold text-emerald-300">
+                <Text style={s.userPayoutAmount}>
                   {detail.userEntry.payoutAmountUi} USDC
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.metaText}>
                   Status: {renderRecipientStatus(detail.userEntry.status)}
                 </Text>
-                <Text className="mt-1 text-xs text-neutral-500">
+                <Text style={s.metaText}>
                   Streak: {detail.userEntry.currentStreak}
                   {' \u00B7 '}
                   Principal: {detail.userEntry.principalAmountUi} USDC
                 </Text>
                 {detail.userEntry.distributedAt ? (
-                  <Text className="mt-1 text-xs text-neutral-500">
+                  <Text style={s.metaText}>
                     Paid at: {new Date(detail.userEntry.distributedAt).toLocaleString()}
                   </Text>
                 ) : null}
                 {detail.userEntry.transactionSignature ? (
-                  <Text className="mt-1 text-xs text-neutral-500">
+                  <Text style={s.txText}>
                     Tx: {detail.userEntry.transactionSignature}
                   </Text>
                 ) : null}
                 {detail.userEntry.lastError ? (
-                  <Text className="mt-2 text-xs text-amber-300">{detail.userEntry.lastError}</Text>
+                  <Text style={[s.metaText, { color: T.amber, marginTop: 8 }]}>
+                    {detail.userEntry.lastError}
+                  </Text>
                 ) : null}
-              </View>
+              </ParchmentCard>
             ) : null}
 
-            <View className="mt-6 mb-8">
-              <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-500">
-                Recipient Rows
-              </Text>
+            {/* Recipient Rows */}
+            <View style={{ marginTop: 24, marginBottom: 32 }}>
+              <Text style={ts.sectionLabel}>Recipient Rows</Text>
               {detail.recipients.length === 0 ? (
-                <Text className="rounded-xl border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-500">
-                  No recipient rows for this window.
-                </Text>
+                <ParchmentCard>
+                  <Text style={s.infoText}>No recipient rows for this window.</Text>
+                </ParchmentCard>
               ) : (
                 detail.recipients.map((recipient) => (
-                  <View
+                  <ParchmentCard
                     key={`${recipient.walletAddress}:${recipient.courseId}`}
-                    className={`mb-3 rounded-xl border p-4 ${
-                      recipient.isCurrentUser
-                        ? 'border-emerald-500/40 bg-emerald-500/5'
-                        : 'border-neutral-700 bg-neutral-900'
-                    }`}
+                    style={[
+                      s.recipientCard,
+                      recipient.isCurrentUser ? { borderColor: `${T.green}40` } : {},
+                    ]}
+                    opacity={recipient.isCurrentUser ? 0.4 : 0.3}
                   >
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-base font-semibold text-white">
+                    <View style={s.recipientHeader}>
+                      <Text style={s.recipientName}>
                         {recipient.displayIdentity}
                       </Text>
-                      <Text className="text-xs uppercase text-purple-300">
+                      <Text style={[s.statusBadge, { color: T.violet }]}>
                         {renderRecipientStatus(recipient.status)}
                       </Text>
                     </View>
-                    <Text className="mt-2 text-lg font-semibold text-white">
+                    <Text style={s.recipientPayout}>
                       {recipient.payoutAmountUi} USDC
                     </Text>
-                    <Text className="mt-1 text-xs text-neutral-500">
+                    <Text style={s.metaText}>
                       Course: {recipient.courseId}
                       {' \u00B7 '}
                       Streak: {recipient.currentStreak}
@@ -253,25 +262,100 @@ export function CommunityPotWindowScreen() {
                       Principal: {recipient.principalAmountUi} USDC
                     </Text>
                     {recipient.distributedAt ? (
-                      <Text className="mt-1 text-xs text-neutral-500">
+                      <Text style={s.metaText}>
                         Paid at: {new Date(recipient.distributedAt).toLocaleString()}
                       </Text>
                     ) : null}
                     {recipient.transactionSignature ? (
-                      <Text className="mt-1 text-xs text-neutral-500">
+                      <Text style={s.txText}>
                         Tx: {recipient.transactionSignature.slice(0, 18)}...
                       </Text>
                     ) : null}
                     {recipient.lastError ? (
-                      <Text className="mt-2 text-xs text-amber-300">{recipient.lastError}</Text>
+                      <Text style={[s.metaText, { color: T.amber, marginTop: 8 }]}>
+                        {recipient.lastError}
+                      </Text>
                     ) : null}
-                  </View>
+                  </ParchmentCard>
                 ))
               )}
             </View>
           </>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenBackground>
   );
 }
+
+const s = StyleSheet.create({
+  infoText: {
+    fontSize: 13,
+    color: T.textSecondary,
+  },
+  summaryCard: {
+    marginTop: 16,
+    borderColor: `${T.violet}30`,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  statusBadge: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  statCol: {
+    flex: 1,
+  },
+  metaText: {
+    fontSize: 11,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+  txText: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: T.textMuted,
+    marginTop: 4,
+  },
+  userReceiptCard: {
+    marginTop: 16,
+    borderColor: `${T.green}30`,
+  },
+  userPayoutAmount: {
+    fontFamily: 'Georgia',
+    fontSize: 24,
+    fontWeight: '700',
+    color: T.green,
+    marginTop: 12,
+  },
+  recipientCard: {
+    marginTop: 10,
+  },
+  recipientHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  recipientName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: T.textPrimary,
+  },
+  recipientPayout: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: T.textPrimary,
+    marginTop: 4,
+  },
+});
