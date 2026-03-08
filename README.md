@@ -1,5 +1,11 @@
 # Locked In
 
+> [!IMPORTANT]
+> The current public test APK connects to a backend hosted on Render and uses Solana devnet program/mint configuration.
+> This is a QA/testing setup, not a production release.
+> Because the current Render deployment may cold-start after inactivity, the first backend-auth or content request can occasionally be slow or need a retry.
+> Deposit, unlock, and reward flows in this build should be treated as devnet test flows.
+
 Locked In is a Solana-native learning product built around a simple bet on human behavior:
 
 People are much more likely to stay consistent when progress feels real, visible, and costly to lose.
