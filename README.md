@@ -1,127 +1,259 @@
-# LOCKED IN — Technical README (v3.0)
+# Locked In
 
-LOCKED IN is a Solana-native learning platform that combines habit formation mechanics with yield-based monetary consequences.
+Locked In is a Solana-native learning product built around a simple bet on human behavior:
 
-Core principle: users lock stablecoin principal for a course duration, keep principal ownership, and earn or forfeit yield based on consistency.
+People are much more likely to stay consistent when progress feels real, visible, and costly to lose.
 
-## Canonical Spec
+Instead of asking users to rely on willpower alone, Locked In turns online learning into a commitment device. Users lock stablecoin principal for the duration of a course, keep ownership of that principal, and let yield become the consequence layer for whether they stay on track.
 
-The v3 source of truth is in `docs/`.
+## The Problem
 
-Start here:
+Most online learning platforms have the same failure mode:
 
-- [`docs/00-technical-architecture-v3.md`](docs/00-technical-architecture-v3.md)
+- signing up is easy
+- starting is easy
+- quitting is also easy
 
-Detailed specs:
+People know they should learn. They still stop.
 
-1. [`docs/01-wallet-connection.md`](docs/01-wallet-connection.md)
-2. [`docs/02-lesson-api.md`](docs/02-lesson-api.md)
-3. [`docs/03-fuel.md`](docs/03-fuel.md)
-4. [`docs/04-tokenomics.md`](docs/04-tokenomics.md)
-5. [`docs/05-yield-calculator.md`](docs/05-yield-calculator.md)
-6. [`docs/06-vault-contract.md`](docs/06-vault-contract.md)
-7. [`docs/07-deposit-locking-service.md`](docs/07-deposit-locking-service.md)
-8. [`docs/08-timer-yield-product.md`](docs/08-timer-yield-product.md)
-9. [`docs/09-leaderboard.md`](docs/09-leaderboard.md)
-10. [`docs/10-answer-validator.md`](docs/10-answer-validator.md)
+That is the real retention problem. Streaks, badges, and XP help, but on their own they are usually too soft. When breaking the habit costs nothing, most users eventually drift.
 
-`docs/done/` is archive-only and not a source of truth.
+Locked In exists to solve that gap between intention and follow-through.
 
-## v3 Core Mechanics
+## The Core Idea
 
-### Fuel
+Locked In combines three systems into one product:
 
-- On-chain `u16` counter in each course `LockAccount`
-- Earned from verified lesson completion
-- Burns at `1 Fuel / 24h` while Brewer is active
-- Not an SPL token
+1. A real commitment device
+2. Habit-building gamification
+3. Transparent on-chain yield logic
 
-### Ichor
+The user locks USDC for a course.
 
-- On-chain `u64` counter in each course `LockAccount`
-- Produced from eligible yield while Brewer is active
-- Redeemable for stablecoin via Ichor Exchange
-- Not an SPL token
+That principal is not meant to be arbitrarily taken away. The pressure comes from the yield generated on top of the locked capital:
 
-### SKR Catalyst
+- stay consistent and keep the system alive
+- earn Fuel
+- power the Brewer
+- accumulate Ichor
+- keep more of the yield you generated
 
-- Optional SKR locked with principal at course start
-- Tier snapshotted and fixed for course duration
-- Boosts Ichor output (`+0%`, `+2%`, `+5%`, `+10%`)
-- Returned in full at resurface
+If you lapse, the product does not slash your principal. Instead, it progressively redirects your yield to a community pot that rewards users who stayed consistent.
 
-### Gauntlet and Consequences
+That makes the system high-pressure without being recklessly punitive.
 
-- Day 1-7 gauntlet: no savers, no Ichor production
-- Day 8+: savers unlocked, Brewer/Ichor unlocked
-- Saver penalties: `10% -> 20% -> 20%`
-- No savers left + miss: `100% yield redirect + lock extension`
+## Why This Idea Works
 
-### Ichor Conversion Tiers
+Locked In is designed around a few behavioral truths.
 
-- `0-9,999`: `1,000 Ichor = 0.90 USDC`
-- `10,000-49,999`: `1,000 Ichor = 1.00 USDC`
-- `50,000-99,999`: `1,000 Ichor = 1.10 USDC`
-- `100,000+`: `1,000 Ichor = 1.25 USDC`
+### 1. Loss aversion is stronger than generic rewards
 
-## On-chain Program Topology
+People protect what feels like theirs.
 
-Canonical v3 topology uses three programs:
+A normal streak counter is nice. Yield that you could have kept is harder to ignore. Locked In uses that emotional difference. The user is not just chasing points. They are trying not to waste value they already feel attached to.
+
+### 2. Commitment works better than vague intention
+
+Locking capital creates friction against quitting.
+
+The user has already made a deliberate decision: "I am doing this for the next 30, 60, or 90 days." That changes the psychology of the product from casual browsing to active commitment.
+
+### 3. Gamification works better when it is tied to real consequence
+
+Fuel, the Brewer, Ichor, and the dungeon layer make the system legible and satisfying. The game layer is not decoration. It turns abstract financial logic into something users can feel and understand every day.
+
+### 4. Pressure should escalate gradually, not instantly
+
+Locked In does not jump straight from "missed one day" to "everything is gone."
+
+It uses a stepped consequence model:
+
+- saver consumed
+- recovery mode
+- Brewer pressure
+- full yield redirection
+- lock extension
+
+That gives users chances to recover while still preserving stakes.
+
+### 5. Social reinforcement matters
+
+Forfeited yield does not disappear into a void. It flows into a community pot.
+
+That creates a strong social and economic loop: users who stay disciplined benefit from the inconsistency of users who do not.
+
+## How Locked In Works
+
+### Step 1: Lock in
+
+The user connects a Solana wallet, chooses a course, and locks USDC for the course duration. They can also optionally lock SKR as a catalyst.
+
+### Step 2: Survive the gauntlet
+
+The first week is the highest-pressure phase.
+
+- no savers
+- no Ichor output
+- Brewer stays cold
+- breaking the streak here triggers the harshest allowed consequence
+
+The point of the gauntlet is to force genuine habit formation up front.
+
+### Step 3: Earn Fuel through verified learning
+
+Lessons are verified. Verified completion credits Fuel.
+
+Fuel is not a token in a wallet. It is an internal counter tied to the user's course lock.
+
+### Step 4: Power the Brewer
+
+Fuel keeps the Brewer alive. When the Brewer is active, eligible yield can be converted into Ichor.
+
+Ichor is the platform's internal redemption currency. It is intentionally more satisfying than watching tiny stablecoin decimals slowly move.
+
+### Step 5: Protect your streak
+
+After the gauntlet, the user gets streak savers.
+
+Missing a day does not immediately destroy everything, but it does hurt:
+
+- 1st saver used: `10%` yield redirected
+- 2nd saver used: `20%` yield redirected
+- 3rd saver used: `20%` yield redirected
+- no savers left: `100%` redirect plus lock extension
+
+### Step 6: Resurface
+
+When the lock period ends, the user resurfaces.
+
+Their principal comes back.
+Their locked SKR comes back.
+What changes is how much yield they preserved, how much Ichor they accumulated, and whether they finished the course with momentum or regret.
+
+## The Dungeon Model
+
+Locked In uses one core metaphor so the system stays intuitive.
+
+| Concept | Meaning |
+| --- | --- |
+| Fuel | Daily energy earned from verified learning |
+| Brewer | The engine that turns consistency into output |
+| Ichor | Internal redemption balance produced while brewing |
+| SKR catalyst | Optional locked boost that increases Ichor output |
+| Savers | First-layer protection against a missed day |
+| Community pot | Yield redirected from inconsistent users to consistent ones |
+| Resurface | End-of-lock exit where principal and locked SKR return |
+
+Important implementation note:
+
+In the current repo, `Fuel` and `Ichor` are counters, not SPL tokens.
+
+## Why Solana
+
+Locked In only makes sense if the financial layer can feel native to the product.
+
+Solana gives the project:
+
+- low-cost state changes
+- fast user transactions
+- practical wallet-based onboarding
+- stablecoin-native rails
+- a realistic path to transparent yield accounting
+
+## What We Have Built So Far
+
+This repo is not just a concept write-up. The core structure already exists.
+
+### 1. On-chain programs
+
+There are currently three Anchor programs in the repo:
 
 1. `LockVault`
 2. `YieldSplitter`
 3. `CommunityPot`
 
-No standalone token program exists for Fuel/Ichor.
+`LockVault` handles the core course lock lifecycle:
 
-## System Architecture
+- protocol setup
+- course policy configuration
+- user lock creation
+- verified completion application
+- daily Fuel burn
+- saver consequence logic
+- Ichor redemption
+- unlock / resurface
 
-| Layer | Stack | Responsibility |
-| --- | --- | --- |
-| Mobile App | React Native + Expo, Zustand, React Navigation | UX, wallet connect, lesson loop, lock/redeem signing |
-| Backend | Fastify, Postgres/Supabase, scheduler workers | content API, auth, progress verification, event orchestration |
-| Blockchain | Solana + Anchor programs | custody, counters, yield split, pot accounting |
-| Yield Substrate | Kamino, Marginfi, Jupiter routing | passive stablecoin yield generation |
+`YieldSplitter` handles harvest accounting:
 
-## Repository Status
+- idempotent split receipts
+- platform fee math
+- yield redirect math
+- user share calculation
+- brewer-active and full-redirect handling
 
-This repo contains working app and backend scaffolding, plus legacy prototype naming in some runtime code paths.
+`CommunityPot` handles redirected-yield accounting:
 
-For all new implementation work, follow v3 docs in `docs/` even when legacy prototype code still uses older terminology.
+- redirect recording
+- distribution window creation and closing
+- recipient settlement
 
-Current implementation checkpoint:
+### 2. Backend logic
 
-- app + backend cover wallet auth, lesson verification, verified completion events, Fuel runtime, burn cycles, and saver consequences
-- the first on-chain `LockVault` scaffold now exists under `programs/lock_vault`
-- `LockVault` now includes canonical `lock_funds` plus the worker-driven Fuel/saver instructions
-- the onboarding deposit screen now builds and submits `lock_funds` transactions when LockVault env config is present
-- current on-chain scope still does not include `unlock_funds` or `redeem_ichor`
+The backend already contains the core runtime layer for the product:
 
-## Monorepo Layout
+- lesson catalog and content delivery
+- wallet challenge / verify / refresh auth
+- lesson start and submit flows
+- answer validation
+- verified completion events
+- gauntlet, Fuel, saver, redirect, and extension state
+- relay workers that publish to the on-chain programs
+- community pot and leaderboard snapshot support
 
-- `src/` — mobile app
-- `backend/` — lesson API and auth/progress services
-- `programs/` — Anchor on-chain programs
-- `docs/` — canonical v3 technical specs
-- `assets/`, `models/`, `textures/` — client visuals/resources
+### 3. Mobile app structure
 
-## Quick Start
+The React Native app already includes the main user-facing surfaces:
 
-### Mobile app
+- wallet connection
+- onboarding
+- course selection
+- deposit flow
+- dungeon home
+- lesson flow
+- streak status
+- alchemy / brewing
+- leaderboard
+- community pot views
+- Ichor shop
+- profile and resurface history
+
+## Repo Structure
+
+- `src/` - React Native app
+- `backend/` - API, workers, SQL migrations, runtime logic
+- `programs/` - Anchor programs
+- `docs/` - technical architecture and detailed specs
+- `scripts/` - local utilities and inspection scripts
+- `web/dungeon/` - dungeon scene assets
+
+## Technical Docs
+
+This README is meant to explain the concept, the product logic, and what exists so far.
+
+For the engineering source of truth, start with [`docs/00-technical-architecture-v3.md`](/Users/marcus/Projects/locked-in/docs/00-technical-architecture-v3.md).
+
+If the README and technical docs ever differ, the technical docs should win.
+
+## Local Dev
+
+Mobile app:
 
 ```bash
 npm install
 npm run start
 ```
 
-Native builds:
-
-```bash
-npm run android
-npm run ios
-```
-
-### Backend API
+Backend:
 
 ```bash
 cd backend
@@ -130,62 +262,8 @@ cp .env.example .env
 npm run dev
 ```
 
-Default backend URL: `http://localhost:3001`
-
-### On-chain programs
+Programs:
 
 ```bash
-cargo test -p lock-vault
+cargo test --workspace
 ```
-
-Current note:
-
-- `anchor build` currently depends on matching local Anchor CLI / SBF toolchain versions
-- this repo currently has `@coral-xyz/anchor` `0.32.1` in JavaScript, while the installed CLI is `0.31.1`
-
-Client deposit env config now lives in `.env.example`.
-
-## Backend API Surface (current)
-
-Public content:
-
-- `GET /health`
-- `GET /v1/content/version`
-- `GET /v1/courses`
-- `GET /v1/courses/:courseId/modules`
-- `GET /v1/modules/:moduleId/lessons`
-- `GET /v1/lessons/:lessonId`
-
-Auth:
-
-- `POST /v1/auth/challenge`
-- `POST /v1/auth/verify`
-- `POST /v1/auth/refresh`
-
-Progress (bearer token):
-
-- `POST /v1/progress/lessons/:lessonId/start`
-- `POST /v1/progress/lessons/:lessonId/submit`
-- `GET /v1/progress/courses/:courseId`
-- `GET /v1/progress/modules/:moduleId`
-
-## Wallet Notes
-
-- Mobile wallet flow uses Solana Mobile Wallet Adapter.
-- In this setup, real MWA flow is Android-native runtime dependent.
-- Wallet signatures are required for lock, redeem, and unlock flows.
-
-## Security and Launch Gates
-
-Before mainnet launch:
-
-1. Smart contract audit (all 3 programs)
-2. End-to-end idempotency and replay protection validation
-3. Production key management and signer isolation
-4. Monitoring/alerting for scheduler and harvest pipelines
-5. Legal/regulatory review for yield redirection and lock-extension policies
-
-## Development Rule
-
-If README and docs conflict, docs win.
-If docs conflict internally, `docs/00-technical-architecture-v3.md` wins.
