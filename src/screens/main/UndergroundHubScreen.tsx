@@ -4,9 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '@/navigation/types';
-import { useFlameStore, useSceneStore, useStreakStore } from '@/stores';
+import { useFlameStore, useSceneStore, useStreakStore, useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
 import { useDungeon } from '@/components/DungeonProvider';
+import { GuidedTour } from '@/components/GuidedTour';
 
 type HubNav = NativeStackNavigationProp<MainStackParamList>;
 
@@ -14,9 +15,12 @@ export function UndergroundHubScreen() {
   const navigation = useNavigation<HubNav>();
   const insets = useSafeAreaInsets();
   const {
-    show, hide, sendMessage, onMessage, setOverlay,
+    show, hide, sendMessage, onMessage, setOverlay, setTourOverlay,
     sceneReady, loadProgress, webviewError,
   } = useDungeon();
+  const dungeonTourCompleted = useUserStore((s) => s.dungeonTourCompleted);
+  const completeDungeonTour = useUserStore((s) => s.completeDungeonTour);
+  const [showTour, setShowTour] = useState(false);
   const [bookModalVisible, setBookModalVisible] = useState(false);
   const [cinematicPhase, setCinematicPhase] = useState<'idle' | 'text' | 'playing' | 'done'>('idle');
   const cinematicOpacity = useRef(new Animated.Value(0)).current;
@@ -130,6 +134,15 @@ export function UndergroundHubScreen() {
       }
     });
   }, [onMessage, navigation]);
+
+  // Show guided tour on first visit after scene loads
+  useEffect(() => {
+    if (sceneReady && !dungeonTourCompleted && cinematicPhase === 'idle') {
+      // Small delay so the scene is visually settled
+      const timer = setTimeout(() => setShowTour(true), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [sceneReady, dungeonTourCompleted, cinematicPhase]);
 
   // Send initial state + lighting mode once scene is ready
   useEffect(() => {
@@ -264,7 +277,37 @@ export function UndergroundHubScreen() {
         )}
       </>,
     );
-  }, [sceneReady, loadProgress, webviewError, bookModalVisible, cinematicPhase, cinematicOpacity, textOpacity, insets.top, navigation, setOverlay]);
+  }, [sceneReady, loadProgress, webviewError, bookModalVisible, sendMessage, cinematicPhase, cinematicOpacity, textOpacity, insets.top, navigation, setOverlay]);
+
+  const handleTourStepChange = useCallback(
+    (viewpoint: string) => sendMessage('setViewpoint', { viewpoint }),
+    [sendMessage],
+  );
+
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false);
+    completeDungeonTour();
+    sendMessage('cameraGoBack', {});
+  }, [completeDungeonTour, sendMessage]);
+
+  // Tour overlay — separate from main overlay so it never remounts
+  useEffect(() => {
+    if (showTour && sceneReady) {
+      setTourOverlay(
+        <GuidedTour
+          onStepChange={handleTourStepChange}
+          onComplete={handleTourComplete}
+        />,
+      );
+    } else {
+      setTourOverlay(null);
+    }
+  }, [showTour, sceneReady, handleTourStepChange, handleTourComplete, setTourOverlay]);
+
+  // Clear tour overlay on unmount
+  useEffect(() => {
+    return () => setTourOverlay(null);
+  }, [setTourOverlay]);
 
   // Screen renders nothing — all UI is via the overlay portal
   return <View style={{ flex: 1, backgroundColor: 'transparent' }} />;

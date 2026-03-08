@@ -16,6 +16,8 @@ export interface DungeonContextType {
   onMessage: (handler: (data: any) => void) => () => void;
   /** Set overlay content rendered above the WebView */
   setOverlay: (content: ReactNode) => void;
+  /** Set tour overlay — rendered above main overlay, managed independently */
+  setTourOverlay: (content: ReactNode) => void;
 }
 
 const DungeonContext = createContext<DungeonContextType | null>(null);
@@ -45,6 +47,7 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
   const [webviewError, setWebviewError] = useState<string | null>(null);
   const [useBundledDungeon, setUseBundledDungeon] = useState(!(IS_DEV && EXPLICIT_DUNGEON_DEV_URL));
   const [overlayContent, setOverlayContent] = useState<ReactNode>(null);
+  const [tourOverlayContent, setTourOverlayContent] = useState<ReactNode>(null);
 
   // Message handlers registered by consumers
   const handlersRef = useRef<Set<(data: any) => void>>(new Set());
@@ -72,6 +75,10 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
 
   const setOverlay = useCallback((content: ReactNode) => {
     setOverlayContent(content);
+  }, []);
+
+  const setTourOverlay = useCallback((content: ReactNode) => {
+    setTourOverlayContent(content);
   }, []);
 
   const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
@@ -111,8 +118,9 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
       sendMessage,
       onMessage,
       setOverlay,
+      setTourOverlay,
     }),
-    [isLoaded, sceneReady, loadProgress, webviewError, show, hide, sendMessage, onMessage, setOverlay],
+    [isLoaded, sceneReady, loadProgress, webviewError, show, hide, sendMessage, onMessage, setOverlay, setTourOverlay],
   );
 
   return (
@@ -189,6 +197,13 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
       {visible && overlayContent != null && (
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
           {overlayContent}
+        </View>
+      )}
+
+      {/* Tour overlay — separate slot so it never remounts when main overlay updates */}
+      {visible && tourOverlayContent != null && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {tourOverlayContent}
         </View>
       )}
     </DungeonContext.Provider>

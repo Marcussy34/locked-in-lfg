@@ -427,6 +427,21 @@ export function ProfileScreen() {
 
         {/* Danger zone */}
         <View style={s.dangerZone}>
+          {__DEV__ && (
+            <Pressable
+              onPress={() => {
+                useUserStore.setState({ dungeonTourCompleted: false });
+                navigation.goBack();
+              }}
+            >
+              <View style={[ts.secondaryBtn, s.actionBtn, s.devBtnTeal]}>
+                <Text style={s.actionBtnIcon}>{'\u{1F9ED}'}</Text>
+                <Text style={[s.actionBtnText, { color: T.teal }]}>
+                  Replay Dungeon Tour (DEV)
+                </Text>
+              </View>
+            </Pressable>
+          )}
           {__DEV__ && activeCourseId && activeState?.gauntletActive && (
             <Pressable
               onPress={() => {
@@ -632,6 +647,9 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: T.textSecondary,
+  },
+  devBtnTeal: {
+    borderColor: 'rgba(42,232,212,0.2)',
   },
   devBtnViolet: {
     borderColor: 'rgba(153,69,255,0.2)',

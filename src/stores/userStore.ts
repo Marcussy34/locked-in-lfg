@@ -18,6 +18,7 @@ interface UserStore extends UserProfile {
   setDisplayName: (name: string) => void;
   startGauntlet: () => void;
   completeGauntlet: () => void;
+  completeDungeonTour: () => void;
 }
 
 const initialState: UserProfile = {
@@ -29,6 +30,7 @@ const initialState: UserProfile = {
   createdAt: null,
   gauntletStartDate: null,
   gauntletCompleted: false,
+  dungeonTourCompleted: false,
   authToken: null,
   refreshToken: null,
 };
@@ -88,6 +90,8 @@ export const useUserStore = create<UserStore>()(
 
       completeGauntlet: () =>
         set({ gauntletCompleted: true, onboardingPhase: 'main' }),
+
+      completeDungeonTour: () => set({ dungeonTourCompleted: true }),
     }),
     {
       name: 'locked-in-user',

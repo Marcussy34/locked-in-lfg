@@ -10,6 +10,7 @@ export interface UserProfile {
   createdAt: string | null;
   gauntletStartDate: string | null;
   gauntletCompleted: boolean;
+  dungeonTourCompleted: boolean;
   /** Lesson API access token (Bearer) */
   authToken: string | null;
   /** Lesson API refresh token for silent access-token renewal */
