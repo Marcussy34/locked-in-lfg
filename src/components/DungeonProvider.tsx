@@ -1,7 +1,6 @@
-import { createContext, useContext, useRef, useState, useCallback, useMemo, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { Asset } from 'expo-asset';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,7 +32,6 @@ export function useDungeon() {
 // Dungeon source selection
 // ---------------------------------------------------------------------------
 const IS_DEV = __DEV__;
-const DUNGEON_ASSET = require('../../web/dungeon/dist/index.html');
 const EXPLICIT_DUNGEON_DEV_URL = (process.env.EXPO_PUBLIC_DUNGEON_WEB_DEV_URL ?? '').trim();
 const DUNGEON_PROD_URL = 'https://dist-ochre-kappa-70.vercel.app';
 
@@ -47,24 +45,8 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
   const [sceneReady, setSceneReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [webviewError, setWebviewError] = useState<string | null>(null);
-  const [useBundledDungeon, setUseBundledDungeon] = useState(!(IS_DEV && EXPLICIT_DUNGEON_DEV_URL));
-  const [resolvedAssetUri, setResolvedAssetUri] = useState<string | null>(null);
   const [overlayContent, setOverlayContent] = useState<ReactNode>(null);
   const [tourOverlayContent, setTourOverlayContent] = useState<ReactNode>(null);
-
-  // In production, resolve the bundled HTML asset to a local file:// URI
-  useEffect(() => {
-    if (!IS_DEV && useBundledDungeon) {
-      const asset = Asset.fromModule(DUNGEON_ASSET);
-      asset.downloadAsync().then(() => {
-        if (asset.localUri) {
-          setResolvedAssetUri(asset.localUri);
-        }
-      }).catch(() => {
-        console.warn('[Dungeon] Failed to resolve bundled asset');
-      });
-    }
-  }, [useBundledDungeon]);
 
   // Message handlers registered by consumers
   const handlersRef = useRef<Set<(data: any) => void>>(new Set());
@@ -120,8 +102,10 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const webviewSource = IS_DEV
-    ? (EXPLICIT_DUNGEON_DEV_URL ? { uri: EXPLICIT_DUNGEON_DEV_URL } : DUNGEON_ASSET)
+  // Dev: use explicit URL env var, or fall back to Vercel
+  // Prod: always Vercel (dungeon assets excluded from APK via .easignore)
+  const webviewSource = (IS_DEV && EXPLICIT_DUNGEON_DEV_URL)
+    ? { uri: EXPLICIT_DUNGEON_DEV_URL }
     : { uri: DUNGEON_PROD_URL };
 
   const ctx = useMemo<DungeonContextType>(
@@ -162,23 +146,11 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
             mediaPlaybackRequiresUserAction={false}
             onMessage={handleWebViewMessage}
             onError={(e) => {
-              if (!useBundledDungeon) {
-                console.warn('[Dungeon] Dev URL failed, falling back to bundled asset');
-                setUseBundledDungeon(true);
-                setWebviewError(null);
-                return;
-              }
               const msg = `${e.nativeEvent.description} (code ${e.nativeEvent.code})`;
               console.warn('[Dungeon] WebView error:', msg);
               setWebviewError(msg);
             }}
             onHttpError={(e) => {
-              if (!useBundledDungeon) {
-                console.warn('[Dungeon] Dev URL HTTP error, falling back to bundled asset');
-                setUseBundledDungeon(true);
-                setWebviewError(null);
-                return;
-              }
               console.warn('[Dungeon] HTTP error:', e.nativeEvent.statusCode);
             }}
             mixedContentMode="always"

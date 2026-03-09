@@ -1,0 +1,5 @@
+# Dungeon — served from Vercel in production, not needed in APK
+web/
+
+# Other non-build files
+.git/
