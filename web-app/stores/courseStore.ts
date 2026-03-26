@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { webStorageAdapter } from './storage';
 import { getCourseRuntime, hasRemoteLessonApi } from '@/services/api';
-import type { CourseRuntimeSnapshot } from '@/services/api/types';
+import type { CourseRuntimeSnapshot, UserEnrollmentsResponse } from '@/services/api/types';
 import type { LockAccountSnapshot } from '@/services/solana';
 import { BREW_MODES } from '@/types';
 import type {
@@ -91,6 +91,7 @@ interface CourseStore {
   resetLessonProgressForCourse: (courseId: string) => void;
   initializeContent: (force?: boolean) => Promise<void>;
   initializeMockData: (errorMessage?: string | null) => void;
+  restoreFromBackend: (data: UserEnrollmentsResponse) => void;
   reset: () => void;
 }
 
@@ -728,6 +729,71 @@ export const useCourseStore = create<CourseStore>()(
         set({
           contentError: errorMessage,
           contentInitialized: true,
+        });
+      },
+
+      /** Restore enrollments, runtime, and lesson progress from backend after fresh login */
+      restoreFromBackend: (data) => {
+        const state = get();
+        const enrolledIds = data.enrollments.map((e) => e.courseId);
+
+        // Only add new enrollments — don't remove existing local ones
+        const mergedEnrolled = [...new Set([...state.enrolledCourseIds, ...enrolledIds])];
+        const mergedActive = [...new Set([...state.activeCourseIds, ...enrolledIds])];
+
+        // Sync runtime state for each enrollment that has it
+        const mergedCourseStates = { ...state.courseStates };
+        for (const enrollment of data.enrollments) {
+          if (enrollment.runtime) {
+            const existing = normalizeCourseGameState(mergedCourseStates[enrollment.courseId]);
+            mergedCourseStates[enrollment.courseId] = {
+              ...existing,
+              currentStreak: enrollment.runtime.currentStreak,
+              longestStreak: enrollment.runtime.longestStreak,
+              gauntletActive: enrollment.runtime.gauntletActive,
+              gauntletDay: enrollment.runtime.gauntletDay,
+              saverCount: enrollment.runtime.saverCount,
+              saverRecoveryMode: enrollment.runtime.saverRecoveryMode,
+              currentYieldRedirectBps: enrollment.runtime.currentYieldRedirectBps,
+              extensionDays: enrollment.runtime.extensionDays,
+              fuelCounter: enrollment.runtime.fuelCounter,
+              fuelCap: enrollment.runtime.fuelCap,
+            };
+          }
+        }
+
+        // Restore lesson progress
+        const mergedProgress = { ...state.lessonProgress };
+        for (const lp of data.lessonProgress) {
+          // Only update if backend has newer/better data
+          const existing = mergedProgress[lp.lessonId];
+          if (!existing || !existing.completed) {
+            mergedProgress[lp.lessonId] = {
+              lessonId: lp.lessonId,
+              courseId: '', // Will be resolved by course content
+              completed: lp.completed,
+              score: lp.score,
+              completedAt: lp.completedAt,
+            };
+          }
+        }
+
+        // Update completed lesson counts on courses
+        const updatedCourses = state.courses.map((course) => {
+          const courseLessons = state.lessons[course.id] ?? [];
+          const completedCount = courseLessons.filter(
+            (l) => mergedProgress[l.id]?.completed,
+          ).length;
+          return { ...course, completedLessons: completedCount };
+        });
+
+        set({
+          enrolledCourseIds: mergedEnrolled,
+          activeCourseIds: mergedActive,
+          courseStates: mergedCourseStates,
+          lessonProgress: mergedProgress,
+          courses: updatedCourses,
+          activeCourseId: state.activeCourseId ?? enrolledIds[0] ?? null,
         });
       },
 

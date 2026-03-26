@@ -15,6 +15,7 @@ import type {
   UnlockReceiptPayload,
   UnlockReceiptRecord,
   YieldHistoryResponse,
+  UserEnrollmentsResponse,
 } from '../types';
 
 export function startLesson(
@@ -54,6 +55,13 @@ export function getCourseProgress(
   return httpRequest<CourseProgressSnapshot>(`/v1/progress/courses/${courseId}`, {
     token,
   });
+}
+
+/** Fetch all enrolled courses + runtime + lesson progress for the authenticated user */
+export function getUserEnrollments(
+  token: string,
+): Promise<UserEnrollmentsResponse> {
+  return httpRequest<UserEnrollmentsResponse>('/v1/progress/enrollments', { token });
 }
 
 export function getCourseRuntime(

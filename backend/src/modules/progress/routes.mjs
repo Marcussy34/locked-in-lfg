@@ -11,6 +11,7 @@ import {
   getCommunityPotHistory,
   getLeaderboardSnapshot,
   getCourseRuntimeHistory,
+  getUserEnrollments,
   getCourseRuntimeSnapshot,
   getCourseProgress,
   getUnlockReceipts,
@@ -342,6 +343,13 @@ export async function progressRoutes(app) {
     '/v1/progress/unlocks',
     { preHandler: requireAccessAuth },
     async (request) => recordUnlockReceipt(request.auth.walletAddress, request.body),
+  );
+
+  // Returns all enrolled courses + runtime + lesson progress for the authenticated user
+  app.get(
+    '/v1/progress/enrollments',
+    { preHandler: requireAccessAuth },
+    async (request) => getUserEnrollments(request.auth.walletAddress),
   );
 
   app.get(

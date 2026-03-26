@@ -1311,6 +1311,89 @@ export async function listRuntimeSchedulerCandidates(limit = 10) {
   return result.rows;
 }
 
+/**
+ * Get all enrolled courses + runtime state + lesson progress for a wallet.
+ * Used by the web app to restore state on login from a fresh browser.
+ */
+export async function getUserEnrollments(walletAddress) {
+  if (!hasDatabase()) {
+    return { enrollments: [], lessonProgress: [] };
+  }
+
+  // Get enrollments with runtime state in one query
+  const enrollResult = await queryAsWallet(
+    walletAddress,
+    `
+      SELECT
+        uce.course_id AS "courseId",
+        uce.enrolled_at AS "enrolledAt",
+        ucrs.current_streak AS "currentStreak",
+        ucrs.longest_streak AS "longestStreak",
+        ucrs.gauntlet_active AS "gauntletActive",
+        ucrs.gauntlet_day AS "gauntletDay",
+        ucrs.saver_count AS "saverCount",
+        ucrs.saver_recovery_mode AS "saverRecoveryMode",
+        ucrs.current_yield_redirect_bps AS "currentYieldRedirectBps",
+        ucrs.extension_days AS "extensionDays",
+        ucrs.fuel_counter AS "fuelCounter",
+        ucrs.fuel_cap AS "fuelCap",
+        ucrs.last_fuel_credit_day AS "lastFuelCreditDay",
+        ucrs.last_brewer_burn_ts AS "lastBrewerBurnTs"
+      FROM lesson.user_course_enrollments uce
+      LEFT JOIN lesson.user_course_runtime_state ucrs
+        ON ucrs.wallet_address = uce.wallet_address AND ucrs.course_id = uce.course_id
+      WHERE uce.wallet_address = $1
+      ORDER BY uce.enrolled_at DESC
+    `,
+    [walletAddress],
+  );
+
+  // Get all completed lesson progress
+  const progressResult = await queryAsWallet(
+    walletAddress,
+    `
+      SELECT
+        lesson_id AS "lessonId",
+        completed,
+        score,
+        completed_at AS "completedAt"
+      FROM lesson.user_lesson_progress
+      WHERE wallet_address = $1 AND completed = true
+    `,
+    [walletAddress],
+  );
+
+  // Shape enrollments with runtime snapshots
+  const enrollments = enrollResult.rows.map((row) => ({
+    courseId: row.courseId,
+    enrolledAt: row.enrolledAt,
+    runtime: row.currentStreak != null
+      ? {
+          courseId: row.courseId,
+          currentStreak: row.currentStreak,
+          longestStreak: row.longestStreak,
+          gauntletActive: row.gauntletActive,
+          gauntletDay: row.gauntletDay,
+          saverCount: row.saverCount,
+          saverRecoveryMode: row.saverRecoveryMode,
+          currentYieldRedirectBps: row.currentYieldRedirectBps,
+          extensionDays: row.extensionDays,
+          fuelCounter: row.fuelCounter,
+          fuelCap: row.fuelCap,
+          lastFuelCreditDay: row.lastFuelCreditDay,
+          lastBrewerBurnTs: row.lastBrewerBurnTs,
+          fuelAwarded: 0,
+          fuelEarnStatus: 'AVAILABLE',
+        }
+      : null,
+  }));
+
+  return {
+    enrollments,
+    lessonProgress: progressResult.rows,
+  };
+}
+
 export async function getCourseRuntimeSnapshot(walletAddress, courseId) {
   if (!hasDatabase()) {
     return {

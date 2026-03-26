@@ -6,6 +6,8 @@ import { Sidebar } from './Sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserStore } from '@/stores/userStore';
 import { useCourseStore } from '@/stores/courseStore';
+import { useFlameStore } from '@/stores/flameStore';
+import { getUserEnrollments } from '@/services/api/progress/progressApi';
 import { T } from './theme';
 
 // Routes that don't require authentication
@@ -131,6 +133,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Enforce flow
   useFlowGuard();
+
+  // Background sync: restore enrollments + progress from backend on reconnect
+  // (handles case where user returns with persisted JWT but localStorage was cleared)
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    const token = useUserStore.getState().authToken;
+    if (!token) return;
+    getUserEnrollments(token)
+      .then((data) => {
+        useCourseStore.getState().restoreFromBackend(data);
+        const bestStreak = Math.max(
+          ...data.enrollments.map((e) => e.runtime?.currentStreak ?? 0),
+          0,
+        );
+        if (bestStreak > 0) {
+          useFlameStore.getState().updateFromStreak(bestStreak);
+        }
+      })
+      .catch(() => {}); // Fail silently — local state is still usable
+  }, [hydrated, isAuthenticated]);
 
   // Loading spinner while stores rehydrate (matches RN AppNavigator)
   if (!hydrated) {

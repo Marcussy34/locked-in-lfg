@@ -167,6 +167,21 @@ export interface CourseRuntimeSnapshot {
   fuelEarnStatus: ApiFuelEarnStatus;
 }
 
+/** Response from GET /v1/progress/enrollments — all enrolled courses + progress for a wallet */
+export interface UserEnrollmentsResponse {
+  enrollments: {
+    courseId: string;
+    enrolledAt: string;
+    runtime: CourseRuntimeSnapshot | null;
+  }[];
+  lessonProgress: {
+    lessonId: string;
+    completed: boolean;
+    score: number;
+    completedAt: string;
+  }[];
+}
+
 export interface ProgressSubmitLessonResponse {
   lessonId: string;
   attemptId: string;

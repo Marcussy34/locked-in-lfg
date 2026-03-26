@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { useWalletConnection } from '@solana/react-hooks';
 import { useAuth } from '@/hooks/useAuth';
+import { getUserEnrollments } from '@/services/api/progress/progressApi';
+import { useUserStore } from '@/stores/userStore';
+import { useCourseStore } from '@/stores/courseStore';
+import { useFlameStore } from '@/stores/flameStore';
 import { T } from './theme';
 
 /**
@@ -41,6 +45,25 @@ export function WalletConnect() {
 
       // 4. Authenticate: challenge → sign → verify (prompts user once for signature)
       await authenticate(address);
+
+      // 5. Sync state from backend (enrollments + progress + runtime)
+      const token = useUserStore.getState().authToken;
+      if (token) {
+        try {
+          const data = await getUserEnrollments(token);
+          useCourseStore.getState().restoreFromBackend(data);
+          // Sync flame from best streak across all courses
+          const bestStreak = Math.max(
+            ...data.enrollments.map((e) => e.runtime?.currentStreak ?? 0),
+            0,
+          );
+          if (bestStreak > 0) {
+            useFlameStore.getState().updateFromStreak(bestStreak);
+          }
+        } catch (syncError) {
+          console.warn('[sync] Failed to restore from backend:', syncError);
+        }
+      }
     } catch (error) {
       // User rejected or network error — already handled in useAuth
       console.warn('[wallet] Connect/auth failed:', error);
