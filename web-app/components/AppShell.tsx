@@ -1,0 +1,164 @@
+'use client';
+
+import { type ReactNode, useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Sidebar } from './Sidebar';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserStore } from '@/stores/userStore';
+import { useCourseStore } from '@/stores/courseStore';
+import { T } from './theme';
+
+// Routes that don't require authentication
+const PUBLIC_ROUTES = ['/'];
+
+// Routes allowed during onboarding (before active lock)
+const ONBOARDING_ROUTES = ['/onboarding/courses', '/onboarding/deposit', '/onboarding/gauntlet'];
+
+/**
+ * Flow enforcement — mirrors AppNavigator.tsx from the RN app exactly.
+ *
+ * 1. No wallet/JWT → landing page only
+ * 2. phase 'auth' → landing page
+ * 3. phase 'onboarding', no active lock → onboarding routes only
+ * 4. phase 'onboarding'/'gauntlet' WITH active lock → main routes
+ * 5. phase 'gauntlet', no active lock → onboarding/gauntlet
+ * 6. phase 'main' → all main routes
+ */
+function useFlowGuard() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
+
+  const phase = useUserStore((s) => s.onboardingPhase);
+  const walletAddress = useUserStore((s) => s.walletAddress);
+  const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
+  const courseStates = useCourseStore((s) => s.courseStates);
+
+  // Check if user has an active on-chain lock (same logic as AppNavigator)
+  const activeLockCourseIds = activeCourseIds.filter(
+    (courseId: string) => Boolean(courseStates[courseId]?.lockAccountAddress),
+  );
+  const hasActiveLock = activeLockCourseIds.length > 0;
+
+  useEffect(() => {
+    // Skip guard on public routes
+    if (PUBLIC_ROUTES.includes(pathname)) return;
+
+    // Gate 1: No wallet/JWT → back to landing
+    if (!walletAddress || !isAuthenticated) {
+      router.replace('/');
+      return;
+    }
+
+    // Gate 2: phase 'auth' → back to landing
+    if (phase === 'auth') {
+      router.replace('/');
+      return;
+    }
+
+    // Gate 3: phase 'onboarding' or 'gauntlet' WITH active lock → allow main routes
+    if ((phase === 'onboarding' || phase === 'gauntlet') && hasActiveLock) {
+      // User has an active lock, they can access main routes
+      // If they're on an onboarding route, send them to courses
+      if (ONBOARDING_ROUTES.includes(pathname)) {
+        router.replace('/courses');
+      }
+      return;
+    }
+
+    // Gate 4: phase 'onboarding', no active lock → onboarding routes only
+    if (phase === 'onboarding') {
+      const isOnboardingRoute = ONBOARDING_ROUTES.some((r) => pathname.startsWith(r));
+      if (!isOnboardingRoute) {
+        router.replace('/onboarding/courses');
+      }
+      return;
+    }
+
+    // Gate 5: phase 'gauntlet', no active lock → gauntlet page
+    if (phase === 'gauntlet' && !hasActiveLock) {
+      if (pathname !== '/onboarding/gauntlet') {
+        router.replace('/onboarding/gauntlet');
+      }
+      return;
+    }
+
+    // Gate 6: phase 'main' → allow everything
+    // (no redirect needed)
+  }, [pathname, walletAddress, isAuthenticated, phase, hasActiveLock, router]);
+}
+
+/** Block rendering until persisted Zustand stores have rehydrated from localStorage */
+function useStoresHydrated(): boolean {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      if (
+        useUserStore.persist.hasHydrated() &&
+        useCourseStore.persist.hasHydrated()
+      ) {
+        setReady(true);
+      }
+    };
+
+    // Check immediately
+    check();
+
+    // Listen for hydration
+    const unsubs = [
+      useUserStore.persist.onFinishHydration(check),
+      useCourseStore.persist.onFinishHydration(check),
+    ];
+
+    return () => unsubs.forEach((u) => u());
+  }, []);
+
+  return ready;
+}
+
+/**
+ * App shell — matches AppNavigator from the mobile app.
+ * Enforces onboarding flow, shows sidebar only for main routes,
+ * waits for store hydration before rendering.
+ */
+export function AppShell({ children }: { children: ReactNode }) {
+  const hydrated = useStoresHydrated();
+  const { isAuthenticated } = useAuth();
+  const phase = useUserStore((s) => s.onboardingPhase);
+  const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
+  const courseStates = useCourseStore((s) => s.courseStates);
+
+  // Enforce flow
+  useFlowGuard();
+
+  // Loading spinner while stores rehydrate (matches RN AppNavigator)
+  if (!hydrated) {
+    return (
+      <div
+        className="flex items-center justify-center min-h-screen"
+        style={{ backgroundColor: T.bg }}
+      >
+        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${T.amber}40`, borderTopColor: 'transparent' }} />
+      </div>
+    );
+  }
+
+  // Determine if sidebar should show (only in main app, not during onboarding/auth)
+  const activeLockCourseIds = activeCourseIds.filter(
+    (courseId: string) => Boolean(courseStates[courseId]?.lockAccountAddress),
+  );
+  const hasActiveLock = activeLockCourseIds.length > 0;
+  const isInMainApp =
+    isAuthenticated &&
+    (phase === 'main' || ((phase === 'onboarding' || phase === 'gauntlet') && hasActiveLock));
+
+  return (
+    <>
+      {isInMainApp && <Sidebar />}
+      <main className={`flex-1 ${isInMainApp ? 'ml-56' : ''}`}>
+        {children}
+      </main>
+    </>
+  );
+}

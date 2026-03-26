@@ -1,0 +1,7 @@
+import { withSerwist } from '@serwist/turbopack';
+
+export default withSerwist({
+  turbopack: {
+    root: process.cwd(),
+  },
+});

@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --background: #06060C;
+  --foreground: #E8DED0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Dead Cells palette */
+  --color-amber: #D4A04A;
+  --color-amber-dim: #8B6914;
+  --color-dc-green: #3EE68A;
+  --color-crimson: #FF4466;
+  --color-teal: #2AE8D4;
+  --color-violet: #9945FF;
+  --color-rust: #E8845A;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

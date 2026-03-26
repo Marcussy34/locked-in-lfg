@@ -56,5 +56,13 @@ window.addEventListener('camera-arrived', ((e: CustomEvent) => {
   sendToRN({ type: 'objectTapped', payload: { objectId } });
 }) as EventListener);
 
-// Expose on window so RN can call it
+// Expose on window so RN can call it via injectJavaScript
 (window as any).dispatchBridgeMessage = dispatchBridgeMessage;
+
+// Listen for postMessage from parent iframe host (Next.js PWA)
+// This enables the same bridge when embedded as an iframe instead of a WebView
+window.addEventListener('message', (event) => {
+  if (event.source === window) return; // ignore own messages
+  const raw = typeof event.data === 'string' ? event.data : JSON.stringify(event.data);
+  dispatchBridgeMessage(raw);
+});
