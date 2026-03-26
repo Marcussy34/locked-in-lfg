@@ -35,6 +35,12 @@ function csvList(value) {
     .filter(Boolean);
 }
 
+// Browser Origin headers never include a trailing slash — strip them
+// so a misconfigured env var like "https://example.com/" still matches.
+function sanitizeOrigins(origins) {
+  return origins.map((o) => o.replace(/\/+$/, ''));
+}
+
 function resolveYieldStrategyProfile(profile) {
   switch ((profile ?? '').trim()) {
     case 'fixed_apy_dev':
@@ -189,6 +195,7 @@ export const appConfig = {
     process.env.LOCK_VAULT_WORKER_PRIVATE_KEY ??
     process.env.DEPLOYER_PRIVATE_KEY ??
     '',
-  corsAllowedOrigins:
+  corsAllowedOrigins: sanitizeOrigins(
     configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins,
+  ),
 };
