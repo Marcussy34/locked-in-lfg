@@ -134,7 +134,7 @@ function CourseCard({
       : 0;
 
   return (
-    <button onClick={onPress} className="w-full text-left transition-opacity hover:opacity-[0.85]">
+    <div onClick={onPress} role="button" tabIndex={0} className="w-full text-left transition-opacity hover:opacity-[0.85] cursor-pointer">
       <ParchmentCard>
         {/* Top row: sigil + tags + difficulty */}
         <div className="flex items-center gap-2 mb-3">
@@ -186,7 +186,7 @@ function CourseCard({
         {/* Stats row */}
         <StatsRow course={course} accentColor={accentColor} />
       </ParchmentCard>
-    </button>
+    </div>
   );
 }
 
