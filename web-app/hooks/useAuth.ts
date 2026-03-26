@@ -98,8 +98,18 @@ export function useAuth() {
     attemptedRef.current = null;
   }, [disconnect, disconnectUser]);
 
-  // Auto-authenticate when wallet connects
+  // Wait for store hydration before auto-auth — prevents sign message
+  // from firing when persisted walletAddress/accessToken haven't loaded yet
+  const [hydrated, setHydrated] = useState(useUserStore.persist.hasHydrated());
   useEffect(() => {
+    if (hydrated) return;
+    return useUserStore.persist.onFinishHydration(() => setHydrated(true));
+  }, [hydrated]);
+
+  // Auto-authenticate when wallet connects (only after store hydration)
+  useEffect(() => {
+    if (!hydrated) return;
+
     if (!connectedAddress) {
       // Wallet disconnected
       if (walletAddress) {
@@ -110,7 +120,7 @@ export function useAuth() {
       return;
     }
 
-    // Already authenticated with this address
+    // Already authenticated with this address — skip sign message
     if (connectedAddress === walletAddress && accessToken) return;
 
     // Don't retry automatically if we already failed for this address
@@ -118,7 +128,7 @@ export function useAuth() {
 
     // New wallet connection — authenticate
     authenticate(connectedAddress);
-  }, [connectedAddress, walletAddress, accessToken, authenticate, disconnectUser]);
+  }, [hydrated, connectedAddress, walletAddress, accessToken, authenticate, disconnectUser]);
 
   return {
     isConnected: !!connectedAddress,
