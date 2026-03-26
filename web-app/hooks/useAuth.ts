@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useWalletSession, useDisconnectWallet } from '@solana/react-hooks';
 import { useUserStore } from '@/stores';
 import { createAuthChallenge, verifyAuthChallenge } from '@/services/api/auth/authApi';
@@ -15,16 +15,17 @@ function setAuthCookie(value: boolean) {
 }
 
 /**
- * Handles the challenge -> sign -> JWT auth flow after wallet connects.
- * Watches the wallet session and triggers auth when a new wallet connects.
+ * Auth hook — imperative flow matching the Android app.
+ *
+ * Android: user taps "Connect Wallet" → handleConnect() runs connect + sign + verify sequentially.
+ * Web:     user clicks "Connect Wallet" → WalletConnect calls connect(), then calls authenticate().
+ *
+ * NO auto-auth effects. The sign message is triggered exactly once by the button handler.
  */
 export function useAuth() {
   const session = useWalletSession();
   const disconnect = useDisconnectWallet();
-  const authInFlight = useRef(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  // Track which address we already attempted auth for to prevent retry loops
-  const attemptedRef = useRef<string | null>(null);
 
   const walletAddress = useUserStore((s) => s.walletAddress);
   const accessToken = useUserStore((s) => s.authToken);
@@ -32,13 +33,11 @@ export function useAuth() {
   const setAuthSession = useUserStore((s) => s.setAuthSession);
   const disconnectUser = useUserStore((s) => s.disconnect);
 
-  // Derive the connected wallet address from framework-kit session
   const connectedAddress = session?.account?.address?.toString() ?? null;
 
-  // Run auth flow when wallet connects
+  // Imperative auth — called directly by WalletConnect after connect() succeeds.
+  // Mirrors Android's handleConnect: challenge → sign → verify → store.
   const authenticate = useCallback(async (address: string) => {
-    if (authInFlight.current) return;
-    authInFlight.current = true;
     setAuthError(null);
 
     try {
@@ -68,73 +67,43 @@ export function useAuth() {
       setWallet(address);
       setAuthSession(authSession.accessToken, authSession.refreshToken);
       setAuthCookie(true);
-      attemptedRef.current = null;
     } catch (error) {
       console.error('[auth] Authentication failed:', error);
       const message = error instanceof Error ? error.message : 'Authentication failed';
       setAuthError(message);
-      // Mark this address as attempted so we don't retry automatically
-      attemptedRef.current = address;
-      // Don't disconnect the wallet — let user retry or disconnect manually
-    } finally {
-      authInFlight.current = false;
+      throw error; // Let caller handle
     }
   }, [session, setWallet, setAuthSession]);
 
-  // Manual retry
+  // Manual retry — called from WalletConnect UI
   const retry = useCallback(() => {
     if (connectedAddress) {
-      attemptedRef.current = null;
-      authenticate(connectedAddress);
+      authenticate(connectedAddress).catch(() => {});
     }
   }, [connectedAddress, authenticate]);
 
-  // Manual disconnect
+  // Disconnect — clears wallet + auth state
   const handleDisconnect = useCallback(async () => {
     await disconnect();
     disconnectUser();
     setAuthCookie(false);
     setAuthError(null);
-    attemptedRef.current = null;
   }, [disconnect, disconnectUser]);
 
-  // Wait for store hydration before auto-auth — prevents sign message
-  // from firing when persisted walletAddress/accessToken haven't loaded yet
-  const [hydrated, setHydrated] = useState(useUserStore.persist.hasHydrated());
+  // Cleanup: if wallet disconnects externally, clear auth state
   useEffect(() => {
-    if (hydrated) return;
-    return useUserStore.persist.onFinishHydration(() => setHydrated(true));
-  }, [hydrated]);
-
-  // Auto-authenticate when wallet connects (only after store hydration)
-  useEffect(() => {
-    if (!hydrated) return;
-
-    if (!connectedAddress) {
-      // Wallet disconnected
-      if (walletAddress) {
-        disconnectUser();
-        setAuthCookie(false);
-      }
-      attemptedRef.current = null;
-      return;
+    if (!connectedAddress && walletAddress) {
+      disconnectUser();
+      setAuthCookie(false);
     }
-
-    // Already authenticated with this address — skip sign message
-    if (connectedAddress === walletAddress && accessToken) return;
-
-    // Don't retry automatically if we already failed for this address
-    if (attemptedRef.current === connectedAddress) return;
-
-    // New wallet connection — authenticate
-    authenticate(connectedAddress);
-  }, [hydrated, connectedAddress, walletAddress, accessToken, authenticate, disconnectUser]);
+  }, [connectedAddress, walletAddress, disconnectUser]);
 
   return {
     isConnected: !!connectedAddress,
     isAuthenticated: !!accessToken,
     walletAddress: connectedAddress,
     authError,
+    authenticate, // Exposed for imperative use by WalletConnect
     retry,
     disconnect: handleDisconnect,
   };
