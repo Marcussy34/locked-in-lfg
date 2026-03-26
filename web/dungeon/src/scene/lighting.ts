@@ -49,10 +49,10 @@ export function setupLighting(scene: Scene) {
   // Start in dungeon mode (dark atmospheric lighting)
   applyDungeonMode();
 
-  // --- Draggable light orb (dev only, skip on mobile) ---
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    || (navigator.maxTouchPoints > 0 && window.innerWidth < 768);
-  if (!isMobile) createDraggableOrb(scene);
+  // Draggable light orb — disabled for production
+  // const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  //   || (navigator.maxTouchPoints > 0 && window.innerWidth < 768);
+  // if (!isMobile) createDraggableOrb(scene);
 }
 
 function createDraggableOrb(scene: Scene) {

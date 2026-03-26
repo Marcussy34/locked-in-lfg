@@ -334,8 +334,8 @@ export async function createDungeonGeometry(scene: Scene) {
   for (const c of candlePositions) addCandleLight(scene, c.pos, c.name);
   for (const lamp of saverLampPositions) addSaverLampGlow(scene, lamp.pos, lamp.name);
 
-  // Gizmo system — dev only, skip on mobile (saves per-frame picking overhead)
-  if (!isMobile) setupGizmos(scene);
+  // Gizmo system — disabled for production
+  // if (!isMobile) setupGizmos(scene);
 }
 
 /* ---------- Room geometry helpers ---------- */
