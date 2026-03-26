@@ -54,60 +54,46 @@ export function WalletConnect() {
     return <div className="h-12 w-48 bg-white/5 rounded-lg animate-pulse" />;
   }
 
-  // Connected state — show address + auth status
-  if (connected && wallet) {
+  // Connected + authenticated — show address + disconnect
+  if (connected && wallet && isAuthenticated) {
     const address = wallet.account.address.toString();
     const shortAddress = `${address.slice(0, 4)}...${address.slice(-4)}`;
 
-    // If wallet is connected but not authenticated, trigger auth imperatively
-    if (!isAuthenticated && !authError && !authInProgress) {
-      // Wallet was connected (e.g. auto-reconnect) but JWT is missing — authenticate
-      authenticate(address).catch(() => {});
-      setAuthInProgress(true);
-    }
-
     return (
-      <div className="flex flex-col items-center gap-3">
-        {authError && (
-          <div className="text-center space-y-2 max-w-xs">
-            <p className="text-red-400 text-sm">{authError}</p>
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={retry}
-                className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
-                style={{ backgroundColor: T.violet, color: '#1A1000' }}
-              >
-                Retry
-              </button>
-              <button
-                onClick={disconnect}
-                className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
-                style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-        )}
+      <div className="flex items-center gap-3">
+        <span className="text-green-400 text-sm">Connected</span>
+        <button
+          onClick={disconnect}
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-85"
+          style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
+        >
+          {shortAddress}
+        </button>
+      </div>
+    );
+  }
 
-        {!authError && (
-          <div className="flex items-center gap-3">
-            <div className="text-sm">
-              {isAuthenticated ? (
-                <span className="text-green-400">Authenticated</span>
-              ) : (
-                <span className="text-yellow-400">Signing in...</span>
-              )}
-            </div>
-            <button
-              onClick={disconnect}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-85"
-              style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
-            >
-              {shortAddress}
-            </button>
-          </div>
-        )}
+  // Auth error state — show retry + disconnect
+  if (authError) {
+    return (
+      <div className="text-center space-y-2 max-w-xs mx-auto">
+        <p className="text-red-400 text-sm">{authError}</p>
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={retry}
+            className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
+            style={{ backgroundColor: T.violet, color: '#1A1000' }}
+          >
+            Retry
+          </button>
+          <button
+            onClick={disconnect}
+            className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
+            style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
+          >
+            Disconnect
+          </button>
+        </div>
       </div>
     );
   }
