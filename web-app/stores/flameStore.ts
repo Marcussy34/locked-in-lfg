@@ -15,14 +15,14 @@ const INTENSITY_MAP: Record<FlameState, number> = {
   BURNING: 1.0,
   LIT: 0.6,
   SPUTTERING: 0.25,
-  COLD: 0.05,
+  COLD: 0.15, // Raised from 0.05 — dungeon must be visible even with no streak
 };
 
 const initialState: FlameData = {
   flameState: 'COLD',
   fuelRemaining: 0,
   lastTickAt: null,
-  lightIntensity: 0.05,
+  lightIntensity: 0.15,
 };
 
 function deriveFlameState(streak: number): FlameState {

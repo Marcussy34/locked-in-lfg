@@ -170,11 +170,19 @@ export default function DungeonPage() {
     useCourseStore.getState().initializeContent().catch(() => {});
   }, []);
 
-  // Refresh course runtime from backend (flame store stays untouched —
-  // it syncs from persisted localStorage and updates only when lessons are completed)
+  // Refresh course runtime from backend and sync flame if real streak data exists
   useEffect(() => {
     if (!activeCourseId || !authToken) return;
-    refreshCourseRuntime(activeCourseId, authToken).catch(() => {});
+    refreshCourseRuntime(activeCourseId, authToken)
+      .then(() => {
+        // Only sync flame if the backend actually returned streak data
+        // (courseState.currentStreak is set by syncCourseRuntime from the API response)
+        const state = useCourseStore.getState().courseStates[activeCourseId];
+        if (state && state.currentStreak > 0) {
+          useFlameStore.getState().updateFromStreak(state.currentStreak);
+        }
+      })
+      .catch(() => {});
   }, [activeCourseId, authToken, refreshCourseRuntime]);
 
   // Error state — fixed z-[5] so it stacks above the dungeon iframe (z-0)
