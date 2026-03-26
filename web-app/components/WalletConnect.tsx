@@ -2,6 +2,7 @@
 
 import { useWalletConnection } from '@solana/react-hooks';
 import { useAuth } from '@/hooks/useAuth';
+import { T } from './theme';
 
 /**
  * Wallet connect dropdown — lists discovered Wallet Standard wallets.
@@ -33,13 +34,15 @@ export function WalletConnect() {
             <div className="flex gap-2 justify-center">
               <button
                 onClick={retry}
-                className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm transition-colors"
+                className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
+                style={{ backgroundColor: T.violet, color: '#1A1000' }}
               >
                 Retry
               </button>
               <button
                 onClick={authDisconnect}
-                className="px-4 py-2 bg-white/10 hover:bg-white/15 text-foreground rounded-lg text-sm transition-colors"
+                className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
+                style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
               >
                 Disconnect
               </button>
@@ -58,7 +61,8 @@ export function WalletConnect() {
             </div>
             <button
               onClick={authDisconnect}
-              className="px-4 py-2 bg-white/10 hover:bg-white/15 text-foreground rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-85"
+              style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
             >
               {shortAddress}
             </button>
@@ -73,7 +77,15 @@ export function WalletConnect() {
     return (
       <button
         disabled
-        className="px-6 py-3 bg-brand-500/50 text-white rounded-lg font-medium cursor-wait"
+        className="px-6 py-3 rounded-lg cursor-wait"
+        style={{
+          backgroundColor: 'rgba(153,69,255,0.5)',
+          color: '#1A1000',
+          fontFamily: 'Georgia, serif',
+          fontWeight: 800,
+          letterSpacing: 2.5,
+          textTransform: 'uppercase' as const,
+        }}
       >
         Connecting...
       </button>
@@ -91,7 +103,8 @@ export function WalletConnect() {
           href="https://phantom.app"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-brand-400 hover:text-brand-300 text-sm underline"
+          className="text-sm underline transition-opacity hover:opacity-75"
+          style={{ color: T.violet }}
         >
           Install Phantom
         </a>
@@ -105,9 +118,19 @@ export function WalletConnect() {
     return (
       <button
         onClick={() => connect(connector.id)}
-        className="px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-medium transition-colors"
+        className="w-full py-3.5 rounded-lg transition-opacity hover:opacity-85"
+        style={{
+          backgroundColor: T.violet,
+          border: '1px solid #B06AFF',
+          fontFamily: 'Georgia, serif',
+          fontWeight: 800,
+          letterSpacing: 2.5,
+          textTransform: 'uppercase' as const,
+          color: '#1A1000',
+          fontSize: 14,
+        }}
       >
-        Connect {connector.name}
+        Connect Wallet
       </button>
     );
   }
@@ -119,7 +142,17 @@ export function WalletConnect() {
         <button
           key={connector.id}
           onClick={() => connect(connector.id)}
-          className="px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-medium transition-colors"
+          className="w-full py-3.5 rounded-lg transition-opacity hover:opacity-85"
+          style={{
+            backgroundColor: T.violet,
+            border: '1px solid #B06AFF',
+            fontFamily: 'Georgia, serif',
+            fontWeight: 800,
+            letterSpacing: 2.5,
+            textTransform: 'uppercase' as const,
+            color: '#1A1000',
+            fontSize: 14,
+          }}
         >
           Connect {connector.name}
         </button>

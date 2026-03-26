@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDungeon } from '@/components/DungeonProvider';
 import { useCourseStore } from '@/stores/courseStore';
+import { useUserStore } from '@/stores/userStore';
 import type { BrewModeId } from '@/types';
 import type { Viewpoint } from '@/types';
 import { useFlameStore } from '@/stores/flameStore';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useStreakStore } from '@/stores/streakStore';
 import { T, ParchmentCard, ProgressBar } from '@/components/theme';
+import { User } from 'lucide-react';
 
 export default function DungeonPage() {
   const router = useRouter();
@@ -28,6 +30,8 @@ export default function DungeonPage() {
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
   const setActiveCourse = useCourseStore((s) => s.setActiveCourse);
+  const refreshCourseRuntime = useCourseStore((s) => s.refreshCourseRuntime);
+  const authToken = useUserStore((s) => s.authToken);
 
   const [bookModalVisible, setBookModalVisible] = useState(false);
 
@@ -166,10 +170,21 @@ export default function DungeonPage() {
     useCourseStore.getState().initializeContent().catch(() => {});
   }, []);
 
-  // Error state
+  // Refresh course runtime from backend and sync flame store with real streak
+  useEffect(() => {
+    if (!activeCourseId || !authToken) return;
+    refreshCourseRuntime(activeCourseId, authToken)
+      .then(() => {
+        const streak = useCourseStore.getState().courseStates[activeCourseId]?.currentStreak ?? 0;
+        useFlameStore.getState().updateFromStreak(streak);
+      })
+      .catch(() => {});
+  }, [activeCourseId, authToken, refreshCourseRuntime]);
+
+  // Error state — fixed z-[5] so it stacks above the dungeon iframe (z-0)
   if (iframeError) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: T.bg }}>
+      <div className="fixed inset-0 z-[5] flex items-center justify-center" style={{ backgroundColor: T.bg }}>
         <div className="text-center space-y-4">
           <h2 className="text-xl font-bold" style={{ color: T.crimson }}>Dungeon Error</h2>
           <p style={{ color: T.textSecondary }}>{iframeError}</p>
@@ -185,10 +200,10 @@ export default function DungeonPage() {
     );
   }
 
-  // Loading state
+  // Loading state — fixed z-[5] so it stacks above the dungeon iframe (z-0)
   if (!sceneReady) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: '#050508' }}>
+      <div className="fixed inset-0 z-[5] flex items-center justify-center" style={{ backgroundColor: '#050508' }}>
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: '#ff8c42', borderTopColor: 'transparent' }} />
           <p className="text-sm" style={{ color: '#888' }}>
@@ -199,9 +214,24 @@ export default function DungeonPage() {
     );
   }
 
-  // Dungeon is rendering via iframe — show book modal overlay when open
+  // Dungeon is rendering via iframe — show profile button + book modal overlay
   return (
     <>
+      {/* Floating profile button — matches Android UndergroundHubScreen overlay (mobile only, desktop has sidebar) */}
+      <button
+        onClick={() => router.push('/profile')}
+        className="fixed top-4 right-4 z-30 flex items-center justify-center md:hidden"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 22,
+          backgroundColor: 'rgba(14,14,28,0.88)',
+          border: `1px solid ${T.borderAlive}`,
+        }}
+      >
+        <User size={18} color={T.amber} strokeWidth={2.5} />
+      </button>
+
       {/* Book modal — lesson browser overlay */}
       {bookModalVisible && (
         <BookModal

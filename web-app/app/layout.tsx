@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Providers } from './providers';
 import { SerwistProvider } from './serwist';
 import { AppShell } from '@/components/AppShell';
+import { AnimatedSplash } from '@/components/AnimatedSplash';
 import './globals.css';
 
 const geistSans = Geist({
@@ -37,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0ea5e9',
+  themeColor: '#06060C',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -49,7 +50,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body className="min-h-full flex flex-col">
         <SerwistProvider swUrl="/serwist/sw.js">
           <Providers>
-            <AppShell>{children}</AppShell>
+            <AppShell>
+              <AnimatedSplash>{children}</AnimatedSplash>
+            </AppShell>
           </Providers>
         </SerwistProvider>
       </body>

@@ -28,7 +28,7 @@ export function Sidebar() {
 
   return (
     <nav
-      className="fixed left-0 top-0 bottom-0 w-56 border-r flex flex-col z-20"
+      className="fixed left-0 top-0 bottom-0 w-56 border-r hidden md:flex flex-col z-20"
       style={{
         backgroundColor: T.bg,
         borderColor: T.borderDormant,

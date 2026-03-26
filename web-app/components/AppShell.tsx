@@ -156,7 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       {isInMainApp && <Sidebar />}
-      <main className={`flex-1 ${isInMainApp ? 'ml-56' : ''}`}>
+      <main className={`flex-1 ${isInMainApp ? 'md:ml-56' : ''}`}>
         {children}
       </main>
     </>

@@ -32,6 +32,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Claude Code auto-generated context
+**/CLAUDE.md
+
 # local env files
 .env
 .env*.local

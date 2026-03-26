@@ -23,29 +23,38 @@ export const T = {
 
 // ── Reusable components (web equivalents of RN theme components) ──
 
-/** Full-screen dark background wrapper */
+/** Full-screen wood-textured background wrapper (matches RN ScreenBackground) */
 export function ScreenBackground({ children }: { children: ReactNode }) {
   return (
     <div
-      className="min-h-screen"
-      style={{ backgroundColor: T.bg }}
+      className="min-h-screen relative"
+      style={{
+        backgroundColor: T.bg,
+        backgroundImage: "url('/images/wood.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
     >
-      <div className="max-w-2xl mx-auto px-[18px] pb-10">
+      {/* Semi-transparent overlay — creates the 60% texture opacity matching Android's imageStyle={{ opacity: 0.6 }} */}
+      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
+      <div className="relative max-w-2xl mx-auto px-[18px] pb-10">
         {children}
       </div>
     </div>
   );
 }
 
-/** Parchment-textured card */
+/** Parchment-textured card (matches RN ParchmentCard with ImageBackground) */
 export function ParchmentCard({
   children,
   className = '',
   style,
+  opacity = 0.35,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  opacity?: number;
 }) {
   return (
     <div
@@ -56,7 +65,16 @@ export function ParchmentCard({
         ...style,
       }}
     >
-      {children}
+      {/* Parchment texture overlay — matches RN imageStyle={{ borderRadius: 9, opacity }} */}
+      <div
+        className="absolute inset-0 rounded-[9px]"
+        style={{
+          backgroundImage: "url('/images/parchment.png')",
+          backgroundSize: 'cover',
+          opacity,
+        }}
+      />
+      <div className="relative">{children}</div>
     </div>
   );
 }
@@ -144,7 +162,7 @@ export function StatBox({
   className?: string;
 }) {
   return (
-    <ParchmentCard className={`flex-1 flex flex-col items-center p-3 ${className}`}>
+    <ParchmentCard className={`flex-1 flex flex-col items-center p-3 ${className}`} opacity={0.25}>
       <span
         className="font-mono text-[10px] uppercase tracking-[1px]"
         style={{ color: T.textSecondary }}

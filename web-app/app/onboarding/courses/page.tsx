@@ -187,8 +187,18 @@ export default function OnboardingCoursesPage() {
     : null;
 
   return (
-    <div className="min-h-screen relative" style={{ backgroundColor: T.bg }}>
-      <div className="max-w-2xl mx-auto px-[18px] pb-32">
+    <div
+      className="min-h-screen relative"
+      style={{
+        backgroundColor: T.bg,
+        backgroundImage: "url('/images/wood.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Wood texture overlay — matches ScreenBackground */}
+      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
+      <div className="relative max-w-2xl mx-auto px-[18px] pb-32">
         {/* Header */}
         <div className="text-center pt-5 pb-7">
           {/* Decorative diamond line */}
