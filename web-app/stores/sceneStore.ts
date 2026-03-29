@@ -9,7 +9,7 @@ interface SceneStore extends SceneState {
 
 export const useSceneStore = create<SceneStore>()((set) => ({
   currentViewpoint: 'overview',
-  roomPhase: 'gauntlet',
+  roomPhase: 'underground',
   isTransitioning: false,
 
   setViewpoint: (viewpoint) => set({ currentViewpoint: viewpoint }),

@@ -14,7 +14,7 @@ import { T } from './theme';
 const PUBLIC_ROUTES = ['/'];
 
 // Routes allowed during onboarding (before active lock)
-const ONBOARDING_ROUTES = ['/onboarding/courses', '/onboarding/deposit', '/onboarding/gauntlet'];
+const ONBOARDING_ROUTES = ['/onboarding/courses', '/onboarding/deposit'];
 
 /**
  * Flow enforcement — mirrors AppNavigator.tsx from the RN app exactly.
@@ -22,9 +22,8 @@ const ONBOARDING_ROUTES = ['/onboarding/courses', '/onboarding/deposit', '/onboa
  * 1. No wallet/JWT → landing page only
  * 2. phase 'auth' → landing page
  * 3. phase 'onboarding', no active lock → onboarding routes only
- * 4. phase 'onboarding'/'gauntlet' WITH active lock → main routes
- * 5. phase 'gauntlet', no active lock → onboarding/gauntlet
- * 6. phase 'main' → all main routes
+ * 4. phase 'onboarding' WITH active lock → main routes
+ * 5. phase 'main' → all main routes
  */
 function useFlowGuard() {
   const pathname = usePathname();
@@ -58,8 +57,8 @@ function useFlowGuard() {
       return;
     }
 
-    // Gate 3: phase 'onboarding' or 'gauntlet' WITH active lock → allow main routes
-    if ((phase === 'onboarding' || phase === 'gauntlet') && hasActiveLock) {
+    // Gate 3: phase 'onboarding' WITH active lock → allow main routes
+    if (phase === 'onboarding' && hasActiveLock) {
       // User has an active lock, they can access main routes
       // If they're on an onboarding route, send them to courses
       if (ONBOARDING_ROUTES.includes(pathname)) {
@@ -77,15 +76,7 @@ function useFlowGuard() {
       return;
     }
 
-    // Gate 5: phase 'gauntlet', no active lock → gauntlet page
-    if (phase === 'gauntlet' && !hasActiveLock) {
-      if (pathname !== '/onboarding/gauntlet') {
-        router.replace('/onboarding/gauntlet');
-      }
-      return;
-    }
-
-    // Gate 6: phase 'main' → allow everything
+    // Gate 5: phase 'main' → allow everything
     // (no redirect needed)
   }, [pathname, walletAddress, isAuthenticated, phase, hasActiveLock, router]);
 }
@@ -173,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hasActiveLock = activeLockCourseIds.length > 0;
   const isInMainApp =
     isAuthenticated &&
-    (phase === 'main' || ((phase === 'onboarding' || phase === 'gauntlet') && hasActiveLock));
+    (phase === 'main' || (phase === 'onboarding' && hasActiveLock));
 
   return (
     <>

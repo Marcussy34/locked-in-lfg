@@ -68,8 +68,6 @@ export default function StreaksPage() {
   const longestStreak = activeState?.longestStreak ?? 0;
   const saverCount = activeState?.saverCount ?? 0;
   const saversRemaining = Math.max(0, 3 - saverCount);
-  const gauntletActive = activeState?.gauntletActive ?? false;
-  const gauntletDay = activeState?.gauntletDay ?? 1;
   const saverRecoveryMode = activeState?.saverRecoveryMode ?? false;
   const redirectPercent = Math.round((activeState?.currentYieldRedirectBps ?? 0) / 100);
   const extensionDays = activeState?.extensionDays ?? 0;
@@ -189,7 +187,6 @@ export default function StreaksPage() {
         </div>
         <p className="text-[11px] text-center mt-3" style={{ color: T.textSecondary }}>
           {saversRemaining}/3 savers remaining
-          {gauntletActive ? ` \u00B7 Locked during gauntlet (Day ${gauntletDay}/7)` : ''}
         </p>
       </ParchmentCard>
 
@@ -241,18 +238,6 @@ export default function StreaksPage() {
           </span>
         </div>
       </ParchmentCard>
-
-      {/* Gauntlet status */}
-      {gauntletActive && (
-        <ParchmentCard className="mt-3" style={{ borderColor: `${T.violet}30` }}>
-          <p className="text-sm font-bold" style={{ color: T.violet }}>
-            Gauntlet Active
-          </p>
-          <p className="text-[11px] mt-1" style={{ color: T.textSecondary }}>
-            Day {gauntletDay} of 7 — no savers allowed
-          </p>
-        </ParchmentCard>
-      )}
 
       {/* Runtime Audit */}
       <ParchmentCard className="mt-3">

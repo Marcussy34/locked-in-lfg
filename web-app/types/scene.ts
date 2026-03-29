@@ -6,7 +6,7 @@ export type Viewpoint =
   | 'noticeboard'
   | 'character';
 
-export type RoomPhase = 'gauntlet' | 'underground';
+export type RoomPhase = 'underground';
 
 export interface SceneState {
   currentViewpoint: Viewpoint;

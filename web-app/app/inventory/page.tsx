@@ -42,16 +42,11 @@ export default function InventoryPage() {
   const fuelBalance = activeState?.fuelCounter ?? 0;
   const fuelCap = activeState?.fuelCap ?? 7;
   const dungeonIchor = activeState?.ichorBalance ?? 0;
-  const gauntletActive = activeState?.gauntletActive ?? true;
   const fuelEarnStatus = useCourseStore((s) => s.getFuelEarnStatus());
   const nextFuelBurnAt = useCourseStore((s) => s.getNextFuelBurnAt());
 
   // Brewer status text
-  const brewerStatus = gauntletActive
-    ? 'Locked until gauntlet complete'
-    : fuelBalance <= 0
-      ? 'Stopped (Fuel is zero)'
-      : 'Fuel available';
+  const brewerStatus = fuelBalance <= 0 ? 'Stopped (Fuel is zero)' : 'Fuel available';
 
   // Refresh runtime on mount
   useEffect(() => {

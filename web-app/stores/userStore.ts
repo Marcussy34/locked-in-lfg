@@ -16,8 +16,6 @@ interface UserStore extends UserProfile {
   disconnect: () => void;
   setOnboardingPhase: (phase: OnboardingPhase) => void;
   setDisplayName: (name: string) => void;
-  startGauntlet: () => void;
-  completeGauntlet: () => void;
   completeDungeonTour: () => void;
 }
 
@@ -28,8 +26,6 @@ const initialState: UserProfile = {
   avatarUrl: null,
   onboardingPhase: 'auth',
   createdAt: null,
-  gauntletStartDate: null,
-  gauntletCompleted: false,
   dungeonTourCompleted: false,
   authToken: null,
   refreshToken: null,
@@ -45,8 +41,6 @@ export const useUserStore = create<UserStore>()(
           ...(state.walletAddress && state.walletAddress !== address
             ? {
                 onboardingPhase: 'onboarding',
-                gauntletCompleted: false,
-                gauntletStartDate: null,
                 displayName: null,
                 avatarUrl: null,
                 createdAt: new Date().toISOString(),
@@ -82,20 +76,19 @@ export const useUserStore = create<UserStore>()(
 
       setDisplayName: (name) => set({ displayName: name }),
 
-      startGauntlet: () =>
-        set((state) => ({
-          onboardingPhase: 'gauntlet',
-          gauntletStartDate: state.gauntletStartDate ?? new Date().toISOString(),
-        })),
-
-      completeGauntlet: () =>
-        set({ gauntletCompleted: true, onboardingPhase: 'main' }),
-
       completeDungeonTour: () => set({ dungeonTourCompleted: true }),
     }),
     {
       name: 'locked-in-user',
       storage: createJSONStorage(() => webStorageAdapter),
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as Partial<UserStore>) };
+        // Migrate legacy 'gauntlet' phase to 'main'
+        if ((merged.onboardingPhase as string) === 'gauntlet') {
+          merged.onboardingPhase = 'main';
+        }
+        return merged;
+      },
     },
   ),
 );

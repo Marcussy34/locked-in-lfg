@@ -46,8 +46,6 @@ interface CourseStore {
   getFuelEarnStatus: () => FuelEarnStatus;
   getNextFuelBurnAt: () => string | null;
   getFlameState: () => FlameState;
-  isGauntletActive: () => boolean;
-
   // Mutations
   setActiveCourse: (courseId: string) => void;
   activateCourse: (
@@ -60,7 +58,6 @@ interface CourseStore {
       skrAmount?: number;
     },
   ) => void;
-  skipGauntletForCourse: (courseId: string) => void;
   deactivateCourse: (courseId: string) => void;
 
   // Per-course actions
@@ -199,11 +196,6 @@ export const useCourseStore = create<CourseStore>()(
         return state?.flameState ?? 'COLD';
       },
 
-      isGauntletActive: () => {
-        const state = get().getActiveState();
-        return state?.gauntletActive ?? false;
-      },
-
       // --- Mutations ---
       setActiveCourse: (courseId) => set({ activeCourseId: courseId }),
 
@@ -226,24 +218,6 @@ export const useCourseStore = create<CourseStore>()(
           enrolledCourseIds: enrolledCourseIds.includes(courseId)
             ? enrolledCourseIds
             : [...enrolledCourseIds, courseId],
-        });
-      },
-
-      skipGauntletForCourse: (courseId: string) => {
-        const { courseStates } = get();
-        const state = courseStates[courseId];
-        if (!state) return;
-        set({
-          courseStates: {
-            ...courseStates,
-            [courseId]: {
-              ...state,
-              gauntletActive: false,
-              gauntletDay: 0,
-              // Give dev fuel so brewer is usable immediately
-              fuelCounter: Math.max(state.fuelCounter, 3),
-            },
-          },
         });
       },
 
@@ -280,12 +254,6 @@ export const useCourseStore = create<CourseStore>()(
               longestStreak: Math.max(state.longestStreak, newStreak),
               lastCompletedDate: today,
               todayCompleted: true,
-              gauntletDay: state.gauntletActive
-                ? Math.min(state.gauntletDay + 1, 8)
-                : state.gauntletDay,
-              gauntletActive: state.gauntletActive
-                ? state.gauntletDay < 7
-                : false,
               // Light flame on first streak
               flameState: newStreak >= 1 ? 'LIT' : state.flameState,
               lightIntensity: newStreak >= 1 ? Math.min(0.3 + newStreak * 0.05, 1.0) : state.lightIntensity,
@@ -298,8 +266,6 @@ export const useCourseStore = create<CourseStore>()(
         const { courseStates } = get();
         const state = courseStates[courseId];
         if (!state || state.saverCount >= 3) return false;
-        // Can't use savers during gauntlet
-        if (state.gauntletActive) return false;
 
         set({
           courseStates: {
@@ -320,8 +286,7 @@ export const useCourseStore = create<CourseStore>()(
         if (
           !state ||
           state.brewStatus === 'BREWING' ||
-          state.fuelCounter <= 0 ||
-          state.gauntletActive
+          state.fuelCounter <= 0
         ) {
           return;
         }
@@ -566,8 +531,6 @@ export const useCourseStore = create<CourseStore>()(
               ...existingState,
               currentStreak: snapshot.currentStreak,
               longestStreak: snapshot.longestStreak,
-              gauntletActive: snapshot.gauntletActive,
-              gauntletDay: snapshot.gauntletDay,
               saverCount: snapshot.saverCount,
               saverRecoveryMode: snapshot.saverRecoveryMode,
               currentYieldRedirectBps: snapshot.currentYieldRedirectBps,
@@ -594,8 +557,6 @@ export const useCourseStore = create<CourseStore>()(
                 snapshot.lockAccountAddress ?? existingState.lockAccountAddress,
               lockStartDate: snapshot.lockStartDate,
               extensionDays: snapshot.extensionDays,
-              gauntletActive: !snapshot.gauntletComplete,
-              gauntletDay: snapshot.gauntletDay,
               saverRecoveryMode: snapshot.saverRecoveryMode,
               currentYieldRedirectBps: snapshot.currentYieldRedirectBps,
               fuelCounter: snapshot.fuelCounter,
@@ -750,8 +711,6 @@ export const useCourseStore = create<CourseStore>()(
               ...existing,
               currentStreak: enrollment.runtime.currentStreak,
               longestStreak: enrollment.runtime.longestStreak,
-              gauntletActive: enrollment.runtime.gauntletActive,
-              gauntletDay: enrollment.runtime.gauntletDay,
               saverCount: enrollment.runtime.saverCount,
               saverRecoveryMode: enrollment.runtime.saverRecoveryMode,
               currentYieldRedirectBps: enrollment.runtime.currentYieldRedirectBps,

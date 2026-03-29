@@ -47,9 +47,6 @@ export const useStreakStore = create<StreakStore>()(
 
       useSaver: () => {
         const state = get();
-        // No savers during Week 1 gauntlet (days 1-7)
-        if (state.dayNumber <= 7) return false;
-        // Savers unlock from Day 8, max 3
         if (state.saverCount >= 3) return false;
 
         set({

@@ -16,10 +16,6 @@ export interface CourseGameState {
   skrLockedAmount: number;
   extensionDays: number;
 
-  // Gauntlet
-  gauntletActive: boolean;
-  gauntletDay: number; // 1-7, 0 if complete
-
   // Streak
   currentStreak: number;
   longestStreak: number;
@@ -57,8 +53,6 @@ export const DEFAULT_COURSE_STATE: CourseGameState = {
   stableMintAddress: null,
   skrLockedAmount: 0,
   extensionDays: 0,
-  gauntletActive: true,
-  gauntletDay: 1,
   currentStreak: 0,
   longestStreak: 0,
   saverCount: 0,

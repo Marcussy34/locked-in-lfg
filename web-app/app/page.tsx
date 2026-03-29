@@ -24,7 +24,7 @@ export default function LandingPage() {
     );
 
     // Same routing as AppNavigator.tsx
-    if ((phase === 'onboarding' || phase === 'gauntlet') && hasActiveLock) {
+    if (phase === 'onboarding' && hasActiveLock) {
       router.replace('/courses');
       return;
     }
@@ -36,9 +36,6 @@ export default function LandingPage() {
         break;
       case 'onboarding':
         router.replace('/onboarding/courses');
-        break;
-      case 'gauntlet':
-        router.replace('/onboarding/gauntlet');
         break;
       case 'main':
         router.replace('/courses');

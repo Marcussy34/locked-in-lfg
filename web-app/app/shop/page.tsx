@@ -242,7 +242,7 @@ export default function ShopPage() {
           --
         </p>
         <p className="text-xs mt-1" style={{ color: T.textMuted }}>
-          Redemption is available only after gauntlet completion.
+          Redemption is available after course completion.
         </p>
       </ParchmentCard>
 
@@ -322,7 +322,7 @@ export default function ShopPage() {
           EXCHANGE ICHOR
         </PrimaryButton>
         <p className="text-xs text-center mt-1" style={{ color: T.textSecondary }}>
-          On-chain redemption requires wallet connection and gauntlet completion.
+          On-chain redemption requires wallet connection.
         </p>
       </div>
     </ScreenBackground>

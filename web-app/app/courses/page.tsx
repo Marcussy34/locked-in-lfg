@@ -194,12 +194,10 @@ function CourseCard({
 function ActiveCourseCard({
   course,
   streak,
-  gauntletDay,
   onPress,
 }: {
   course: Course;
   streak: number;
-  gauntletDay: number;
   onPress: () => void;
 }) {
   return (
@@ -227,9 +225,6 @@ function ActiveCourseCard({
             <div className="flex items-center gap-3">
               <span className="font-mono text-[11px]" style={{ color: T.amber }}>
                 ✹ {streak} streak
-              </span>
-              <span className="font-mono text-[11px]" style={{ color: T.violet }}>
-                Day {gauntletDay}
               </span>
               <span className="font-mono text-[11px]" style={{ color: T.textMuted }}>
                 {course.completedLessons}/{course.totalLessons} lessons
@@ -342,7 +337,6 @@ export default function CoursesPage() {
                   key={course.id}
                   course={course}
                   streak={state?.currentStreak ?? 0}
-                  gauntletDay={state?.gauntletDay ?? 1}
                   onPress={() => handleActiveCoursePress(course.id)}
                 />
               );

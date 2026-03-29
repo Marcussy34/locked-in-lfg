@@ -43,10 +43,9 @@ export default function AlchemyPage() {
   const activeMode = getMode(activeState?.brewModeId ?? null);
   const fuelBalance = activeState?.fuelCounter ?? 0;
   const fuelCap = activeState?.fuelCap ?? 7;
-  const gauntletActive = activeState?.gauntletActive ?? true;
   const brewStatus = activeState?.brewStatus ?? 'IDLE';
   const ichorBalance = activeState?.ichorBalance ?? 0;
-  const canBrew = fuelBalance > 0 && !gauntletActive;
+  const canBrew = fuelBalance > 0;
 
   /* Tick timer while brewing */
   useEffect(() => {
@@ -122,7 +121,7 @@ export default function AlchemyPage() {
           />
           <StatBox
             label="Brewer"
-            value={gauntletActive ? 'Locked' : canBrew ? 'Ready' : 'Stopped'}
+            value={canBrew ? 'Ready' : 'Stopped'}
             color={T.textPrimary}
           />
         </div>
@@ -228,11 +227,9 @@ export default function AlchemyPage() {
               onClick={handleConfirmBrew}
               disabled={!canBrew}
             >
-              {gauntletActive
-                ? 'GAUNTLET LOCKED'
-                : fuelBalance <= 0
-                  ? 'FUEL REQUIRED'
-                  : 'CONFIRM BREW'}
+              {fuelBalance <= 0
+                ? 'FUEL REQUIRED'
+                : 'CONFIRM BREW'}
             </PrimaryButton>
           </div>
         </div>

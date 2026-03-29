@@ -197,7 +197,8 @@ function DepositContent() {
       });
 
       setStatusMessage('Lock created successfully!');
-      router.push('/onboarding/gauntlet');
+      useUserStore.getState().setOnboardingPhase('main');
+      router.push('/dungeon');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Transaction failed';
       console.error('[deposit] Lock transaction failed:', error);
@@ -227,7 +228,7 @@ function DepositContent() {
         className="text-xs leading-[18px] mt-0.5 mb-4"
         style={{ color: T.textSecondary }}
       >
-        Create the on-chain lock that starts the gauntlet.
+        Create the on-chain lock to start learning.
       </p>
 
       {/* Main card with all deposit fields */}
@@ -406,7 +407,7 @@ function DepositContent() {
       {/* Deposit button */}
       <div className="mt-5 mb-8">
         <PrimaryButton onClick={handleDeposit} disabled={isDisabled}>
-          {isSubmitting ? 'Creating Lock...' : 'Deposit & Start Gauntlet'}
+          {isSubmitting ? 'Creating Lock...' : 'Deposit & Start Learning'}
         </PrimaryButton>
       </div>
     </ScreenBackground>

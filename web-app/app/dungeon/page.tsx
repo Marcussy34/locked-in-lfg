@@ -42,10 +42,6 @@ export default function DungeonPage() {
     [activeCourseIds, courseStates],
   );
 
-  const gauntletActive = activeCourseId
-    ? courseStates[activeCourseId]?.gauntletActive ?? false
-    : false;
-
   // Auto-select first locked course if none active
   useEffect(() => {
     if (lockedCourseIds.length > 0 && (!activeCourseId || !lockedCourseIds.includes(activeCourseId))) {
@@ -79,7 +75,7 @@ export default function DungeonPage() {
     });
     // Delay so dungeon lights are fully created before toggling mode
     setTimeout(() => {
-      sendMessage('setLightingMode', { mode: gauntletActive ? 'gauntlet' : 'normal' });
+      sendMessage('setLightingMode', { mode: 'normal' });
     }, 300);
   }, [sceneReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -141,7 +137,7 @@ export default function DungeonPage() {
           const { activeCourseId: acid, courseStates: cs } = useCourseStore.getState();
           if (modeId && acid) {
             const activeState = cs[acid];
-            if (activeState?.fuelCounter > 0 && !activeState?.gauntletActive) {
+            if (activeState?.fuelCounter > 0) {
               useCourseStore.getState().startBrewForCourse(acid, modeId as BrewModeId);
             }
           }

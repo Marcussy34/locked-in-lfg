@@ -1,4 +1,4 @@
-export type OnboardingPhase = 'auth' | 'onboarding' | 'gauntlet' | 'main';
+export type OnboardingPhase = 'auth' | 'onboarding' | 'main';
 
 export interface UserProfile {
   walletAddress: string | null;
@@ -8,8 +8,6 @@ export interface UserProfile {
   avatarUrl: string | null;
   onboardingPhase: OnboardingPhase;
   createdAt: string | null;
-  gauntletStartDate: string | null;
-  gauntletCompleted: boolean;
   dungeonTourCompleted: boolean;
   /** Lesson API access token (Bearer) */
   authToken: string | null;
