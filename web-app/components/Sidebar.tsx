@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: '/courses', label: 'Courses', icon: '📜' },
   { href: '/dashboard', label: 'Dashboard', icon: '🔥' },
   { href: '/alchemy', label: 'Alchemy', icon: '⚗️' },
-  { href: '/shop', label: 'Shop', icon: '🛒' },
+  { href: '/shop', label: 'Rewards', icon: '🎁' },
   { href: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
   { href: '/community-pot', label: 'Community', icon: '🫂' },
   { href: '/profile', label: 'Profile', icon: '👤' },
