@@ -1,118 +1,139 @@
 'use client';
 
-import { useState } from 'react';
-import { useWalletConnection } from '@solana/react-hooks';
+import { useLogin, usePrivy } from '@privy-io/react-auth';
 import { useAuth } from '@/hooks/useAuth';
-import { getUserEnrollments } from '@/services/api/progress/progressApi';
-import { useUserStore } from '@/stores/userStore';
-import { useCourseStore } from '@/stores/courseStore';
+import { useCourseStore, useUserStore } from '@/stores';
 import { useFlameStore } from '@/stores/flameStore';
+import { getUserEnrollments } from '@/services/api/progress/progressApi';
 import { T } from './theme';
 
-/**
- * Wallet connect button — imperative flow matching Android's WalletConnectScreen.
- *
- * Android: handleConnect() → connectWallet() → issueBackendSession() → setWallet()
- * Web:     handleConnect() → connect()        → authenticate()        → stores JWT
- *
- * One button press → one connect prompt → one sign prompt → done.
- */
 export function WalletConnect() {
-  const { connectors, connected, connecting, connect, wallet, isReady } =
-    useWalletConnection();
-  const { isAuthenticated, authError, authenticate, retry, disconnect } = useAuth();
-  const [authInProgress, setAuthInProgress] = useState(false);
+  const { ready, authenticated } = usePrivy();
+  const {
+    isReady,
+    isConnected,
+    isAuthenticated,
+    walletAddress,
+    authError,
+    authInProgress,
+    retry,
+    disconnect,
+  } = useAuth();
 
-  // Imperative connect + auth — mirrors Android's handleConnect exactly
-  const handleConnect = async (connectorId: string) => {
-    setAuthInProgress(true);
-    try {
-      // 1. Connect wallet (prompts user once for wallet access)
-      await connect(connectorId);
+  const { login } = useLogin({
+    onComplete: async () => {
+      // Auth hook auto-triggers challenge-sign-verify when wallet becomes available.
+      // After JWT is obtained, sync backend state.
+      const waitForToken = () =>
+        new Promise<string | null>((resolve) => {
+          // Poll briefly for the auth token to be set by the useAuth hook
+          let attempts = 0;
+          const check = () => {
+            const token = useUserStore.getState().authToken;
+            if (token || attempts > 20) {
+              resolve(token);
+              return;
+            }
+            attempts++;
+            setTimeout(check, 250);
+          };
+          check();
+        });
 
-      // 2. Small delay for session to stabilize after connect
-      await new Promise((r) => setTimeout(r, 200));
-
-      // 3. Get the connected address from the wallet
-      // Note: useWalletConnection doesn't return the address from connect(),
-      // so we read it from the wallet session after connection
-      const address = wallet?.account?.address?.toString();
-      if (!address) {
-        // Wallet connected but address not available yet — auth will be
-        // handled when the component re-renders with the connected state
-        return;
-      }
-
-      // 4. Authenticate: challenge → sign → verify (prompts user once for signature)
-      await authenticate(address);
-
-      // 5. Sync state from backend (enrollments + progress + runtime)
-      const token = useUserStore.getState().authToken;
-      if (token) {
-        try {
-          const data = await getUserEnrollments(token);
-          useCourseStore.getState().restoreFromBackend(data);
-          // Sync flame from best streak across all courses
-          const bestStreak = Math.max(
-            ...data.enrollments.map((e) => e.runtime?.currentStreak ?? 0),
-            0,
-          );
-          if (bestStreak > 0) {
-            useFlameStore.getState().updateFromStreak(bestStreak);
-          }
-        } catch (syncError) {
-          console.warn('[sync] Failed to restore from backend:', syncError);
+      const token = await waitForToken();
+      if (!token) return;
+      try {
+        const data = await getUserEnrollments(token);
+        useCourseStore.getState().restoreFromBackend(data);
+        const bestStreak = Math.max(
+          ...data.enrollments.map((e) => e.runtime?.currentStreak ?? 0),
+          0,
+        );
+        if (bestStreak > 0) {
+          useFlameStore.getState().updateFromStreak(bestStreak);
         }
+      } catch {
+        // Fail silently — local state is still usable
       }
-    } catch (error) {
-      // User rejected or network error — already handled in useAuth
-      console.warn('[wallet] Connect/auth failed:', error);
-    } finally {
-      setAuthInProgress(false);
-    }
-  };
+    },
+    onError: (error) => {
+      console.error('[wallet] Login failed:', error);
+    },
+  });
 
-  // SSR hydration guard
-  if (!isReady) {
-    return <div className="h-12 w-48 bg-white/5 rounded-lg animate-pulse" />;
+  // Loading — Privy not ready yet
+  if (!ready || !isReady) {
+    return (
+      <div className="flex justify-center">
+        <div
+          className="h-12 w-48 rounded-lg animate-pulse"
+          style={{ backgroundColor: `${T.violet}20` }}
+        />
+      </div>
+    );
   }
 
   // Connected + authenticated — show address + disconnect
-  if (connected && wallet && isAuthenticated) {
-    const address = wallet.account.address.toString();
-    const shortAddress = `${address.slice(0, 4)}...${address.slice(-4)}`;
-
+  if (isConnected && isAuthenticated && walletAddress) {
+    const shortAddress = `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
     return (
-      <div className="flex items-center gap-3">
-        <span className="text-green-400 text-sm">Connected</span>
+      <div className="flex flex-col items-center gap-3">
+        <div
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border"
+          style={{
+            borderColor: `${T.green}30`,
+            backgroundColor: `${T.green}08`,
+          }}
+        >
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: T.green }}
+          />
+          <span className="text-xs font-medium" style={{ color: T.green }}>
+            Connected
+          </span>
+          <span className="text-xs font-mono" style={{ color: T.textSecondary }}>
+            {shortAddress}
+          </span>
+        </div>
         <button
           onClick={disconnect}
-          className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-85"
-          style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
+          className="text-xs underline"
+          style={{ color: T.textMuted }}
         >
-          {shortAddress}
+          Disconnect
         </button>
       </div>
     );
   }
 
-  // Auth error state — show retry + disconnect
+  // Auth error — show retry + disconnect
   if (authError) {
     return (
-      <div className="text-center space-y-2 max-w-xs mx-auto">
-        <p className="text-red-400 text-sm">{authError}</p>
-        <div className="flex gap-2 justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-xs text-center" style={{ color: T.crimson }}>
+          {authError}
+        </p>
+        <div className="flex gap-3">
           <button
             onClick={retry}
-            className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
-            style={{ backgroundColor: T.violet, color: '#1A1000' }}
+            className="px-4 py-2 rounded-lg text-xs font-semibold"
+            style={{
+              backgroundColor: T.violet,
+              color: '#fff',
+              border: '1px solid #B06AFF',
+            }}
           >
             Retry
           </button>
           <button
             onClick={disconnect}
-            className="px-4 py-2 rounded-lg text-sm transition-opacity hover:opacity-85"
-            style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: T.textPrimary }}
+            className="px-4 py-2 rounded-lg text-xs font-semibold"
+            style={{
+              backgroundColor: 'transparent',
+              color: T.textSecondary,
+              border: `1px solid ${T.borderDormant}`,
+            }}
           >
             Disconnect
           </button>
@@ -121,88 +142,63 @@ export function WalletConnect() {
     );
   }
 
-  // Connecting / auth in progress
-  if (connecting || authInProgress) {
+  // Privy authenticated but backend auth in progress
+  if (authenticated && authInProgress) {
     return (
-      <button
-        disabled
-        className="w-full py-3.5 rounded-lg cursor-wait"
-        style={{
-          backgroundColor: 'rgba(153,69,255,0.5)',
-          color: '#1A1000',
-          fontFamily: 'Georgia, serif',
-          fontWeight: 800,
-          letterSpacing: 2.5,
-          textTransform: 'uppercase' as const,
-        }}
-      >
-        {connecting ? 'Connecting...' : 'Signing in...'}
-      </button>
-    );
-  }
-
-  // No wallets discovered
-  if (connectors.length === 0) {
-    return (
-      <div className="text-center space-y-2">
-        <p className="text-foreground/50 text-sm">No Solana wallet detected.</p>
-        <a
-          href="https://phantom.app"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm underline transition-opacity hover:opacity-75"
-          style={{ color: T.violet }}
+      <div className="flex justify-center">
+        <button
+          disabled
+          className="w-full max-w-xs py-3 rounded-lg text-sm font-semibold opacity-60"
+          style={{
+            backgroundColor: T.violet,
+            color: '#fff',
+            border: '1px solid #B06AFF',
+          }}
         >
-          Install Phantom
-        </a>
+          Signing in...
+        </button>
       </div>
     );
   }
 
-  // Single wallet — direct connect
-  if (connectors.length === 1) {
-    return (
+  // Not authenticated — show dual sign-in
+  return (
+    <div className="flex flex-col items-center gap-4 w-full">
+      {/* Primary: Google sign-in */}
       <button
-        onClick={() => handleConnect(connectors[0].id)}
-        className="w-full py-3.5 rounded-lg transition-opacity hover:opacity-85"
+        onClick={() => login({ loginMethods: ['google'] })}
+        className="w-full max-w-xs py-3.5 rounded-lg text-sm font-bold tracking-wide flex items-center justify-center gap-2"
         style={{
           backgroundColor: T.violet,
+          color: '#fff',
           border: '1px solid #B06AFF',
           fontFamily: 'Georgia, serif',
-          fontWeight: 800,
-          letterSpacing: 2.5,
-          textTransform: 'uppercase' as const,
-          color: '#1A1000',
-          fontSize: 14,
         }}
       >
-        Connect Wallet
+        <svg viewBox="0 0 18 18" width={16} height={16} fill="none">
+          <path d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.79 2.72v2.26h2.9c1.7-1.56 2.68-3.87 2.68-6.62z" fill="#4285F4"/>
+          <path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.81.54-1.85.86-3.06.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A8.99 8.99 0 009 18z" fill="#34A853"/>
+          <path d="M3.96 10.71A5.41 5.41 0 013.68 9c0-.6.1-1.17.28-1.71V4.96H.96A8.99 8.99 0 000 9c0 1.45.35 2.82.96 4.04l3-2.33z" fill="#FBBC05"/>
+          <path d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A8.99 8.99 0 00.96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58z" fill="#EA4335"/>
+        </svg>
+        Sign in with Google
       </button>
-    );
-  }
 
-  // Multiple wallets
-  return (
-    <div className="flex flex-col gap-2">
-      {connectors.map((connector) => (
-        <button
-          key={connector.id}
-          onClick={() => handleConnect(connector.id)}
-          className="w-full py-3.5 rounded-lg transition-opacity hover:opacity-85"
-          style={{
-            backgroundColor: T.violet,
-            border: '1px solid #B06AFF',
-            fontFamily: 'Georgia, serif',
-            fontWeight: 800,
-            letterSpacing: 2.5,
-            textTransform: 'uppercase' as const,
-            color: '#1A1000',
-            fontSize: 14,
-          }}
-        >
-          Connect {connector.name}
-        </button>
-      ))}
+      {/* Divider */}
+      <div className="flex items-center gap-3 w-full max-w-xs">
+        <div className="flex-1 h-px" style={{ backgroundColor: T.borderDormant }} />
+        <span className="text-[10px]" style={{ color: T.textMuted }}>or</span>
+        <div className="flex-1 h-px" style={{ backgroundColor: T.borderDormant }} />
+      </div>
+
+      {/* Secondary: Connect existing wallet */}
+      <button
+        onClick={() => login({ loginMethods: ['wallet'] })}
+        className="text-xs underline"
+        style={{ color: T.textSecondary }}
+      >
+        Connect existing wallet
+      </button>
     </div>
   );
 }

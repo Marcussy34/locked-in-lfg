@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useWalletSession, useDisconnectWallet } from '@solana/react-hooks';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallets, useSignMessage } from '@privy-io/react-auth/solana';
 import { useUserStore } from '@/stores';
 import { createAuthChallenge, verifyAuthChallenge } from '@/services/api/auth/authApi';
 
@@ -15,17 +16,18 @@ function setAuthCookie(value: boolean) {
 }
 
 /**
- * Auth hook — imperative flow matching the Android app.
+ * Auth hook — uses Privy for wallet management, our backend for JWT.
  *
- * Android: user taps "Connect Wallet" → handleConnect() runs connect + sign + verify sequentially.
- * Web:     user clicks "Connect Wallet" → WalletConnect calls connect(), then calls authenticate().
+ * Flow: Privy login (Google or wallet) → get Solana wallet → challenge-sign-verify → JWT
  *
- * NO auto-auth effects. The sign message is triggered exactly once by the button handler.
+ * Backend doesn't know about Privy. It just sees an Ed25519 signature.
  */
 export function useAuth() {
-  const session = useWalletSession();
-  const disconnect = useDisconnectWallet();
+  const { ready: privyReady, authenticated: privyAuthenticated, logout: privyLogout, user: privyUser } = usePrivy();
+  const { wallets, ready: walletsReady } = useWallets();
+  const { signMessage } = useSignMessage();
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authInProgress, setAuthInProgress] = useState(false);
 
   const walletAddress = useUserStore((s) => s.walletAddress);
   const accessToken = useUserStore((s) => s.authToken);
@@ -33,27 +35,36 @@ export function useAuth() {
   const setAuthSession = useUserStore((s) => s.setAuthSession);
   const disconnectUser = useUserStore((s) => s.disconnect);
 
-  const connectedAddress = session?.account?.address?.toString() ?? null;
+  // Get the first Solana wallet (embedded or external)
+  const solanaWallet = wallets[0] ?? null;
+  const connectedAddress = solanaWallet?.address ?? null;
 
-  // Imperative auth — called directly by WalletConnect after connect() succeeds.
-  // Mirrors Android's handleConnect: challenge → sign → verify → store.
-  const authenticate = useCallback(async (address: string) => {
+  // Authenticate with our backend using the Privy-managed wallet
+  const authenticate = useCallback(async () => {
+    if (!solanaWallet) {
+      setAuthError('No Solana wallet available. Please try again.');
+      return;
+    }
+
     setAuthError(null);
+    setAuthInProgress(true);
 
     try {
+      const address = solanaWallet.address;
+
       // 1. Request challenge from backend
       const challenge = await createAuthChallenge({ walletAddress: address });
 
-      // 2. Sign the challenge message using the wallet
-      if (!session?.signMessage) {
-        throw new Error('Wallet does not support message signing.');
-      }
+      // 2. Sign the challenge message using Privy wallet
       const messageBytes = new TextEncoder().encode(challenge.message);
-      const signatureBytes = await session.signMessage(messageBytes);
+      const result = await signMessage({
+        message: messageBytes,
+        wallet: solanaWallet,
+      });
 
       // 3. Convert signature to base64 for backend verification
       const signature = btoa(
-        String.fromCharCode(...signatureBytes),
+        String.fromCharCode(...result.signature),
       );
 
       // 4. Verify with backend to get JWT
@@ -71,39 +82,56 @@ export function useAuth() {
       console.error('[auth] Authentication failed:', error);
       const message = error instanceof Error ? error.message : 'Authentication failed';
       setAuthError(message);
-      throw error; // Let caller handle
+    } finally {
+      setAuthInProgress(false);
     }
-  }, [session, setWallet, setAuthSession]);
+  }, [solanaWallet, signMessage, setWallet, setAuthSession]);
 
-  // Manual retry — called from WalletConnect UI
+  // Auto-authenticate when Privy login completes and wallet becomes available
+  useEffect(() => {
+    if (
+      privyAuthenticated &&
+      walletsReady &&
+      solanaWallet &&
+      !accessToken &&
+      !authInProgress &&
+      !authError
+    ) {
+      authenticate();
+    }
+  }, [privyAuthenticated, walletsReady, solanaWallet, accessToken, authInProgress, authError, authenticate]);
+
+  // Manual retry — called from UI
   const retry = useCallback(() => {
-    if (connectedAddress) {
-      authenticate(connectedAddress).catch(() => {});
-    }
-  }, [connectedAddress, authenticate]);
+    setAuthError(null);
+    authenticate();
+  }, [authenticate]);
 
-  // Disconnect — clears wallet + auth state
+  // Disconnect — clears Privy + our auth state
   const handleDisconnect = useCallback(async () => {
-    await disconnect();
+    await privyLogout();
     disconnectUser();
     setAuthCookie(false);
     setAuthError(null);
-  }, [disconnect, disconnectUser]);
+  }, [privyLogout, disconnectUser]);
 
-  // Cleanup: if wallet disconnects externally, clear auth state
+  // Cleanup: if Privy logs out externally, clear our state
   useEffect(() => {
-    if (!connectedAddress && walletAddress) {
+    if (privyReady && !privyAuthenticated && walletAddress) {
       disconnectUser();
       setAuthCookie(false);
     }
-  }, [connectedAddress, walletAddress, disconnectUser]);
+  }, [privyReady, privyAuthenticated, walletAddress, disconnectUser]);
 
   return {
-    isConnected: !!connectedAddress,
+    isReady: privyReady && walletsReady,
+    isConnected: privyAuthenticated && !!connectedAddress,
     isAuthenticated: !!accessToken,
     walletAddress: connectedAddress,
     authError,
-    authenticate, // Exposed for imperative use by WalletConnect
+    authInProgress,
+    loginMethod: privyUser?.google ? 'google' as const : privyAuthenticated ? 'wallet' as const : null,
+    authenticate,
     retry,
     disconnect: handleDisconnect,
   };

@@ -1,21 +1,48 @@
 'use client';
 
-import type { SolanaClientConfig } from '@solana/client';
-import { SolanaProvider } from '@solana/react-hooks';
+import { PrivyProvider } from '@privy-io/react-auth';
+import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana';
+import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit';
 import { DungeonProvider } from '@/components/DungeonProvider';
 
-// Solana client configuration — devnet by default
-const config: SolanaClientConfig = {
-  cluster: 'devnet',
-  rpc: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
-  websocket:
-    process.env.NEXT_PUBLIC_SOLANA_WS_URL ?? 'wss://api.devnet.solana.com',
-};
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? '';
+const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
+const WS_URL = process.env.NEXT_PUBLIC_SOLANA_WS_URL ?? 'wss://api.devnet.solana.com';
+
+const solanaRpc = createSolanaRpc(RPC_URL);
+const solanaRpcSubscriptions = createSolanaRpcSubscriptions(WS_URL);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SolanaProvider config={config}>
+    <PrivyProvider
+      appId={PRIVY_APP_ID}
+      config={{
+        solana: {
+          rpcs: {
+            'solana:devnet': {
+              rpc: solanaRpc,
+              rpcSubscriptions: solanaRpcSubscriptions,
+            },
+          },
+        },
+        appearance: {
+          theme: 'dark',
+          walletChainType: 'solana-only',
+        },
+        loginMethods: ['google', 'wallet'],
+        externalWallets: {
+          solana: {
+            connectors: toSolanaWalletConnectors(),
+          },
+        },
+        embeddedWallets: {
+          solana: {
+            createOnLogin: 'users-without-wallets',
+          },
+        },
+      }}
+    >
       <DungeonProvider>{children}</DungeonProvider>
-    </SolanaProvider>
+    </PrivyProvider>
   );
 }

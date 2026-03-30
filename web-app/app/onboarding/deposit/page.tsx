@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useWallets, useSignTransaction } from '@privy-io/react-auth/solana';
 import { useCourseStore, useUserStore } from '@/stores';
 import { defaultCourseLockPolicyForDifficulty } from '@/types';
 import type { CourseLockPolicy } from '@/types';
@@ -52,6 +53,8 @@ function DepositContent() {
   const walletAddress = useUserStore((s) => s.walletAddress);
   const activateCourse = useCourseStore((s) => s.activateCourse);
   const courses = useCourseStore((s) => s.courses);
+  const { wallets: solanaWallets } = useWallets();
+  const { signTransaction: privySignTransaction } = useSignTransaction();
 
   // Wallet balances
   const [balances, setBalances] = useState<{ stableBalanceUi: string; skrBalanceUi: string; solBalanceUi: string } | null>(null);
@@ -164,21 +167,22 @@ function DepositContent() {
 
       setStatusMessage('Waiting for wallet approval...');
 
-      // 2. Sign via injected wallet provider (Phantom/Solflare)
-      //    Framework-kit's signTransaction expects Kit-native tx format,
-      //    but buildLockFundsTransaction returns a legacy web3.js Transaction.
-      //    Use the injected provider directly (same as RN web fallback).
-      const provider = (window as any).solana;
-      if (!provider?.signTransaction) {
-        throw new Error('No Solana wallet provider found. Install Phantom or Solflare.');
+      // 2. Sign via Privy wallet (works for both embedded + external wallets)
+      const wallet = solanaWallets[0];
+      if (!wallet) {
+        throw new Error('No Solana wallet available. Please reconnect.');
       }
-      const signedTx = await provider.signTransaction(buildResult.transaction);
+      const txBytes = buildResult.transaction.serialize({ requireAllSignatures: false });
+      const { signedTransaction } = await privySignTransaction({
+        transaction: txBytes,
+        wallet,
+      });
 
       setStatusMessage('Sending transaction...');
 
       // 3. Send signed transaction to the network
       const signature = await connection.sendRawTransaction(
-        signedTx.serialize(),
+        signedTransaction as Buffer,
         { skipPreflight: false, preflightCommitment: 'confirmed' },
       );
 
