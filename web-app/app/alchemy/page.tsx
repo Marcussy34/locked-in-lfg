@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore } from '@/stores';
+import { useCourseStore, useUserStore } from '@/stores';
 import {
   ScreenBackground,
   BackButton,
@@ -20,22 +20,33 @@ export default function AlchemyPage() {
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const courseStates = useCourseStore((s) => s.courseStates);
   const convertFuelForCourse = useCourseStore((s) => s.convertFuelForCourse);
+  const authToken = useUserStore((s) => s.authToken);
   const [convertAmount, setConvertAmount] = useState(1);
   const [justConverted, setJustConverted] = useState<number | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
   const fuelBalance = activeState?.fuelCounter ?? 0;
   const fuelCap = activeState?.fuelCap ?? 7;
   const ichorBalance = activeState?.ichorBalance ?? 0;
-  const canConvert = fuelBalance > 0;
+  const canConvert = fuelBalance > 0 && !isConverting;
 
-  const handleConvert = useCallback(() => {
+  const handleConvert = useCallback(async () => {
     if (!activeCourseId || !canConvert) return;
     const amount = Math.min(convertAmount, fuelBalance);
-    convertFuelForCourse(activeCourseId, amount);
-    setJustConverted(amount * ICHOR_PER_FUEL);
-    setTimeout(() => setJustConverted(null), 2000);
-  }, [activeCourseId, canConvert, convertAmount, fuelBalance, convertFuelForCourse]);
+    setIsConverting(true);
+    setError(null);
+    try {
+      await convertFuelForCourse(activeCourseId, amount, authToken);
+      setJustConverted(amount * ICHOR_PER_FUEL);
+      setTimeout(() => setJustConverted(null), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Conversion failed');
+    } finally {
+      setIsConverting(false);
+    }
+  }, [activeCourseId, canConvert, convertAmount, fuelBalance, convertFuelForCourse, authToken]);
 
   return (
     <ScreenBackground>
@@ -138,12 +149,21 @@ export default function AlchemyPage() {
 
       {/* Convert button */}
       <PrimaryButton onClick={handleConvert} disabled={!canConvert}>
-        {justConverted
-          ? `+${justConverted} Ichor!`
-          : fuelBalance <= 0
-            ? 'NO FUEL TO CONVERT'
-            : 'CONVERT'}
+        {isConverting
+          ? 'CONVERTING...'
+          : justConverted
+            ? `+${justConverted} Ichor!`
+            : fuelBalance <= 0
+              ? 'NO FUEL TO CONVERT'
+              : 'CONVERT'}
       </PrimaryButton>
+
+      {/* Error display */}
+      {error && (
+        <p className="text-[12px] text-center mt-2" style={{ color: T.crimson }}>
+          {error}
+        </p>
+      )}
 
       {/* Footer note */}
       <ParchmentCard className="flex items-center justify-center mb-8 mt-4">

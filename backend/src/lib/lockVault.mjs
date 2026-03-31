@@ -20,6 +20,7 @@ const COMPLETION_SEED = Buffer.from('completion');
 const FUEL_BURN_SEED = Buffer.from('fuel-burn');
 const MISS_SEED = Buffer.from('miss');
 const HARVEST_SEED = Buffer.from('harvest');
+const CONVERSION_SEED = Buffer.from('conversion');
 const LOCK_ACCOUNT_DISCRIMINATOR = 'df40477cff5676c0';
 
 const APPLY_VERIFIED_COMPLETION_DISCRIMINATOR = anchorDiscriminator(
@@ -31,6 +32,7 @@ const CONSUME_SAVER_OR_FULL_CONSEQUENCE_DISCRIMINATOR = anchorDiscriminator(
 );
 const APPLY_HARVEST_RESULT_DISCRIMINATOR = anchorDiscriminator('apply_harvest_result');
 const UNLOCK_FUNDS_DISCRIMINATOR = anchorDiscriminator('unlock_funds');
+const CONVERT_FUEL_TO_ICHOR_DISCRIMINATOR = anchorDiscriminator('convert_fuel_to_ichor');
 
 let relay = null;
 let readConnection = null;
@@ -576,5 +578,49 @@ export async function publishHarvestToLockVault({
     lockAccount: lockAccount.toBase58(),
     receiptAccount: receiptAccount.toBase58(),
     grossYieldAmount,
+  };
+}
+
+export async function publishFuelConversionToLockVault({
+  walletAddress,
+  courseId,
+  conversionId,
+  fuelAmount,
+}) {
+  const { connection, signer, programId } = getRelay();
+  const protocolConfig = deriveProtocolConfig(programId);
+  const lockAccount = deriveLockAccount(programId, walletAddress, courseId);
+  const receiptKey = hashString(conversionId);
+  const receiptAccount = deriveReceiptAccount(
+    programId,
+    CONVERSION_SEED,
+    lockAccount,
+    receiptKey,
+  );
+
+  await assertLockAccountExists(connection, lockAccount);
+
+  const data = Buffer.concat([
+    CONVERT_FUEL_TO_ICHOR_DISCRIMINATOR,
+    receiptKey,
+    encodeU16LE(fuelAmount),
+  ]);
+
+  const result = await sendWorkerInstruction(
+    [
+      { pubkey: protocolConfig, isSigner: false, isWritable: false },
+      { pubkey: lockAccount, isSigner: false, isWritable: true },
+      { pubkey: signer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: receiptAccount, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  );
+
+  return {
+    ...result,
+    lockAccount: lockAccount.toBase58(),
+    receiptAccount: receiptAccount.toBase58(),
+    fuelAmount,
   };
 }

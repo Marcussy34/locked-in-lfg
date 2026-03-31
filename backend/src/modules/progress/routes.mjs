@@ -4,6 +4,7 @@ import { ensureRedemptionVaultLiquidity } from '../../lib/redemptionVault.mjs';
 import { requireAccessAuth } from '../../plugins/auth.mjs';
 import {
   consumeDailyFuel,
+  convertFuelToIchor,
   closeCommunityPotWindowAndSnapshot,
   distributeCommunityPotWindowBatch,
   getCommunityPotWindowDetail,
@@ -98,6 +99,28 @@ export async function progressRoutes(app) {
         assertAnswers(answers),
         startedAt,
         completedAt,
+      );
+    },
+  );
+
+  app.post(
+    '/v1/progress/fuel/convert',
+    { preHandler: requireAccessAuth },
+    async (request) => {
+      const courseId = assertBodyField(request.body?.courseId, 'courseId');
+      const rawFuelAmount = request.body?.fuelAmount;
+      const fuelAmount =
+        Number.isFinite(Number(rawFuelAmount)) && Number(rawFuelAmount) > 0
+          ? Math.floor(Number(rawFuelAmount))
+          : null;
+      if (!fuelAmount) {
+        throw badRequest('fuelAmount must be a positive integer', 'INVALID_FUEL_AMOUNT');
+      }
+
+      return convertFuelToIchor(
+        request.auth.walletAddress,
+        courseId,
+        fuelAmount,
       );
     },
   );

@@ -34,6 +34,11 @@ const OUTCOME_SAVER_CONSUMED: u8 = 30;
 const OUTCOME_FULL_CONSEQUENCE: u8 = 31;
 const OUTCOME_HARVEST_SKIPPED: u8 = 40;
 const OUTCOME_HARVEST_APPLIED: u8 = 41;
+const ICHOR_PER_FUEL: u64 = 100;
+const RECEIPT_KIND_CONVERSION: u8 = 5;
+const OUTCOME_CONVERSION_APPLIED: u8 = 50;
+const OUTCOME_CONVERSION_NO_FUEL: u8 = 51;
+const OUTCOME_CONVERSION_GAUNTLET_LOCKED: u8 = 52;
 
 #[program]
 pub mod lock_vault {
@@ -488,6 +493,44 @@ pub mod lock_vault {
 
         Ok(())
     }
+
+    pub fn convert_fuel_to_ichor(
+        ctx: Context<ConvertFuelToIchor>,
+        receipt_key: [u8; 32],
+        fuel_amount: u16,
+    ) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let receipt = &mut ctx.accounts.receipt;
+        if receipt.is_initialized() {
+            return Ok(());
+        }
+
+        let effect = ctx.accounts.lock_account.convert_fuel_to_ichor(fuel_amount)?;
+
+        receipt.record(
+            ctx.accounts.lock_account.key(),
+            receipt_key,
+            RECEIPT_KIND_CONVERSION,
+            effect.applied,
+            effect.outcome,
+            now,
+            i64::try_from(effect.ichor_gained).map_err(|_| LockVaultError::NumericalOverflow)?,
+            ctx.bumps.receipt,
+            now,
+        );
+
+        if effect.applied {
+            emit!(FuelConverted {
+                lock_account: ctx.accounts.lock_account.key(),
+                fuel_amount: effect.fuel_consumed,
+                ichor_gained: effect.ichor_gained,
+                fuel_counter: ctx.accounts.lock_account.fuel_counter,
+                ichor_counter: ctx.accounts.lock_account.ichor_counter,
+            });
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -667,6 +710,30 @@ pub struct ApplyHarvestResult<'info> {
         payer = authority,
         space = 8 + WorkerReceipt::INIT_SPACE,
         seeds = [WorkerReceipt::HARVEST_SEED, lock_account.key().as_ref(), receipt_key.as_ref()],
+        bump
+    )]
+    pub receipt: Account<'info, WorkerReceipt>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(receipt_key: [u8; 32], fuel_amount: u16)]
+pub struct ConvertFuelToIchor<'info> {
+    #[account(
+        seeds = [ProtocolConfig::SEED],
+        bump = protocol_config.bump,
+        has_one = authority @ LockVaultError::UnauthorizedWorker
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+    #[account(mut)]
+    pub lock_account: Account<'info, LockAccount>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + WorkerReceipt::INIT_SPACE,
+        seeds = [WorkerReceipt::CONVERSION_SEED, lock_account.key().as_ref(), receipt_key.as_ref()],
         bump
     )]
     pub receipt: Account<'info, WorkerReceipt>,
@@ -1010,6 +1077,51 @@ impl LockAccount {
         })
     }
 
+    fn convert_fuel_to_ichor(&mut self, fuel_amount: u16) -> Result<FuelConversionEffect> {
+        if !self.gauntlet_complete {
+            return Ok(FuelConversionEffect {
+                applied: false,
+                outcome: OUTCOME_CONVERSION_GAUNTLET_LOCKED,
+                fuel_consumed: 0,
+                ichor_gained: 0,
+            });
+        }
+
+        if self.fuel_counter == 0 || fuel_amount == 0 {
+            return Ok(FuelConversionEffect {
+                applied: false,
+                outcome: OUTCOME_CONVERSION_NO_FUEL,
+                fuel_consumed: 0,
+                ichor_gained: 0,
+            });
+        }
+
+        let to_convert = fuel_amount.min(self.fuel_counter);
+        let ichor_gained = u64::from(to_convert)
+            .checked_mul(ICHOR_PER_FUEL)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+
+        self.fuel_counter = self
+            .fuel_counter
+            .checked_sub(to_convert)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+        self.ichor_counter = self
+            .ichor_counter
+            .checked_add(ichor_gained)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+        self.ichor_lifetime_total = self
+            .ichor_lifetime_total
+            .checked_add(ichor_gained)
+            .ok_or(LockVaultError::NumericalOverflow)?;
+
+        Ok(FuelConversionEffect {
+            applied: true,
+            outcome: OUTCOME_CONVERSION_APPLIED,
+            fuel_consumed: to_convert,
+            ichor_gained,
+        })
+    }
+
     fn consume_saver_or_apply_full_consequence(
         &mut self,
         protocol: &ProtocolConfig,
@@ -1177,6 +1289,7 @@ impl WorkerReceipt {
     pub const FUEL_BURN_SEED: &'static [u8] = b"fuel-burn";
     pub const MISS_SEED: &'static [u8] = b"miss";
     pub const HARVEST_SEED: &'static [u8] = b"harvest";
+    pub const CONVERSION_SEED: &'static [u8] = b"conversion";
 
     fn is_initialized(&self) -> bool {
         self.lock_account != Pubkey::default()
@@ -1243,6 +1356,15 @@ pub struct FuelBurned {
     pub lock_account: Pubkey,
     pub burned_at_ts: i64,
     pub fuel_counter: u16,
+}
+
+#[event]
+pub struct FuelConverted {
+    pub lock_account: Pubkey,
+    pub fuel_amount: u16,
+    pub ichor_gained: u64,
+    pub fuel_counter: u16,
+    pub ichor_counter: u64,
 }
 
 #[event]
@@ -1639,6 +1761,13 @@ struct FuelBurnEffect {
     applied: bool,
     outcome: u8,
     fuel_burned: u16,
+}
+
+struct FuelConversionEffect {
+    applied: bool,
+    outcome: u8,
+    fuel_consumed: u16,
+    ichor_gained: u64,
 }
 
 struct MissEffect {

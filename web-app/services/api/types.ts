@@ -218,6 +218,20 @@ export interface CourseRuntimeSnapshot {
   fuelEarnStatus: ApiFuelEarnStatus;
 }
 
+export interface FuelConversionResponse {
+  conversionId: string;
+  applied: boolean;
+  fuelConverted: number;
+  ichorGained: number;
+  reason: string;
+  courseRuntime?: CourseRuntimeSnapshot;
+  chain?: {
+    signature?: string;
+    lockAccount?: string;
+    error?: string;
+  } | null;
+}
+
 /** Response from GET /v1/progress/enrollments — all enrolled courses + progress for a wallet */
 export interface UserEnrollmentsResponse {
   enrollments: {
