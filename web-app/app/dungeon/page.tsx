@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useDungeon } from '@/components/DungeonProvider';
 import { useCourseStore } from '@/stores/courseStore';
 import { useUserStore } from '@/stores/userStore';
-import type { BrewModeId } from '@/types';
 import type { Viewpoint } from '@/types';
 import { useFlameStore } from '@/stores/flameStore';
 import { useSceneStore } from '@/stores/sceneStore';
@@ -133,21 +132,12 @@ export default function DungeonPage() {
         }
 
         case 'brewConfirmed': {
-          const modeId = payload?.modeId as string;
           const { activeCourseId: acid, courseStates: cs } = useCourseStore.getState();
-          if (modeId && acid) {
+          if (acid) {
             const activeState = cs[acid];
             if (activeState?.fuelCounter > 0) {
-              useCourseStore.getState().startBrewForCourse(acid, modeId as BrewModeId);
+              useCourseStore.getState().convertFuelForCourse(acid, 1);
             }
-          }
-          break;
-        }
-
-        case 'brewCancelled': {
-          const { activeCourseId: acid } = useCourseStore.getState();
-          if (acid) {
-            useCourseStore.getState().cancelBrewForCourse(acid);
           }
           break;
         }

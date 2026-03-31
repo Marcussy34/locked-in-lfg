@@ -32,11 +32,7 @@ export interface CourseGameState {
   lastFuelCreditDay: string | null;
   lastBrewerBurnTs: string | null;
 
-  // Brew
-  brewStatus: 'IDLE' | 'BREWING';
-  brewModeId: string | null;
-  brewStartedAt: string | null;
-  brewEndsAt: string | null;
+  // Ichor
   ichorBalance: number;
   totalIchorProduced: number;
 
@@ -64,10 +60,6 @@ export const DEFAULT_COURSE_STATE: CourseGameState = {
   fuelCap: 7,
   lastFuelCreditDay: null,
   lastBrewerBurnTs: null,
-  brewStatus: 'IDLE',
-  brewModeId: null,
-  brewStartedAt: null,
-  brewEndsAt: null,
   ichorBalance: 0,
   totalIchorProduced: 0,
   flameState: 'COLD',

@@ -14,18 +14,9 @@ function sanitizeLessonPayload(payload) {
     return payload;
   }
 
-  const sanitizedQuestions = Array.isArray(payload.questions)
-    ? payload.questions.map((question) => {
-        const { correctAnswer, ...rest } = question;
-        void correctAnswer;
-        return rest;
-      })
-    : [];
-
-  return withContentHash({
-    ...payload,
-    questions: sanitizedQuestions,
-  });
+  // Include correctAnswer — needed for local quiz checking and recall questions.
+  // Routes are auth-protected, and answers are shown to users after submission anyway.
+  return withContentHash(payload);
 }
 
 export async function getLatestRelease() {

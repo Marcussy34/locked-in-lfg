@@ -4,9 +4,7 @@ import { webStorageAdapter } from './storage';
 import { getCourseRuntime, hasRemoteLessonApi } from '@/services/api';
 import type { CourseRuntimeSnapshot, UserEnrollmentsResponse } from '@/services/api/types';
 import type { LockAccountSnapshot } from '@/services/solana';
-import { BREW_MODES } from '@/types';
 import type {
-  BrewModeId,
   Course,
   CourseModule,
   Lesson,
@@ -64,9 +62,7 @@ interface CourseStore {
   completeLesson: (lessonId: string, courseId: string, score: number) => void;
   completeDayForCourse: (courseId: string) => void;
   useSaverForCourse: (courseId: string) => boolean;
-  startBrewForCourse: (courseId: string, modeId: BrewModeId) => void;
-  tickBrewForCourse: (courseId: string) => void;
-  cancelBrewForCourse: (courseId: string) => void;
+  convertFuelForCourse: (courseId: string, fuelAmount: number) => void;
 
   // Existing helpers
   setCourses: (courses: Course[]) => void;
@@ -126,23 +122,11 @@ function deriveFuelEarnStatus(state: CourseGameState): FuelEarnStatus {
   return 'AVAILABLE';
 }
 
-function deriveNextFuelBurnAt(state: CourseGameState): string | null {
-  if (state.brewStatus !== 'BREWING' || state.fuelCounter <= 0) {
-    return null;
-  }
-
-  const anchor = state.lastBrewerBurnTs ?? state.brewStartedAt;
-  if (!anchor) {
-    return null;
-  }
-
-  return new Date(new Date(anchor).getTime() + 24 * 60 * 60 * 1000).toISOString();
+function deriveNextFuelBurnAt(_state: CourseGameState): string | null {
+  // Fuel conversion is now instant — no scheduled burn
+  return null;
 }
 
-function getBrewMode(modeId: string | null) {
-  if (!modeId) return null;
-  return BREW_MODES[modeId as BrewModeId] ?? null;
-}
 
 export const useCourseStore = create<CourseStore>()(
   persist(
@@ -280,92 +264,23 @@ export const useCourseStore = create<CourseStore>()(
         return true;
       },
 
-      startBrewForCourse: (courseId, modeId) => {
+      convertFuelForCourse: (courseId, fuelAmount) => {
         const { courseStates } = get();
         const state = courseStates[courseId];
-        if (
-          !state ||
-          state.brewStatus === 'BREWING' ||
-          state.fuelCounter <= 0
-        ) {
-          return;
-        }
+        if (!state || state.fuelCounter <= 0 || fuelAmount <= 0) return;
 
-        const mode = BREW_MODES[modeId];
-        if (!mode) return;
-
-        const now = new Date();
-        const endsAt = new Date(now.getTime() + mode.durationMs);
+        const toConvert = Math.min(fuelAmount, state.fuelCounter);
+        const ICHOR_PER_FUEL = 100;
+        const ichorGained = toConvert * ICHOR_PER_FUEL;
 
         set({
           courseStates: {
             ...courseStates,
             [courseId]: {
               ...state,
-              brewStatus: 'BREWING',
-              brewModeId: modeId,
-              brewStartedAt: now.toISOString(),
-              brewEndsAt: endsAt.toISOString(),
-            },
-          },
-        });
-      },
-
-      tickBrewForCourse: (courseId) => {
-        const { courseStates } = get();
-        const state = courseStates[courseId];
-        if (!state || state.brewStatus !== 'BREWING' || !state.brewEndsAt) return;
-
-        const now = new Date();
-        if (now >= new Date(state.brewEndsAt)) {
-          // Brew complete — award ichor
-          const mode = getBrewMode(state.brewModeId);
-          const ichorReward = mode
-            ? Math.round(mode.ichorPerHour * (mode.durationMs / (60 * 60 * 1000)))
-            : 0;
-          set({
-            courseStates: {
-              ...courseStates,
-              [courseId]: {
-                ...state,
-                brewStatus: 'IDLE',
-                brewModeId: null,
-                brewStartedAt: null,
-                brewEndsAt: null,
-                ichorBalance: state.ichorBalance + ichorReward,
-                totalIchorProduced: state.totalIchorProduced + ichorReward,
-              },
-            },
-          });
-        }
-      },
-
-      cancelBrewForCourse: (courseId) => {
-        const { courseStates } = get();
-        const state = courseStates[courseId];
-        if (!state) return;
-
-        const mode = getBrewMode(state.brewModeId);
-        const accruedIchor =
-          state.brewStatus === 'BREWING' && state.brewStartedAt && mode
-            ? Math.floor(
-                mode.ichorPerHour *
-                  ((Date.now() - new Date(state.brewStartedAt).getTime()) /
-                    (60 * 60 * 1000)),
-              )
-            : 0;
-
-        set({
-          courseStates: {
-            ...courseStates,
-            [courseId]: {
-              ...state,
-              brewStatus: 'IDLE',
-              brewModeId: null,
-              brewStartedAt: null,
-              brewEndsAt: null,
-              ichorBalance: state.ichorBalance + accruedIchor,
-              totalIchorProduced: state.totalIchorProduced + accruedIchor,
+              fuelCounter: state.fuelCounter - toConvert,
+              ichorBalance: state.ichorBalance + ichorGained,
+              totalIchorProduced: state.totalIchorProduced + ichorGained,
             },
           },
         });
