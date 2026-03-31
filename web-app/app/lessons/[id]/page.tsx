@@ -6,17 +6,18 @@ import { useCourseStore, useUserStore, useStreakStore, useFlameStore } from '@/s
 import { hasRemoteLessonApi, startLesson, submitLesson } from '@/services/api';
 import { refreshAuthSession } from '@/services/api/auth/authApi';
 import { ApiError } from '@/services/api/errors';
-import type { Question } from '@/types';
+import type { Question, Lesson } from '@/types';
 import {
   T,
   ScreenBackground,
   BackButton,
-  ParchmentCard,
   PrimaryButton,
   ProgressBar,
 } from '@/components/theme';
+import { RecallQuestion } from '@/components/RecallQuestion';
+import { LessonBlockRenderer } from '@/components/LessonBlocks';
 
-type Phase = 'reading' | 'questions';
+type Phase = 'recall' | 'reading' | 'questions';
 
 export default function LessonPage(props: {
   params: Promise<{ id: string }>;
@@ -31,8 +32,29 @@ export default function LessonPage(props: {
   const refreshToken = useUserStore((s) => s.refreshToken);
   const setAuthSession = useUserStore((s) => s.setAuthSession);
 
+  // Recall: pick a random question from completed previous lessons
+  const lessonProgress = useCourseStore((s) => s.lessonProgress);
+  const allLessons = useCourseStore((s) => s.getLessonsForCourse(lesson?.courseId ?? ''));
+  const recallData = (() => {
+    if (!lesson) return null;
+    const previousLessons = allLessons
+      .filter((l: Lesson) => l.order < lesson.order && lessonProgress[l.id]?.completed);
+    if (previousLessons.length === 0) return null;
+    // Gather all questions from completed previous lessons
+    const pool: Array<{ question: Question; lessonTitle: string }> = [];
+    for (const prev of previousLessons) {
+      for (const q of prev.questions ?? []) {
+        pool.push({ question: q, lessonTitle: prev.title });
+      }
+    }
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  })();
+
+  const shouldShowRecall = recallData !== null;
+
   // Local state
-  const [phase, setPhase] = useState<Phase>('reading');
+  const [phase, setPhase] = useState<Phase>(shouldShowRecall ? 'recall' : 'reading');
   const [startSynced, setStartSynced] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [attemptStartedAt, setAttemptStartedAt] = useState<string | null>(null);
@@ -64,12 +86,14 @@ export default function LessonPage(props: {
     (currentQuestion?.type === 'mcq' && Boolean(selectedOption)) ||
     (currentQuestion?.type === 'short_text' && textAnswer.trim().length > 0);
 
-  // Get lesson content from blocks or fallback
-  const lessonContent = lesson?.blocks
-    ?.sort((a, b) => a.order - b.order)
-    .map((block) => block.text ?? '')
-    .filter(Boolean)
-    .join('\n\n') ?? lesson?.content ?? '';
+  // Get sorted lesson blocks
+  const sortedBlocks = lesson?.blocks?.sort((a, b) => a.order - b.order) ?? [];
+  const hasBlocks = sortedBlocks.length > 0;
+  const [sectionIndex, setSectionIndex] = useState(0);
+  const totalSections = sortedBlocks.length || 1;
+  const isLastSection = sectionIndex >= totalSections - 1;
+  // Fallback for legacy lessons without blocks
+  const legacyContent = lesson?.content ?? '';
 
   // Lesson position
   const courseLessons = useCourseStore((s) => s.getLessonsForCourse(courseId));
@@ -274,16 +298,54 @@ export default function LessonPage(props: {
     );
   }
 
-  // Reading phase
-  if (phase === 'reading') {
+  // Recall phase — spaced retrieval before new lesson
+  if (phase === 'recall' && recallData) {
     return (
       <ScreenBackground>
-        <BackButton onClick={() => router.back()} />
+        <RecallQuestion
+          question={recallData.question}
+          lessonTitle={recallData.lessonTitle}
+          onComplete={() => setPhase('reading')}
+        />
+      </ScreenBackground>
+    );
+  }
 
-        {/* Lesson counter */}
-        <p className="text-xs mt-1" style={{ color: T.textMuted }}>
-          Lesson {lessonOrder} of {totalLessonsInCourse}
-        </p>
+  // Reading phase — paginated sections
+  if (phase === 'reading') {
+    const currentBlock = hasBlocks ? sortedBlocks[sectionIndex] : null;
+
+    return (
+      <ScreenBackground>
+        <BackButton onClick={() => {
+          if (sectionIndex > 0) {
+            setSectionIndex(sectionIndex - 1);
+          } else {
+            router.back();
+          }
+        }} />
+
+        {/* Lesson + section counter */}
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-xs" style={{ color: T.textMuted }}>
+            Lesson {lessonOrder} of {totalLessonsInCourse}
+          </p>
+          {hasBlocks && totalSections > 1 && (
+            <p className="text-xs font-mono" style={{ color: T.amber }}>
+              {sectionIndex + 1} / {totalSections}
+            </p>
+          )}
+        </div>
+
+        {/* Section progress bar */}
+        {hasBlocks && totalSections > 1 && (
+          <div className="mt-2">
+            <ProgressBar
+              progress={(sectionIndex + 1) / totalSections}
+              color={T.amber}
+            />
+          </div>
+        )}
 
         {/* Title */}
         <h1
@@ -293,22 +355,30 @@ export default function LessonPage(props: {
           {lesson.title}
         </h1>
 
-        {/* Content */}
-        <div className="mt-4 space-y-4">
-          {lessonContent.split('\n\n').map((paragraph, i) => (
-            <p
-              key={i}
-              className="text-[15px] leading-[22px]"
-              style={{ color: T.textSecondary }}
-            >
-              {paragraph}
-            </p>
-          ))}
+        {/* Single section content */}
+        <div className="mt-4 space-y-5 min-h-[40vh]">
+          {hasBlocks && currentBlock ? (
+            <LessonBlockRenderer block={currentBlock} />
+          ) : (
+            legacyContent.split('\n\n').map((paragraph, i) => (
+              <p
+                key={i}
+                className="text-[15px] leading-[22px]"
+                style={{ color: T.textSecondary }}
+              >
+                {paragraph}
+              </p>
+            ))
+          )}
         </div>
 
-        {/* Start questions / Complete lesson button */}
+        {/* Navigation */}
         <div className="mt-6 mb-8">
-          {questions.length > 0 ? (
+          {hasBlocks && !isLastSection ? (
+            <PrimaryButton onClick={() => setSectionIndex(sectionIndex + 1)}>
+              Next
+            </PrimaryButton>
+          ) : questions.length > 0 ? (
             <PrimaryButton onClick={handleStartQuestions}>
               Start Questions
             </PrimaryButton>
