@@ -1,237 +1,178 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore, useUserStore } from '@/stores';
-import { getCourseRuntimeHistory } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
-import type { RuntimeHistoryResponse } from '@/services/api/types';
+import { getUserXp } from '@/services/api/progress/progressApi';
 import {
   ScreenBackground,
   BackButton,
-  PageHeader,
   ParchmentCard,
   StatBox,
   SectionLabel,
-  Divider,
   T,
 } from '@/components/theme';
+
+const LEVEL_NAMES = ['Novice', 'Apprentice', 'Scholar', 'Adept', 'Master', 'Sage', 'Legend'];
+const XP_THRESHOLDS = [0, 500, 1500, 3500, 7000, 12000, 20000];
 
 export default function DashboardPage() {
   const router = useRouter();
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const courseStates = useCourseStore((s) => s.courseStates);
   const courses = useCourseStore((s) => s.courses);
-  const refreshCourseRuntime = useCourseStore((s) => s.refreshCourseRuntime);
+  const lessons = useCourseStore((s) => s.lessons);
+  const lessonProgress = useCourseStore((s) => s.lessonProgress);
+  const enrolledCourseIds = useCourseStore((s) => s.enrolledCourseIds);
   const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
 
-  const [history, setHistory] = useState<RuntimeHistoryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [xp, setXp] = useState({ xpTotal: 0, xpLevel: 1 });
+
+  useEffect(() => {
+    if (authToken) {
+      getUserXp(authToken).then((data) => setXp({ xpTotal: data.xpTotal, xpLevel: data.xpLevel })).catch(() => {});
+    }
+  }, [authToken]);
 
   const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
   const activeCourse = activeCourseId ? courses.find((c) => c.id === activeCourseId) : null;
 
-  /* Derived values */
   const streak = activeState?.currentStreak ?? 0;
   const longestStreak = activeState?.longestStreak ?? 0;
+  const fuelBalance = activeState?.fuelCounter ?? 0;
+  const fuelCap = activeState?.fuelCap ?? 7;
+  const fuelFragments = activeState?.fuelFragmentsToday ?? 0;
+  const ichorBalance = activeState?.ichorBalance ?? 0;
   const saverCount = activeState?.saverCount ?? 0;
   const saversRemaining = Math.max(0, 3 - saverCount);
-  const saverRecoveryMode = activeState?.saverRecoveryMode ?? false;
-  const redirectPercent = Math.round((activeState?.currentYieldRedirectBps ?? 0) / 100);
-  const extensionDays = activeState?.extensionDays ?? 0;
 
-  /* Flame state derived from streak */
-  const flameState = streak >= 3 ? 'BURNING' : streak >= 1 ? 'LIT' : 'COLD';
-  const flameColor =
-    flameState === 'BURNING'
-      ? T.amber
-      : flameState === 'LIT'
-        ? T.rust
-        : T.textMuted;
+  // Total lessons completed across all courses
+  const totalCompleted = Object.values(lessonProgress).filter((p) => p.completed).length;
+  const totalLessons = Object.values(lessons).reduce((sum, arr) => sum + arr.length, 0);
 
-  const lampsLit = saversRemaining;
+  // Enrolled course count
+  const enrolledCount = enrolledCourseIds.filter((id) => Boolean(courseStates[id]?.lockAccountAddress)).length;
 
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
+  const levelName = LEVEL_NAMES[xp.xpLevel - 1] ?? `Level ${xp.xpLevel}`;
+  const currentThreshold = XP_THRESHOLDS[xp.xpLevel - 1] ?? 0;
+  const nextThreshold = XP_THRESHOLDS[xp.xpLevel] ?? currentThreshold + 1000;
+  const xpProgress = (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold);
 
-  /* Load runtime history and refresh runtime state */
-  useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      if (!activeCourseId) {
-        setHistory(null);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try { token = await refreshBackendToken(); } catch {
-          if (active) { setError('Connect wallet to view dashboard.'); setLoading(false); }
-          return;
-        }
-      }
-      if (!token) {
-        if (active) { setError('Connect wallet to view dashboard.'); setLoading(false); }
-        return;
-      }
-
-      /* Refresh runtime state in background */
-      void refreshCourseRuntime(activeCourseId, token).catch(() => {});
-
-      try {
-        const resp = await getCourseRuntimeHistory(activeCourseId, token);
-        if (active) { setHistory(resp); setError(null); setLoading(false); }
-      } catch (err) {
-        if (err instanceof ApiError && (err.code === 'TOKEN_EXPIRED' || err.status === 401) && refreshToken) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getCourseRuntimeHistory(activeCourseId, newToken);
-            if (active) { setHistory(retried); setError(null); setLoading(false); }
-            return;
-          } catch { /* fall through */ }
-        }
-        if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
-      }
-    };
-
-    void load();
-    return () => { active = false; };
-  }, [activeCourseId, authToken, refreshToken, refreshBackendToken, refreshCourseRuntime]);
+  const flameLabel = streak >= 3 ? 'Burning' : streak >= 1 ? 'Lit' : 'Cold';
+  const flameColor = streak >= 3 ? T.amber : streak >= 1 ? T.rust : T.textMuted;
 
   return (
     <ScreenBackground>
       <BackButton onClick={() => router.back()} />
 
-      <PageHeader title="Streak Status" />
-      {activeCourse && (
-        <p className="text-xs mt-1 mb-2" style={{ color: T.textSecondary }}>
-          {activeCourse.title}
+      {/* Hero — XP + Level */}
+      <div className="text-center pt-2 pb-5">
+        <p className="font-mono text-[10px] uppercase tracking-[2px] mb-1" style={{ color: T.textMuted }}>
+          Your Progress
         </p>
-      )}
-
-      {/* Flame state hero */}
-      <ParchmentCard className="flex flex-col items-center py-6 mt-4">
-        <p
-          className="text-[32px] font-bold tracking-[2px]"
-          style={{ fontFamily: 'Georgia, serif', color: flameColor }}
-        >
-          {flameState}
+        <p className="text-[28px] font-bold" style={{ color: T.amber, fontFamily: 'Georgia, serif' }}>
+          Lv.{xp.xpLevel} {levelName}
         </p>
-        <p className="text-xs mt-2" style={{ color: T.textSecondary }}>
-          {flameState === 'BURNING'
-            ? 'Your flame burns bright'
-            : flameState === 'LIT'
-              ? 'Your flame is lit'
-              : 'Your flame is cold'}
-        </p>
-      </ParchmentCard>
-
-      {/* Streak stats */}
-      <div className="flex gap-2.5 mt-3">
-        <StatBox label="Current Streak" value={`${streak}`} color={T.amber} />
-        <StatBox label="Longest Streak" value={`${longestStreak}`} color={T.amber} />
+        <div className="max-w-xs mx-auto mt-3">
+          <div className="flex justify-between mb-1">
+            <span className="text-[10px] font-mono" style={{ color: T.textSecondary }}>{xp.xpTotal} XP</span>
+            <span className="text-[10px] font-mono" style={{ color: T.textMuted }}>{nextThreshold} XP</span>
+          </div>
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${Math.min(100, Math.max(0, xpProgress * 100))}%`, backgroundColor: T.amber }}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Saver Lamps */}
-      <ParchmentCard className="mt-3">
+      {/* Stats grid */}
+      <div className="flex flex-col gap-2.5">
+        <div className="flex gap-2.5">
+          <StatBox label="Streak" value={`${streak} day${streak !== 1 ? 's' : ''}`} color={flameColor} />
+          <StatBox label="Longest" value={`${longestStreak} day${longestStreak !== 1 ? 's' : ''}`} color={T.amber} />
+        </div>
+        <div className="flex gap-2.5">
+          <StatBox label="Fuel" value={`${fuelBalance}/${fuelCap}`} color={T.rust} />
+          <StatBox label="Ichor" value={Math.floor(ichorBalance)} color={T.green} />
+        </div>
+        <div className="flex gap-2.5">
+          <StatBox label="Lessons Done" value={`${totalCompleted}/${totalLessons}`} color={T.violet} />
+          <StatBox label="Courses" value={enrolledCount} color={T.teal} />
+        </div>
+      </div>
+
+      {/* Flame status */}
+      <ParchmentCard className="mt-4 flex items-center gap-4 p-4">
+        <span className="text-[32px]">
+          {streak >= 3 ? '\u{1F525}' : streak >= 1 ? '\u{1FA94}' : '\u{1F9CA}'}
+        </span>
+        <div>
+          <p className="text-[15px] font-bold" style={{ color: flameColor, fontFamily: 'Georgia, serif' }}>
+            Flame: {flameLabel}
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: T.textSecondary }}>
+            {streak >= 3
+              ? 'Yield is active. Keep the streak alive.'
+              : streak >= 1
+                ? 'Building momentum. 3-day streak activates yield.'
+                : 'Complete a lesson today to light the flame.'}
+          </p>
+        </div>
+      </ParchmentCard>
+
+      {/* Fuel progress today */}
+      <ParchmentCard className="mt-3 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-mono text-[10px] uppercase tracking-[1px]" style={{ color: T.textSecondary }}>
+            Today&apos;s Fuel
+          </span>
+          <span className="text-[11px] font-mono font-bold" style={{ color: fuelFragments >= 1 ? T.green : T.amber }}>
+            {fuelFragments.toFixed(2)} / 1.00
+          </span>
+        </div>
+        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${Math.min(100, fuelFragments * 100)}%`, backgroundColor: fuelFragments >= 1 ? T.green : T.amber }}
+          />
+        </div>
+      </ParchmentCard>
+
+      {/* Saver lamps */}
+      <ParchmentCard className="mt-3 p-4">
         <SectionLabel>Saver Lamps</SectionLabel>
         <div className="flex justify-center gap-7 mt-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex flex-col items-center">
-              <span className="text-[28px]">
-                {i < lampsLit ? '\u{1F525}' : '\u{1F4A8}'}
-              </span>
+              <span className="text-[24px]">{i < saversRemaining ? '\u{1F525}' : '\u{1F4A8}'}</span>
               <span
-                className="font-mono text-[10px] mt-1 uppercase tracking-[1px]"
-                style={{ color: i < lampsLit ? T.violet : T.textMuted }}
+                className="font-mono text-[9px] mt-1 uppercase tracking-[1px]"
+                style={{ color: i < saversRemaining ? T.green : T.textMuted }}
               >
-                {i < lampsLit ? 'Active' : 'Used'}
+                {i < saversRemaining ? 'Active' : 'Used'}
               </span>
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-center mt-3" style={{ color: T.textSecondary }}>
-          {saversRemaining}/3 savers remaining
+        <p className="text-[10px] text-center mt-2" style={{ color: T.textMuted }}>
+          Miss a day? A saver protects your streak. {saversRemaining}/3 remaining.
         </p>
       </ParchmentCard>
 
-      {/* Consequence State */}
-      <ParchmentCard className="mt-3">
-        <SectionLabel>Consequence State</SectionLabel>
-        <div className="flex justify-between items-center">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[1px]"
-            style={{ color: T.textSecondary }}
-          >
-            Yield redirect
-          </span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: redirectPercent > 0 ? T.crimson : T.textPrimary }}
-          >
-            {redirectPercent}%
-          </span>
-        </div>
-        <Divider />
-        <div className="flex justify-between items-center">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[1px]"
-            style={{ color: T.textSecondary }}
-          >
-            Saver recovery
-          </span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: saverRecoveryMode ? T.green : T.textPrimary }}
-          >
-            {saverRecoveryMode ? 'Active' : 'Inactive'}
-          </span>
-        </div>
-        <Divider />
-        <div className="flex justify-between items-center">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[1px]"
-            style={{ color: T.textSecondary }}
-          >
-            Extension total
-          </span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: extensionDays > 0 ? T.crimson : T.textPrimary }}
-          >
-            {extensionDays} day{extensionDays !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </ParchmentCard>
-
-      {/* Runtime Audit */}
-      <ParchmentCard className="mt-3">
-        <SectionLabel>Runtime Audit</SectionLabel>
-        {loading ? (
-          <p className="text-xs mt-2" style={{ color: T.textSecondary }}>Loading...</p>
-        ) : error ? (
-          <p className="text-[11px] mt-1.5" style={{ color: T.amber }}>{error}</p>
-        ) : history ? (
-          <p className="text-[13px] mt-1" style={{ color: T.textPrimary }}>
-            Burns: {history.burnCount} &middot; Misses: {history.missCount} &middot; Extensions: {history.extensionDaysAdded} day{history.extensionDaysAdded === 1 ? '' : 's'}
+      {/* Active course */}
+      {activeCourse && (
+        <ParchmentCard className="mt-3 p-4 mb-6">
+          <SectionLabel>Active Course</SectionLabel>
+          <p className="text-[15px] font-bold mt-1" style={{ color: T.textPrimary, fontFamily: 'Georgia, serif' }}>
+            {activeCourse.title}
           </p>
-        ) : (
-          <p className="text-xs mt-2" style={{ color: T.textSecondary }}>
-            No active course selected.
+          <p className="text-[11px] mt-1" style={{ color: T.textSecondary }}>
+            {activeCourse.completedLessons}/{(lessons[activeCourse.id] ?? []).length || activeCourse.totalLessons} lessons completed
           </p>
-        )}
-      </ParchmentCard>
+        </ParchmentCard>
+      )}
     </ScreenBackground>
   );
 }
