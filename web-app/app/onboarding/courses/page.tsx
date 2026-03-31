@@ -6,13 +6,10 @@ import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
   T,
-  ScreenBackground,
   ParchmentCard,
   CornerMarks,
-  PageHeader,
 } from '@/components/theme';
 
-// Color maps matching the RN source
 const DIFFICULTY_COLORS: Record<CourseDifficulty, string> = {
   beginner: T.green,
   intermediate: T.teal,
@@ -27,7 +24,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   rust: T.rust,
 };
 
-// Difficulty flask indicators
 function DifficultyFlasks({ level }: { level: number }) {
   const fills = [T.green, T.teal, T.crimson];
   return (
@@ -54,7 +50,6 @@ function DifficultyFlasks({ level }: { level: number }) {
   );
 }
 
-// Tag component
 function Tag({ label, color }: { label: string; color: string }) {
   return (
     <span
@@ -70,7 +65,6 @@ function Tag({ label, color }: { label: string; color: string }) {
   );
 }
 
-// Stats row for course card
 function StatsRow({ course, accentColor }: { course: Course; accentColor: string }) {
   return (
     <div
@@ -100,15 +94,18 @@ function StatsRow({ course, accentColor }: { course: Course; accentColor: string
   );
 }
 
-// Course card
 function CourseCard({
   course,
   selected,
   onSelect,
+  isEnrolled,
+  isComingSoon,
 }: {
   course: Course;
   selected: boolean;
   onSelect: () => void;
+  isEnrolled: boolean;
+  isComingSoon: boolean;
 }) {
   const difficultyLevel =
     course.difficulty === 'beginner' ? 1 : course.difficulty === 'intermediate' ? 2 : 3;
@@ -116,28 +113,32 @@ function CourseCard({
   const catColor = CATEGORY_COLORS[course.category] ?? T.teal;
 
   return (
-    <button
-      onClick={onSelect}
-      className="w-full text-left relative"
+    <div
+      onClick={isComingSoon ? undefined : onSelect}
+      role={isComingSoon ? undefined : 'button'}
+      tabIndex={isComingSoon ? undefined : 0}
+      className={`w-full text-left relative ${isComingSoon ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}
     >
       <ParchmentCard
         style={{
           backgroundColor: selected ? T.bgCardActive : T.bgCard,
-          borderColor: selected ? `${accentColor}35` : T.borderDormant,
+          borderColor: isEnrolled
+            ? `${T.green}35`
+            : selected
+              ? `${accentColor}35`
+              : T.borderDormant,
         }}
       >
-        {/* Corner marks on selected */}
         {selected && <CornerMarks />}
 
-        {/* Top row: tags + difficulty flasks */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <Tag label={course.difficulty} color={accentColor} />
           <Tag label={course.category} color={catColor} />
+          {isEnrolled && <Tag label="enrolled" color={T.green} />}
           <div className="flex-1" />
           <DifficultyFlasks level={difficultyLevel} />
         </div>
 
-        {/* Title */}
         <h3
           className="text-[17px] font-bold tracking-wide leading-snug mb-[5px]"
           style={{
@@ -148,43 +149,68 @@ function CourseCard({
           {course.title}
         </h3>
 
-        {/* Description */}
-        <p
-          className="text-xs leading-[18px] mb-3.5 line-clamp-2"
-          style={{ color: T.textSecondary }}
-        >
+        <p className="text-xs leading-[18px] mb-3.5 line-clamp-2" style={{ color: T.textSecondary }}>
           {course.description}
         </p>
 
-        {/* Stats row */}
+        {isComingSoon && (
+          <div
+            className="mb-3.5 py-3 rounded-[10px] border text-center"
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.03)',
+              borderColor: T.borderDormant,
+            }}
+          >
+            <span
+              className="text-[12px] font-bold uppercase tracking-[2px]"
+              style={{ color: T.textMuted, fontFamily: 'Georgia, serif' }}
+            >
+              Coming Soon
+            </span>
+          </div>
+        )}
+
         <StatsRow course={course} accentColor={accentColor} />
       </ParchmentCard>
-    </button>
+    </div>
   );
 }
 
-// Main page
 export default function OnboardingCoursesPage() {
   const router = useRouter();
 
   const courses = useCourseStore((s) => s.courses);
+  const lessons = useCourseStore((s) => s.lessons);
   const contentLoading = useCourseStore((s) => s.contentLoading);
   const contentError = useCourseStore((s) => s.contentError);
   const contentInitialized = useCourseStore((s) => s.contentInitialized);
   const initializeContent = useCourseStore((s) => s.initializeContent);
+  const syncOnChainEnrollments = useCourseStore((s) => s.syncOnChainEnrollments);
+  const enrolledCourseIds = useCourseStore((s) => s.enrolledCourseIds);
+  const courseStates = useCourseStore((s) => s.courseStates);
+  const walletAddress = useUserStore((s) => s.walletAddress);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Initialize course content on mount
   useEffect(() => {
     if (!contentInitialized && !contentLoading) {
       void initializeContent();
     }
   }, [contentInitialized, contentLoading, initializeContent]);
 
-  const selectedCourse = selectedId
-    ? courses.find((c) => c.id === selectedId)
-    : null;
+  // Detect on-chain locks
+  useEffect(() => {
+    if (walletAddress && courses.length > 0) {
+      void syncOnChainEnrollments(walletAddress);
+    }
+  }, [walletAddress, courses.length, syncOnChainEnrollments]);
+
+  const enrolledIds = new Set(
+    enrolledCourseIds.filter((id) => Boolean(courseStates[id]?.lockAccountAddress)),
+  );
+
+  const selectedCourse = selectedId ? courses.find((c) => c.id === selectedId) : null;
+  const selectedIsEnrolled = selectedId ? enrolledIds.has(selectedId) : false;
 
   return (
     <div
@@ -196,18 +222,14 @@ export default function OnboardingCoursesPage() {
         backgroundPosition: 'center',
       }}
     >
-      {/* Wood texture overlay — matches ScreenBackground */}
       <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
       <div className="relative max-w-2xl mx-auto px-[18px] pb-32">
-        {/* Header */}
         <div className="text-center pt-5 pb-7">
-          {/* Decorative diamond line */}
           <div className="flex items-center justify-center gap-2 mb-3.5">
             <div className="w-[30px] h-px" style={{ backgroundColor: `${T.amber}30` }} />
             <span className="text-[7px]" style={{ color: `${T.amber}50` }}>{'\u25C6'}</span>
             <div className="w-[30px] h-px" style={{ backgroundColor: `${T.amber}30` }} />
           </div>
-
           <h1
             className="text-[26px] font-bold tracking-wide leading-tight mb-2"
             style={{ color: T.textPrimary, fontFamily: 'Georgia, serif' }}
@@ -220,14 +242,10 @@ export default function OnboardingCoursesPage() {
           </p>
         </div>
 
-        {/* Scanning / Loading states */}
         {contentLoading && courses.length === 0 && (
           <div
             className="p-4 rounded-lg border mb-4"
-            style={{
-              borderColor: T.borderDormant,
-              backgroundColor: 'rgba(14,14,28,0.6)',
-            }}
+            style={{ borderColor: T.borderDormant, backgroundColor: 'rgba(14,14,28,0.6)' }}
           >
             <p className="text-xs text-center" style={{ color: T.textSecondary }}>
               Syncing course catalog...
@@ -235,14 +253,10 @@ export default function OnboardingCoursesPage() {
           </div>
         )}
 
-        {/* Error */}
         {contentError && (
           <div
             className="p-4 rounded-lg border mb-4"
-            style={{
-              borderColor: 'rgba(255,68,102,0.15)',
-              backgroundColor: 'rgba(14,14,28,0.6)',
-            }}
+            style={{ borderColor: 'rgba(255,68,102,0.15)', backgroundColor: 'rgba(14,14,28,0.6)' }}
           >
             <p className="text-xs text-center" style={{ color: 'rgba(255,68,102,0.6)' }}>
               {contentError}
@@ -250,39 +264,35 @@ export default function OnboardingCoursesPage() {
             <button
               onClick={() => void initializeContent(true)}
               className="mt-3 mx-auto block px-4 py-2 rounded-md border text-[11px] font-semibold uppercase tracking-wide"
-              style={{
-                borderColor: `${T.amber}30`,
-                backgroundColor: 'rgba(212,160,74,0.08)',
-                color: T.amber,
-              }}
+              style={{ borderColor: `${T.amber}30`, backgroundColor: 'rgba(212,160,74,0.08)', color: T.amber }}
             >
               Retry
             </button>
           </div>
         )}
 
-        {/* Course cards */}
         <div className="flex flex-col gap-3">
-          {courses.map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              selected={selectedId === course.id}
-              onSelect={() =>
-                setSelectedId(selectedId === course.id ? null : course.id)
-              }
-            />
-          ))}
+          {courses.map((course) => {
+            const isEnrolled = enrolledIds.has(course.id);
+            const actualLessonCount = (lessons[course.id] ?? []).length;
+            const isComingSoon = actualLessonCount === 0 && course.totalLessons === 0;
+            return (
+              <CourseCard
+                key={course.id}
+                course={course}
+                selected={selectedId === course.id}
+                isEnrolled={isEnrolled}
+                isComingSoon={isComingSoon}
+                onSelect={() => setSelectedId(selectedId === course.id ? null : course.id)}
+              />
+            );
+          })}
         </div>
 
-        {/* Empty state */}
         {courses.length === 0 && !contentLoading && !contentError && (
           <div
             className="p-4 rounded-lg border"
-            style={{
-              borderColor: T.borderDormant,
-              backgroundColor: 'rgba(14,14,28,0.6)',
-            }}
+            style={{ borderColor: T.borderDormant, backgroundColor: 'rgba(14,14,28,0.6)' }}
           >
             <p className="text-xs text-center" style={{ color: T.textSecondary }}>
               No courses available.
@@ -299,21 +309,28 @@ export default function OnboardingCoursesPage() {
         >
           <div className="max-w-2xl mx-auto">
             <button
-              onClick={() =>
-                router.push(`/onboarding/deposit?courseId=${selectedCourse.id}`)
-              }
+              onClick={() => {
+                if (selectedIsEnrolled) {
+                  useCourseStore.getState().setActiveCourse(selectedCourse.id);
+                  router.push('/dungeon');
+                } else {
+                  router.push(`/onboarding/deposit?courseId=${selectedCourse.id}`);
+                }
+              }}
               className="w-full py-4 rounded-[10px] text-center"
               style={{
-                backgroundColor: T.amber,
-                border: `1px solid ${T.amber}50`,
-                boxShadow: `0 0 16px rgba(212,160,74,0.2)`,
+                backgroundColor: selectedIsEnrolled ? T.green : T.amber,
+                border: `1px solid ${selectedIsEnrolled ? T.green : T.amber}50`,
+                boxShadow: `0 0 16px ${selectedIsEnrolled ? 'rgba(62,230,138,0.2)' : 'rgba(212,160,74,0.2)'}`,
               }}
             >
               <span
                 className="text-[13px] font-bold uppercase tracking-[3px]"
                 style={{ color: T.bg, fontFamily: 'Georgia, serif' }}
               >
-                {'\u25C6'}  BEGIN DESCENT  {'\u25C6'}
+                {selectedIsEnrolled
+                  ? '\u25C6  CONTINUE COURSE  \u25C6'
+                  : '\u25C6  BEGIN DESCENT  \u25C6'}
               </span>
             </button>
           </div>
