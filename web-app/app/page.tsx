@@ -14,6 +14,7 @@ export default function LandingPage() {
   const phase = useUserStore((s) => s.onboardingPhase);
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
+  const tutorialCompleted = useUserStore((s) => s.tutorialCompleted);
 
   // Redirect after auth — mirror AppNavigator logic
   useEffect(() => {
@@ -31,17 +32,14 @@ export default function LandingPage() {
 
     switch (phase) {
       case 'auth':
-        // Just authenticated — move to onboarding
-        router.replace('/courses');
-        break;
       case 'onboarding':
-        router.replace('/courses');
+        router.replace(tutorialCompleted ? '/courses' : '/onboarding/tutorial');
         break;
       case 'main':
         router.replace('/courses');
         break;
     }
-  }, [isAuthenticated, phase, activeCourseIds, courseStates, router]);
+  }, [isAuthenticated, phase, activeCourseIds, courseStates, tutorialCompleted, router]);
 
   return (
     <ScreenBackground>

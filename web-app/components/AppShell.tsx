@@ -14,7 +14,7 @@ import { T } from './theme';
 const PUBLIC_ROUTES = ['/'];
 
 // Routes allowed during onboarding (before active lock)
-const ONBOARDING_ROUTES = ['/courses', '/onboarding/deposit'];
+const ONBOARDING_ROUTES = ['/courses', '/onboarding/deposit', '/onboarding/tutorial'];
 
 /**
  * Flow enforcement — mirrors AppNavigator.tsx from the RN app exactly.

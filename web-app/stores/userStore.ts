@@ -17,6 +17,7 @@ interface UserStore extends UserProfile {
   setOnboardingPhase: (phase: OnboardingPhase) => void;
   setDisplayName: (name: string) => void;
   completeDungeonTour: () => void;
+  completeTutorial: () => void;
 }
 
 const initialState: UserProfile = {
@@ -27,6 +28,7 @@ const initialState: UserProfile = {
   onboardingPhase: 'auth',
   createdAt: null,
   dungeonTourCompleted: false,
+  tutorialCompleted: false,
   authToken: null,
   refreshToken: null,
 };
@@ -77,6 +79,7 @@ export const useUserStore = create<UserStore>()(
       setDisplayName: (name) => set({ displayName: name }),
 
       completeDungeonTour: () => set({ dungeonTourCompleted: true }),
+      completeTutorial: () => set({ tutorialCompleted: true }),
     }),
     {
       name: 'locked-in-user',

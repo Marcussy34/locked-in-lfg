@@ -9,6 +9,7 @@ export interface UserProfile {
   onboardingPhase: OnboardingPhase;
   createdAt: string | null;
   dungeonTourCompleted: boolean;
+  tutorialCompleted: boolean;
   /** Lesson API access token (Bearer) */
   authToken: string | null;
   /** Lesson API refresh token for silent access-token renewal */
