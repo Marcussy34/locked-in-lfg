@@ -135,7 +135,7 @@ function CourseCard({
       ? course.completedLessons / course.totalLessons
       : 0;
 
-  const isComingSoon = actualLessonCount === 0;
+  const isComingSoon = actualLessonCount === 0 && course.totalLessons === 0;
 
   return (
     <div
@@ -380,23 +380,23 @@ export default function CoursesPage() {
         </div>
       )}
 
-      {/* Available courses label */}
-      {activeCourses.length > 0 && availableCourses.length > 0 && (
-        <SectionLabel>Available Courses</SectionLabel>
+      {/* Available courses */}
+      {availableCourses.length > 0 && (
+        <>
+          {activeCourses.length > 0 && <SectionLabel>Available Courses</SectionLabel>}
+          <div className="flex flex-col gap-3">
+            {availableCourses.map((course) => (
+              <CourseCard
+                key={course.id}
+                course={course}
+                actualLessonCount={(lessons[course.id] ?? []).length}
+                onPress={() => handleCoursePress(course)}
+                onEnroll={() => handleEnroll(course.id)}
+              />
+            ))}
+          </div>
+        </>
       )}
-
-      {/* Course list */}
-      <div className="flex flex-col gap-3">
-        {(activeCourses.length > 0 ? availableCourses : courses).map((course) => (
-          <CourseCard
-            key={course.id}
-            course={course}
-            actualLessonCount={(lessons[course.id] ?? []).length}
-            onPress={() => handleCoursePress(course)}
-            onEnroll={() => handleEnroll(course.id)}
-          />
-        ))}
-      </div>
 
       {/* Empty state */}
       {!contentLoading && !contentError && courses.length === 0 && (
