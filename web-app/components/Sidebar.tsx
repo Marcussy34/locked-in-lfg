@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { T } from './theme';
 
 const NAV_ITEMS = [
-  { href: '/dungeon', label: 'Dungeon', icon: '🏰' },
   { href: '/courses', label: 'Courses', icon: '📜' },
   { href: '/dashboard', label: 'Dashboard', icon: '🔥' },
   { href: '/alchemy', label: 'Alchemy', icon: '⚗️' },
