@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
@@ -199,6 +200,7 @@ function ActiveCourseCard({ course, streak, lessonCount, onPress }: { course: Co
 /* ── Main page — adapts between onboarding and post-onboarding ── */
 export default function CoursesPage() {
   const router = useRouter();
+  const { disconnect } = useAuth();
 
   const courses = useCourseStore((s) => s.courses);
   const contentLoading = useCourseStore((s) => s.contentLoading);
@@ -268,9 +270,16 @@ export default function CoursesPage() {
               >
                 Choose Your {'\n'}<span style={{ color: T.amber }}>Path</span>
               </h1>
-              <p className="text-xs leading-[18px]" style={{ color: T.textSecondary }}>
+              <p className="text-xs leading-[18px] mb-3" style={{ color: T.textSecondary }}>
                 Mastering your craft through proof of effort.
               </p>
+              <button
+                onClick={disconnect}
+                className="text-[10px] font-mono uppercase tracking-[1.5px]"
+                style={{ color: T.textMuted }}
+              >
+                Disconnect Wallet
+              </button>
             </>
           ) : (
             <>
