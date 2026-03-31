@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useWallets, useSignMessage } from '@privy-io/react-auth/solana';
-import { useUserStore } from '@/stores';
+import { useUserStore, useCourseStore } from '@/stores';
 import { createAuthChallenge, verifyAuthChallenge } from '@/services/api/auth/authApi';
 
 // Cookie flag for proxy auth guard (server-side check)
@@ -76,6 +76,7 @@ export function useAuth() {
 
       // 5. Store in Zustand (persisted to localStorage)
       setWallet(address);
+      useCourseStore.getState().bindToWallet(address);
       setAuthSession(authSession.accessToken, authSession.refreshToken);
       setAuthCookie(true);
     } catch (error) {
