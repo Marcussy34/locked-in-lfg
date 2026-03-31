@@ -87,9 +87,13 @@ export function useAuth() {
     }
   }, [solanaWallet, signMessage, setWallet, setAuthSession]);
 
-  // Auto-authenticate when Privy login completes and wallet becomes available
+  // Track whether user just logged in this session (not a page reload)
+  const [freshLogin, setFreshLogin] = useState(false);
+
+  // Only auto-authenticate after a FRESH login (user clicked sign-in), not on page reload
   useEffect(() => {
     if (
+      freshLogin &&
       privyAuthenticated &&
       walletsReady &&
       solanaWallet &&
@@ -98,8 +102,9 @@ export function useAuth() {
       !authError
     ) {
       authenticate();
+      setFreshLogin(false);
     }
-  }, [privyAuthenticated, walletsReady, solanaWallet, accessToken, authInProgress, authError, authenticate]);
+  }, [freshLogin, privyAuthenticated, walletsReady, solanaWallet, accessToken, authInProgress, authError, authenticate]);
 
   // Manual retry — called from UI
   const retry = useCallback(() => {
@@ -123,6 +128,9 @@ export function useAuth() {
     }
   }, [privyReady, privyAuthenticated, walletAddress, disconnectUser]);
 
+  // Called by WalletConnect after user deliberately clicks sign-in
+  const markFreshLogin = useCallback(() => setFreshLogin(true), []);
+
   return {
     isReady: privyReady && walletsReady,
     isConnected: privyAuthenticated && !!connectedAddress,
@@ -132,6 +140,7 @@ export function useAuth() {
     authInProgress,
     loginMethod: privyUser?.google ? 'google' as const : privyAuthenticated ? 'wallet' as const : null,
     authenticate,
+    markFreshLogin,
     retry,
     disconnect: handleDisconnect,
   };

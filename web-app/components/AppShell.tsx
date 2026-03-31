@@ -57,10 +57,11 @@ function useFlowGuard() {
       return;
     }
 
-    // Gate 3: phase 'onboarding' WITH active lock → allow main routes
+    // Gate 3: phase 'onboarding' WITH active lock → allow main routes + deposit
     if (phase === 'onboarding' && hasActiveLock) {
-      // User has an active lock, they can access main routes
-      // If they're on an onboarding route, send them to courses
+      // Allow deposit page (enrolling in additional courses)
+      if (pathname.startsWith('/onboarding/deposit')) return;
+      // Other onboarding routes → redirect to courses
       if (ONBOARDING_ROUTES.includes(pathname)) {
         router.replace('/courses');
       }

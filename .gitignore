@@ -34,6 +34,8 @@ yarn-error.*
 
 # Claude Code auto-generated context
 **/CLAUDE.md
+.claude/
+.superpowers/
 
 # local env files
 .env

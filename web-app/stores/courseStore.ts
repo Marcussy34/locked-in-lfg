@@ -622,9 +622,7 @@ export const useCourseStore = create<CourseStore>()(
         }
 
         const remoteConfigured = hasRemoteLessonApi();
-        const needsRemoteUpgrade =
-          remoteConfigured &&
-          (state.contentReleaseId === 'local-mock-release' || !state.contentReleaseId);
+        const needsRemoteUpgrade = remoteConfigured;
 
         if (!force && state.contentInitialized && !needsRemoteUpgrade) {
           console.info(

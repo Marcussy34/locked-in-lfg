@@ -16,6 +16,7 @@ export function WalletConnect() {
     walletAddress,
     authError,
     authInProgress,
+    markFreshLogin,
     retry,
     disconnect,
   } = useAuth();
@@ -161,12 +162,45 @@ export function WalletConnect() {
     );
   }
 
+  // Privy has a session but no backend JWT — let user continue or switch
+  if (authenticated && !isAuthenticated && !authInProgress) {
+    const shortAddr = walletAddress
+      ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
+      : '';
+    return (
+      <div className="flex flex-col items-center gap-3 w-full">
+        <p className="text-xs" style={{ color: T.textSecondary }}>
+          Welcome back{shortAddr ? ` (${shortAddr})` : ''}
+        </p>
+        <button
+          onClick={() => { markFreshLogin(); }}
+          className="w-full max-w-xs py-3.5 rounded-lg text-sm font-bold tracking-wide"
+          style={{
+            backgroundColor: T.violet,
+            color: '#fff',
+            border: '1px solid #B06AFF',
+            fontFamily: 'Georgia, serif',
+          }}
+        >
+          Continue
+        </button>
+        <button
+          onClick={disconnect}
+          className="text-xs underline"
+          style={{ color: T.textMuted }}
+        >
+          Use a different account
+        </button>
+      </div>
+    );
+  }
+
   // Not authenticated — show dual sign-in
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       {/* Primary: Google sign-in */}
       <button
-        onClick={() => login({ loginMethods: ['google'] })}
+        onClick={() => { markFreshLogin(); login({ loginMethods: ['google'] }); }}
         className="w-full max-w-xs py-3.5 rounded-lg text-sm font-bold tracking-wide flex items-center justify-center gap-2"
         style={{
           backgroundColor: T.violet,
@@ -193,7 +227,7 @@ export function WalletConnect() {
 
       {/* Secondary: Connect existing wallet */}
       <button
-        onClick={() => login({ loginMethods: ['wallet'] })}
+        onClick={() => { markFreshLogin(); login({ loginMethods: ['wallet'] }); }}
         className="text-xs underline"
         style={{ color: T.textSecondary }}
       >

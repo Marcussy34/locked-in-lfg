@@ -116,10 +116,12 @@ function CourseCard({
   course,
   onPress,
   onEnroll,
+  actualLessonCount,
 }: {
   course: Course;
   onPress: () => void;
   onEnroll: () => void;
+  actualLessonCount: number;
 }) {
   const difficultyLevel =
     course.difficulty === 'beginner' ? 1 :
@@ -133,8 +135,15 @@ function CourseCard({
       ? course.completedLessons / course.totalLessons
       : 0;
 
+  const isComingSoon = actualLessonCount === 0;
+
   return (
-    <div onClick={onPress} role="button" tabIndex={0} className="w-full text-left transition-opacity hover:opacity-[0.85] cursor-pointer">
+    <div
+      className={`w-full text-left ${isComingSoon ? 'opacity-50 pointer-events-none' : 'transition-opacity hover:opacity-[0.85] cursor-pointer'}`}
+      onClick={isComingSoon ? undefined : onPress}
+      role={isComingSoon ? undefined : 'button'}
+      tabIndex={isComingSoon ? undefined : 0}
+    >
       <ParchmentCard>
         {/* Top row: sigil + tags + difficulty */}
         <div className="flex items-center gap-2 mb-3">
@@ -173,15 +182,32 @@ function CourseCard({
           {course.completedLessons}/{course.totalLessons} lessons
         </p>
 
-        {/* Enroll button */}
-        <div
-          className="mt-3.5 mb-3.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <PrimaryButton onClick={onEnroll}>
-            ◆  LOCK & START  ◆
-          </PrimaryButton>
-        </div>
+        {/* Coming soon or enroll button */}
+        {isComingSoon ? (
+          <div
+            className="mt-3.5 mb-3.5 py-3 rounded-[10px] border text-center"
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.03)',
+              borderColor: T.borderDormant,
+            }}
+          >
+            <span
+              className="text-[12px] font-bold uppercase tracking-[2px]"
+              style={{ color: T.textMuted, fontFamily: 'Georgia, serif' }}
+            >
+              Coming Soon
+            </span>
+          </div>
+        ) : (
+          <div
+            className="mt-3.5 mb-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PrimaryButton onClick={onEnroll}>
+              ◆  LOCK & START  ◆
+            </PrimaryButton>
+          </div>
+        )}
 
         {/* Stats row */}
         <StatsRow course={course} accentColor={accentColor} />
@@ -356,6 +382,7 @@ export default function CoursesPage() {
           <CourseCard
             key={course.id}
             course={course}
+            actualLessonCount={(lessons[course.id] ?? []).length}
             onPress={() => handleCoursePress(course)}
             onEnroll={() => handleEnroll(course.id)}
           />
