@@ -577,12 +577,12 @@ pub struct LockFunds<'info> {
         seeds = [ProtocolConfig::SEED],
         bump = protocol_config.bump
     )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
+    pub protocol_config: Box<Account<'info, ProtocolConfig>>,
     #[account(
         seeds = [CoursePolicy::SEED, course_id_hash.as_ref()],
         bump = course_policy.bump
     )]
-    pub course_policy: Account<'info, CoursePolicy>,
+    pub course_policy: Box<Account<'info, CoursePolicy>>,
     #[account(
         init,
         payer = owner,
@@ -590,13 +590,13 @@ pub struct LockFunds<'info> {
         seeds = [LockAccount::SEED, owner.key().as_ref(), course_id_hash.as_ref()],
         bump
     )]
-    pub lock_account: Account<'info, LockAccount>,
-    pub stable_mint: InterfaceAccount<'info, Mint>,
-    pub skr_mint: InterfaceAccount<'info, Mint>,
+    pub lock_account: Box<Account<'info, LockAccount>>,
+    pub stable_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub skr_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(mut)]
-    pub owner_stable_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub owner_stable_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init,
         payer = owner,
@@ -604,7 +604,7 @@ pub struct LockFunds<'info> {
         associated_token::authority = lock_account,
         associated_token::token_program = token_program
     )]
-    pub stable_vault: InterfaceAccount<'info, TokenAccount>,
+    pub stable_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init,
         payer = owner,
@@ -612,12 +612,12 @@ pub struct LockFunds<'info> {
         associated_token::authority = lock_account,
         associated_token::token_program = token_program
     )]
-    pub skr_vault: InterfaceAccount<'info, TokenAccount>,
+    pub skr_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     #[account(mut)]
-    pub owner_skr_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
+    pub owner_skr_token_account: Option<Box<InterfaceAccount<'info, TokenAccount>>>,
 }
 
 #[derive(Accounts)]
@@ -747,9 +747,9 @@ pub struct UnlockFunds<'info> {
         close = owner,
         has_one = owner @ LockVaultError::InvalidLockOwner
     )]
-    pub lock_account: Account<'info, LockAccount>,
-    pub stable_mint: InterfaceAccount<'info, Mint>,
-    pub skr_mint: InterfaceAccount<'info, Mint>,
+    pub lock_account: Box<Account<'info, LockAccount>>,
+    pub stable_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub skr_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(
@@ -758,14 +758,14 @@ pub struct UnlockFunds<'info> {
         token::authority = lock_account,
         token::token_program = token_program
     )]
-    pub stable_vault: InterfaceAccount<'info, TokenAccount>,
+    pub stable_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         token::mint = skr_mint,
         token::authority = lock_account,
         token::token_program = token_program
     )]
-    pub skr_vault: InterfaceAccount<'info, TokenAccount>,
+    pub skr_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = owner,
@@ -773,7 +773,7 @@ pub struct UnlockFunds<'info> {
         associated_token::authority = owner,
         associated_token::token_program = token_program
     )]
-    pub owner_stable_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub owner_stable_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = owner,
@@ -781,7 +781,7 @@ pub struct UnlockFunds<'info> {
         associated_token::authority = owner,
         associated_token::token_program = token_program
     )]
-    pub owner_skr_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub owner_skr_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
