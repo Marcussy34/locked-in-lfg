@@ -334,29 +334,60 @@ export default function CoursesPage() {
           </div>
         )}
 
-        {/* Available / all courses */}
-        {availableCourses.length > 0 && (
-          <>
-            {activeCourses.length > 0 && <SectionLabel>Available Courses</SectionLabel>}
-            <div className="flex flex-col gap-3">
-              {availableCourses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  actualLessonCount={(lessons[course.id] ?? []).length}
-                  selected={isOnboardingMode && selectedId === course.id}
-                  onSelect={() =>
-                    isOnboardingMode
-                      ? setSelectedId(selectedId === course.id ? null : course.id)
-                      : handleEnroll(course.id)
-                  }
-                  showEnrollButton={!isOnboardingMode}
-                  onEnroll={() => handleEnroll(course.id)}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        {/* Split available courses into ready vs coming soon */}
+        {(() => {
+          const readyCourses = availableCourses.filter(
+            (c) => (lessons[c.id] ?? []).length > 0 || c.totalLessons > 0,
+          );
+          const comingSoonCourses = availableCourses.filter(
+            (c) => (lessons[c.id] ?? []).length === 0 && c.totalLessons === 0,
+          );
+
+          return (
+            <>
+              {readyCourses.length > 0 && (
+                <>
+                  {(activeCourses.length > 0 || comingSoonCourses.length > 0) && (
+                    <SectionLabel>Available Courses</SectionLabel>
+                  )}
+                  <div className="flex flex-col gap-3">
+                    {readyCourses.map((course) => (
+                      <CourseCard
+                        key={course.id}
+                        course={course}
+                        actualLessonCount={(lessons[course.id] ?? []).length}
+                        selected={isOnboardingMode && selectedId === course.id}
+                        onSelect={() =>
+                          isOnboardingMode
+                            ? setSelectedId(selectedId === course.id ? null : course.id)
+                            : handleEnroll(course.id)
+                        }
+                        showEnrollButton={!isOnboardingMode}
+                        onEnroll={() => handleEnroll(course.id)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {comingSoonCourses.length > 0 && (
+                <div className="mt-5">
+                  <SectionLabel>Coming Soon</SectionLabel>
+                  <div className="flex flex-col gap-3">
+                    {comingSoonCourses.map((course) => (
+                      <CourseCard
+                        key={course.id}
+                        course={course}
+                        actualLessonCount={0}
+                        onSelect={() => {}}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Empty */}
         {courses.length === 0 && !contentLoading && !contentError && (
