@@ -5,6 +5,7 @@ import { requireAccessAuth } from '../../plugins/auth.mjs';
 import {
   consumeDailyFuel,
   convertFuelToIchor,
+  getUserXp,
   closeCommunityPotWindowAndSnapshot,
   distributeCommunityPotWindowBatch,
   getCommunityPotWindowDetail,
@@ -100,6 +101,14 @@ export async function progressRoutes(app) {
         startedAt,
         completedAt,
       );
+    },
+  );
+
+  app.get(
+    '/v1/progress/xp',
+    { preHandler: requireAccessAuth },
+    async (request) => {
+      return getUserXp(request.auth.walletAddress);
     },
   );
 

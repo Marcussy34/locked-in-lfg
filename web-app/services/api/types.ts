@@ -234,6 +234,13 @@ export interface FuelConversionResponse {
   } | null;
 }
 
+export interface XpSnapshot {
+  xpTotal: number;
+  xpLevel: number;
+  xpAwarded?: number;
+  levelThresholds?: number[];
+}
+
 /** Response from GET /v1/progress/enrollments — all enrolled courses + progress for a wallet */
 export interface UserEnrollmentsResponse {
   enrollments: {
@@ -260,6 +267,7 @@ export interface ProgressSubmitLessonResponse {
   completionEventId?: string;
   courseRuntime?: CourseRuntimeSnapshot;
   questionResults?: QuestionValidationResult[];
+  xp?: XpSnapshot;
 }
 
 export interface CourseProgressSnapshot {

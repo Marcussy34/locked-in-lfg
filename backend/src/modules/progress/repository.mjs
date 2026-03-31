@@ -62,6 +62,127 @@ const SAVER_REDIRECT_BPS_BY_COUNT = {
   3: 2000,
 };
 const SUBJECTIVE_VALIDATOR_VERSION = 'rubric-v1';
+
+// XP progression — cosmetic, non-grindable milestones only
+const XP_LESSON_FIRST_COMPLETE = 100;
+const XP_MODULE_COMPLETE = 500;
+const XP_COURSE_COMPLETE = 2000;
+const XP_LEVEL_THRESHOLDS = [0, 500, 1500, 3500, 7000, 12000, 20000];
+
+function xpToLevel(xpTotal) {
+  for (let i = XP_LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (xpTotal >= XP_LEVEL_THRESHOLDS[i]) return i + 1;
+  }
+  return 1;
+}
+
+export async function getUserXp(walletAddress) {
+  if (!hasDatabase()) return { xpTotal: 0, xpLevel: 1, levelThresholds: XP_LEVEL_THRESHOLDS };
+  const result = await query(
+    `SELECT xp_total as "xpTotal", xp_level as "xpLevel" FROM lesson.user_xp WHERE wallet_address = $1`,
+    [walletAddress],
+  );
+  const row = result.rows[0] ?? { xpTotal: 0, xpLevel: 1 };
+  return { ...row, levelThresholds: XP_LEVEL_THRESHOLDS };
+}
+
+async function ensureUserXp(client, walletAddress) {
+  await client.query(
+    `INSERT INTO lesson.user_xp (wallet_address) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [walletAddress],
+  );
+  const result = await client.query(
+    `SELECT xp_total as "xpTotal", xp_level as "xpLevel" FROM lesson.user_xp WHERE wallet_address = $1`,
+    [walletAddress],
+  );
+  return result.rows[0];
+}
+
+async function awardXp(client, walletAddress, amount, source, sourceId = null) {
+  if (amount <= 0) return null;
+
+  // Idempotency: skip if this exact event was already recorded
+  if (sourceId) {
+    const existing = await client.query(
+      `SELECT 1 FROM lesson.user_xp_events WHERE wallet_address = $1 AND source = $2 AND source_id = $3 LIMIT 1`,
+      [walletAddress, source, sourceId],
+    );
+    if (existing.rowCount > 0) return null;
+  }
+
+  await client.query(
+    `INSERT INTO lesson.user_xp_events (wallet_address, xp_amount, source, source_id) VALUES ($1, $2, $3, $4)`,
+    [walletAddress, amount, source, sourceId],
+  );
+
+  const result = await client.query(
+    `UPDATE lesson.user_xp SET xp_total = xp_total + $2, xp_level = $3, updated_at = now()
+     WHERE wallet_address = $1
+     RETURNING xp_total as "xpTotal", xp_level as "xpLevel"`,
+    [walletAddress, amount, xpToLevel(0)], // level recalculated below
+  );
+
+  if (result.rowCount > 0) {
+    const newTotal = result.rows[0].xpTotal;
+    const newLevel = xpToLevel(newTotal);
+    await client.query(
+      `UPDATE lesson.user_xp SET xp_level = $2 WHERE wallet_address = $1`,
+      [walletAddress, newLevel],
+    );
+    return { xpTotal: newTotal, xpLevel: newLevel, xpAwarded: amount };
+  }
+  return null;
+}
+
+async function checkAndAwardMilestoneXp(client, walletAddress, courseId, lessonId) {
+  await ensureUserXp(client, walletAddress);
+  let totalAwarded = 0;
+
+  // 1. First-time lesson completion: +100 XP
+  const lessonXp = await awardXp(client, walletAddress, XP_LESSON_FIRST_COMPLETE, 'lesson_complete', lessonId);
+  if (lessonXp) totalAwarded += XP_LESSON_FIRST_COMPLETE;
+
+  // 2. Check module completion
+  const moduleCheck = await client.query(
+    `SELECT pm.module_id,
+            count(DISTINCT pl.lesson_id) as total_lessons,
+            count(DISTINCT ulp.lesson_id) FILTER (WHERE ulp.completed) as completed_lessons
+     FROM lesson.published_modules pm
+     JOIN lesson.published_lessons pl ON pl.module_id = pm.module_id AND pl.release_id = pm.release_id
+     LEFT JOIN lesson.user_lesson_progress ulp ON ulp.lesson_id = pl.lesson_id AND ulp.wallet_address = $1
+     WHERE pm.course_id = $2
+     GROUP BY pm.module_id`,
+    [walletAddress, courseId],
+  );
+
+  for (const mod of moduleCheck.rows) {
+    if (mod.total_lessons > 0 && mod.completed_lessons >= mod.total_lessons) {
+      const moduleXp = await awardXp(client, walletAddress, XP_MODULE_COMPLETE, 'module_complete', mod.module_id);
+      if (moduleXp) totalAwarded += XP_MODULE_COMPLETE;
+    }
+  }
+
+  // 3. Check course completion (all modules done)
+  const allModulesDone = moduleCheck.rows.length > 0 &&
+    moduleCheck.rows.every((mod) => mod.total_lessons > 0 && mod.completed_lessons >= mod.total_lessons);
+
+  if (allModulesDone) {
+    const courseXp = await awardXp(client, walletAddress, XP_COURSE_COMPLETE, 'course_complete', courseId);
+    if (courseXp) totalAwarded += XP_COURSE_COMPLETE;
+  }
+
+  // Read final state
+  const final = await client.query(
+    `SELECT xp_total as "xpTotal", xp_level as "xpLevel" FROM lesson.user_xp WHERE wallet_address = $1`,
+    [walletAddress],
+  );
+
+  return {
+    xpTotal: final.rows[0]?.xpTotal ?? 0,
+    xpLevel: final.rows[0]?.xpLevel ?? 1,
+    xpAwarded: totalAwarded,
+  };
+}
 const LESSON_ACCEPTANCE_THRESHOLD = 70;
 
 function assertAttemptId(attemptId) {
@@ -4897,6 +5018,7 @@ export async function submitLessonAttempt(
 
     let completionEvent = null;
     let courseRuntime = null;
+    let xpResult = null;
     if (accepted) {
       await persistLessonProgress(
         client,
@@ -4921,6 +5043,12 @@ export async function submitLessonAttempt(
         completionEvent.courseId,
         completionEvent.completionDay,
         completionEvent.rewardUnits,
+      );
+      xpResult = await checkAndAwardMilestoneXp(
+        client,
+        walletAddress,
+        completionEvent.courseId,
+        lessonId,
       );
     }
 
@@ -4947,6 +5075,7 @@ export async function submitLessonAttempt(
       completionEventId: completionEvent?.eventId,
       courseRuntime,
       questionResults,
+      xp: xpResult,
     };
   });
 }

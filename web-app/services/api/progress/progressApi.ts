@@ -3,6 +3,7 @@ import type {
   CourseRuntimeSnapshot,
   CourseProgressSnapshot,
   FuelConversionResponse,
+  XpSnapshot,
   CommunityPotHistoryResponse,
   LeaderboardResponse,
   CommunityPotWindowDetailResponse,
@@ -59,6 +60,10 @@ export function convertFuel(
     body: { courseId, fuelAmount },
     token,
   });
+}
+
+export function getUserXp(token: string): Promise<XpSnapshot> {
+  return httpRequest<XpSnapshot>('/v1/progress/xp', { token });
 }
 
 export function getCourseProgress(

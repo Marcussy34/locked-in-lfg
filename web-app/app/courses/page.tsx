@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { getUserXp } from '@/services/api/progress/progressApi';
 import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
@@ -212,11 +213,20 @@ export default function CoursesPage() {
   const lessons = useCourseStore((s) => s.lessons);
   const walletAddress = useUserStore((s) => s.walletAddress);
 
+  const authToken = useUserStore((s) => s.authToken);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [xp, setXp] = useState({ xpTotal: 0, xpLevel: 1, levelThresholds: [0, 500, 1500, 3500, 7000, 12000, 20000] });
 
   useEffect(() => {
     void initializeContent();
   }, [initializeContent]);
+
+  // Fetch XP
+  useEffect(() => {
+    if (authToken) {
+      getUserXp(authToken).then((data) => setXp((prev) => ({ ...prev, ...data }))).catch(() => {});
+    }
+  }, [authToken]);
 
   useEffect(() => {
     if (walletAddress && courses.length > 0) {
@@ -289,9 +299,35 @@ export default function CoursesPage() {
               >
                 Your <span style={{ color: T.amber }}>Courses</span>
               </h1>
-              <p className="text-xs leading-[18px]" style={{ color: T.textSecondary }}>
+              <p className="text-xs leading-[18px] mb-4" style={{ color: T.textSecondary }}>
                 Continue your journey or start a new path.
               </p>
+              {/* XP Bar */}
+              {(() => {
+                const currentThreshold = xp.levelThresholds?.[xp.xpLevel - 1] ?? 0;
+                const nextThreshold = xp.levelThresholds?.[xp.xpLevel] ?? currentThreshold + 1000;
+                const progress = (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold);
+                const LEVEL_NAMES = ['Novice', 'Apprentice', 'Scholar', 'Adept', 'Master', 'Sage', 'Legend'];
+                const levelName = LEVEL_NAMES[xp.xpLevel - 1] ?? `Level ${xp.xpLevel}`;
+                return (
+                  <div className="max-w-xs mx-auto">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-[1px]" style={{ color: T.amber }}>
+                        Lv.{xp.xpLevel} {levelName}
+                      </span>
+                      <span className="text-[10px] font-mono" style={{ color: T.textMuted }}>
+                        {xp.xpTotal} / {nextThreshold} XP
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%`, backgroundColor: T.amber }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
