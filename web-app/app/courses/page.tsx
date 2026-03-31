@@ -165,7 +165,7 @@ function CourseCard({
 }
 
 /* Active course card */
-function ActiveCourseCard({ course, streak, onPress }: { course: Course; streak: number; onPress: () => void }) {
+function ActiveCourseCard({ course, streak, lessonCount, onPress }: { course: Course; streak: number; lessonCount: number; onPress: () => void }) {
   return (
     <button onClick={onPress} className="w-full text-left transition-opacity hover:opacity-[0.85]">
       <ParchmentCard style={{ borderColor: `${T.violet}35` }}>
@@ -185,7 +185,7 @@ function ActiveCourseCard({ course, streak, onPress }: { course: Course; streak:
             <div className="flex items-center gap-3">
               <span className="font-mono text-[11px]" style={{ color: T.amber }}>✹ {streak} streak</span>
               <span className="font-mono text-[11px]" style={{ color: T.textMuted }}>
-                {course.completedLessons}/{course.totalLessons} lessons
+                {course.completedLessons}/{lessonCount || course.totalLessons} lessons
               </span>
             </div>
           </div>
@@ -326,6 +326,7 @@ export default function CoursesPage() {
                   key={course.id}
                   course={course}
                   streak={courseStates[course.id]?.currentStreak ?? 0}
+                  lessonCount={(lessons[course.id] ?? []).length}
                   onPress={() => handleActiveCoursePress(course.id)}
                 />
               ))}
