@@ -370,6 +370,59 @@ export async function deriveLockAccountAddress(
   return lockAccount.toBase58();
 }
 
+/**
+ * Batch-check which courses have existing on-chain LockAccounts for this wallet.
+ * One RPC call via getMultipleAccountsInfo. Returns a Map of courseId → snapshot
+ * for courses that have an active lock.
+ */
+export async function batchCheckLockAccounts(
+  ownerAddress: string,
+  courseIds: string[],
+): Promise<Map<string, LockAccountSnapshot>> {
+  if (courseIds.length === 0 || !hasLockVaultConfig()) return new Map();
+
+  const config = getLockVaultConfig();
+  const owner = new PublicKey(ownerAddress);
+
+  // Derive all PDAs
+  const hashes = await Promise.all(courseIds.map((id) => hashCourseId(id)));
+  const pubkeys = hashes.map((hash) => {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [LOCK_SEED, owner.toBuffer(), Buffer.from(hash)],
+      config.programId,
+    );
+    return pda;
+  });
+
+  // One batch RPC call
+  const accounts = await connection.getMultipleAccountsInfo(pubkeys, 'confirmed');
+
+  // Decode mint decimals once (needed for all snapshots)
+  const [stableDecimals, skrDecimals] = await Promise.all([
+    getMintDecimals(config.usdcMint),
+    getMintDecimals(config.skrMint),
+  ]);
+
+  const result = new Map<string, LockAccountSnapshot>();
+  for (let i = 0; i < courseIds.length; i++) {
+    const info = accounts[i];
+    if (!info) continue;
+    try {
+      const snapshot = decodeLockAccountSnapshot(
+        new Uint8Array(info.data),
+        pubkeys[i].toBase58(),
+        stableDecimals,
+        skrDecimals,
+      );
+      result.set(courseIds[i], snapshot);
+    } catch {
+      // Not a valid lock account — skip
+    }
+  }
+
+  return result;
+}
+
 export async function deriveCoursePolicyAddress(courseId: string): Promise<string> {
   const config = getLockVaultConfig();
   const courseIdHash = await hashCourseId(courseId);

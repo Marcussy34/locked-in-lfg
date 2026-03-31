@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore } from '@/stores';
+import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
   ScreenBackground,
@@ -272,14 +272,23 @@ export default function CoursesPage() {
   const contentLoading = useCourseStore((s) => s.contentLoading);
   const contentError = useCourseStore((s) => s.contentError);
   const initializeContent = useCourseStore((s) => s.initializeContent);
+  const syncOnChainEnrollments = useCourseStore((s) => s.syncOnChainEnrollments);
   const enrolledCourseIds = useCourseStore((s) => s.enrolledCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
   const lessons = useCourseStore((s) => s.lessons);
+  const walletAddress = useUserStore((s) => s.walletAddress);
 
   /* Load courses on mount */
   useEffect(() => {
     void initializeContent();
   }, [initializeContent]);
+
+  /* Detect existing on-chain locks and auto-enroll */
+  useEffect(() => {
+    if (walletAddress && courses.length > 0) {
+      void syncOnChainEnrollments(walletAddress);
+    }
+  }, [walletAddress, courses.length, syncOnChainEnrollments]);
 
   /* Separate enrolled (locked) vs available */
   const activeCourseIds = enrolledCourseIds.filter((courseId) =>

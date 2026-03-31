@@ -2,6 +2,7 @@ export { connection, CLUSTER, RPC_ENDPOINT } from './connection';
 export {
   buildRedeemIchorTransaction,
   buildUnlockFundsTransaction,
+  batchCheckLockAccounts,
   buildLockFundsTransaction,
   deriveCoursePolicyAddress,
   deriveLockAccountAddress,

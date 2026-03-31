@@ -4,6 +4,7 @@ import { webStorageAdapter } from './storage';
 import { getCourseRuntime, hasRemoteLessonApi } from '@/services/api';
 import { convertFuel } from '@/services/api/progress/progressApi';
 import type { CourseRuntimeSnapshot, UserEnrollmentsResponse } from '@/services/api/types';
+import { batchCheckLockAccounts } from '@/services/solana';
 import type { LockAccountSnapshot } from '@/services/solana';
 import type {
   Course,
@@ -83,6 +84,7 @@ interface CourseStore {
   syncLockSnapshot: (courseId: string, snapshot: LockAccountSnapshot) => void;
   refreshCourseRuntime: (courseId: string, token: string) => Promise<void>;
   resetLessonProgressForCourse: (courseId: string) => void;
+  syncOnChainEnrollments: (walletAddress: string) => Promise<void>;
   initializeContent: (force?: boolean) => Promise<void>;
   initializeMockData: (errorMessage?: string | null) => void;
   restoreFromBackend: (data: UserEnrollmentsResponse) => void;
@@ -572,6 +574,34 @@ export const useCourseStore = create<CourseStore>()(
             completedLessons: completedCounts[course.id] ?? 0,
           })),
         });
+      },
+
+      syncOnChainEnrollments: async (walletAddress) => {
+        const { courses, enrolledCourseIds, courseStates } = get();
+        if (!walletAddress || courses.length === 0) return;
+
+        // Only check courses not already enrolled
+        const unenrolledCourseIds = courses
+          .map((c) => c.id)
+          .filter((id) => !enrolledCourseIds.includes(id) || !courseStates[id]?.lockAccountAddress);
+
+        if (unenrolledCourseIds.length === 0) return;
+
+        try {
+          const lockMap = await batchCheckLockAccounts(walletAddress, unenrolledCourseIds);
+
+          for (const [courseId, snapshot] of lockMap) {
+            // Enroll + activate with lock data from chain
+            get().activateCourse(courseId, {
+              amount: parseFloat(snapshot.principalAmountUi),
+              duration: 30, // default — exact duration derived from lock dates
+              lockAccountAddress: snapshot.lockAccountAddress,
+            });
+            get().syncLockSnapshot(courseId, snapshot);
+          }
+        } catch (error) {
+          console.warn('[on-chain-sync] Failed to check lock accounts:', error);
+        }
       },
 
       initializeContent: async (force = false) => {
