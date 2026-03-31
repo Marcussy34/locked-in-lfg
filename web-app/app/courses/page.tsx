@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
   ScreenBackground,
-  BackButton,
-  PageHeader,
   ParchmentCard,
   SectionLabel,
   CornerMarks,
@@ -16,7 +14,6 @@ import {
   T,
 } from '@/components/theme';
 
-/* Difficulty color mapping */
 const DIFFICULTY_COLORS: Record<CourseDifficulty, string> = {
   beginner: T.green,
   intermediate: T.teal,
@@ -31,29 +28,17 @@ const CATEGORY_COLORS: Record<string, string> = {
   rust: T.rust,
 };
 
-const DIFFICULTY_SIGILS: Record<CourseDifficulty, string> = {
-  beginner: '\u2B21',
-  intermediate: '\u25CE',
-  advanced: '\u2B1F',
-};
-
-/* Tag badge */
 function Tag({ label, color }: { label: string; color: string }) {
   return (
     <span
       className="px-2 py-[3px] rounded text-[9px] font-bold uppercase tracking-[1px] font-mono"
-      style={{
-        color,
-        backgroundColor: `${color}14`,
-        border: `1px solid ${color}30`,
-      }}
+      style={{ color, backgroundColor: `${color}14`, border: `1px solid ${color}30` }}
     >
       {label}
     </span>
   );
 }
 
-/* Difficulty flask indicators */
 function DifficultyFlasks({ level }: { level: number }) {
   const fills = [T.green, T.teal, T.crimson];
   return (
@@ -63,8 +48,7 @@ function DifficultyFlasks({ level }: { level: number }) {
           key={i}
           className="relative rounded-[3px]"
           style={{
-            width: 8,
-            height: 14,
+            width: 8, height: 14,
             backgroundColor: i < level ? fills[i] : 'rgba(255,255,255,0.06)',
             opacity: i < level ? 1 : 0.3,
             border: `0.5px solid ${i < level ? `${fills[i]}40` : 'rgba(255,255,255,0.04)'}`,
@@ -73,10 +57,7 @@ function DifficultyFlasks({ level }: { level: number }) {
           {i < level && (
             <div
               className="absolute rounded-sm"
-              style={{
-                bottom: 2, left: 1, right: 1, height: 4,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-              }}
+              style={{ bottom: 2, left: 1, right: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.15)' }}
             />
           )}
         </div>
@@ -85,111 +66,79 @@ function DifficultyFlasks({ level }: { level: number }) {
   );
 }
 
-/* Stats row under card */
 function StatsRow({ course, accentColor }: { course: Course; accentColor: string }) {
   return (
-    <div
-      className="flex items-center gap-2 pt-3"
-      style={{ borderTop: `1px solid ${T.borderDormant}` }}
-    >
-      <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>
-        {course.totalModules ?? 1} mod
-      </span>
+    <div className="flex items-center gap-2 pt-3" style={{ borderTop: `1px solid ${T.borderDormant}` }}>
+      <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>{course.totalModules ?? 1} mod</span>
       <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.08)' }}>&middot;</span>
-      <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>
-        {course.totalLessons} lessons
-      </span>
+      <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>{course.totalLessons} lessons</span>
       <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.08)' }}>&middot;</span>
-      <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>
-        {course.difficulty}
-      </span>
+      <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>{course.difficulty}</span>
       <span className="flex-1" />
-      <span className="font-mono text-[9px]" style={{ color: `${accentColor}70` }}>
-        {course.category}
-      </span>
+      <span className="font-mono text-[9px]" style={{ color: `${accentColor}70` }}>{course.category}</span>
     </div>
   );
 }
 
-/* Available course card */
+/* Course card — used in both onboarding and available sections */
 function CourseCard({
   course,
-  onPress,
-  onEnroll,
   actualLessonCount,
+  selected,
+  onSelect,
+  showEnrollButton,
+  onEnroll,
 }: {
   course: Course;
-  onPress: () => void;
-  onEnroll: () => void;
   actualLessonCount: number;
+  selected?: boolean;
+  onSelect: () => void;
+  showEnrollButton?: boolean;
+  onEnroll?: () => void;
 }) {
   const difficultyLevel =
-    course.difficulty === 'beginner' ? 1 :
-    course.difficulty === 'intermediate' ? 2 : 3;
+    course.difficulty === 'beginner' ? 1 : course.difficulty === 'intermediate' ? 2 : 3;
   const accentColor = DIFFICULTY_COLORS[course.difficulty];
   const catColor = CATEGORY_COLORS[course.category] ?? T.teal;
-  const sigil = DIFFICULTY_SIGILS[course.difficulty];
-
-  const progressPercent =
-    course.totalLessons > 0
-      ? course.completedLessons / course.totalLessons
-      : 0;
-
   const isComingSoon = actualLessonCount === 0 && course.totalLessons === 0;
 
   return (
     <div
-      className={`w-full text-left ${isComingSoon ? 'opacity-50 pointer-events-none' : 'transition-opacity hover:opacity-[0.85] cursor-pointer'}`}
-      onClick={isComingSoon ? undefined : onPress}
+      className={`w-full text-left ${isComingSoon ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}
+      onClick={isComingSoon ? undefined : onSelect}
       role={isComingSoon ? undefined : 'button'}
       tabIndex={isComingSoon ? undefined : 0}
     >
-      <ParchmentCard>
-        {/* Top row: sigil + tags + difficulty */}
-        <div className="flex items-center gap-2 mb-3">
-          {/* Sigil */}
-          <div className="w-9 h-9 flex items-center justify-center">
-            <span
-              className="text-xl"
-              style={{ color: 'rgba(255,255,255,0.1)', fontFamily: 'serif' }}
-            >
-              {sigil}
-            </span>
-          </div>
-          <div className="flex gap-[5px] flex-wrap flex-1">
-            <Tag label={course.difficulty} color={accentColor} />
-            <Tag label={course.category} color={catColor} />
-          </div>
+      <ParchmentCard
+        style={{
+          backgroundColor: selected ? T.bgCardActive : T.bgCard,
+          borderColor: selected ? `${accentColor}35` : T.borderDormant,
+        }}
+      >
+        {selected && <CornerMarks />}
+
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <Tag label={course.difficulty} color={accentColor} />
+          <Tag label={course.category} color={catColor} />
+          <div className="flex-1" />
           <DifficultyFlasks level={difficultyLevel} />
         </div>
 
-        {/* Title */}
         <h3
           className="text-[17px] font-bold tracking-wide leading-[22px] mb-[5px]"
-          style={{ color: '#B8B0A4', fontFamily: 'Georgia, serif' }}
+          style={{ color: selected ? T.textPrimary : '#B8B0A4', fontFamily: 'Georgia, serif' }}
         >
           {course.title}
         </h3>
 
-        {/* Description */}
         <p className="text-xs leading-[18px] mb-3.5 line-clamp-2" style={{ color: T.textSecondary }}>
           {course.description}
         </p>
 
-        {/* Progress bar */}
-        <ProgressBar progress={progressPercent} />
-        <p className="font-mono text-[10px] mt-1" style={{ color: T.textMuted }}>
-          {course.completedLessons}/{course.totalLessons} lessons
-        </p>
-
-        {/* Coming soon or enroll button */}
-        {isComingSoon ? (
+        {isComingSoon && (
           <div
-            className="mt-3.5 mb-3.5 py-3 rounded-[10px] border text-center"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.03)',
-              borderColor: T.borderDormant,
-            }}
+            className="mb-3.5 py-3 rounded-[10px] border text-center"
+            style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderColor: T.borderDormant }}
           >
             <span
               className="text-[12px] font-bold uppercase tracking-[2px]"
@@ -198,48 +147,33 @@ function CourseCard({
               Coming Soon
             </span>
           </div>
-        ) : (
-          <div
-            className="mt-3.5 mb-3.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <PrimaryButton onClick={onEnroll}>
+        )}
+
+        {/* Inline enroll button (post-onboarding available courses) */}
+        {showEnrollButton && !isComingSoon && (
+          <div className="mt-3.5 mb-3.5" onClick={(e) => e.stopPropagation()}>
+            <PrimaryButton onClick={onEnroll ?? onSelect}>
               ◆  LOCK & START  ◆
             </PrimaryButton>
           </div>
         )}
 
-        {/* Stats row */}
         <StatsRow course={course} accentColor={accentColor} />
       </ParchmentCard>
     </div>
   );
 }
 
-/* Active course card with corner marks */
-function ActiveCourseCard({
-  course,
-  streak,
-  onPress,
-}: {
-  course: Course;
-  streak: number;
-  onPress: () => void;
-}) {
+/* Active course card */
+function ActiveCourseCard({ course, streak, onPress }: { course: Course; streak: number; onPress: () => void }) {
   return (
     <button onClick={onPress} className="w-full text-left transition-opacity hover:opacity-[0.85]">
       <ParchmentCard style={{ borderColor: `${T.violet}35` }}>
         <CornerMarks />
-
-        {/* Breathing border effect (CSS animation) */}
         <div
           className="absolute inset-[-1px] rounded-[10px] pointer-events-none animate-pulse"
-          style={{
-            border: `1px solid ${T.violet}25`,
-            opacity: 0.5,
-          }}
+          style={{ border: `1px solid ${T.violet}25`, opacity: 0.5 }}
         />
-
         <div className="flex items-center">
           <div className="flex-1">
             <h3
@@ -249,9 +183,7 @@ function ActiveCourseCard({
               {course.title}
             </h3>
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[11px]" style={{ color: T.amber }}>
-                ✹ {streak} streak
-              </span>
+              <span className="font-mono text-[11px]" style={{ color: T.amber }}>✹ {streak} streak</span>
               <span className="font-mono text-[11px]" style={{ color: T.textMuted }}>
                 {course.completedLessons}/{course.totalLessons} lessons
               </span>
@@ -264,7 +196,7 @@ function ActiveCourseCard({
   );
 }
 
-/* ── Main page ── */
+/* ── Main page — adapts between onboarding and post-onboarding ── */
 export default function CoursesPage() {
   const router = useRouter();
 
@@ -278,134 +210,187 @@ export default function CoursesPage() {
   const lessons = useCourseStore((s) => s.lessons);
   const walletAddress = useUserStore((s) => s.walletAddress);
 
-  /* Load courses on mount */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   useEffect(() => {
     void initializeContent();
   }, [initializeContent]);
 
-  /* Detect existing on-chain locks and auto-enroll */
   useEffect(() => {
     if (walletAddress && courses.length > 0) {
       void syncOnChainEnrollments(walletAddress);
     }
   }, [walletAddress, courses.length, syncOnChainEnrollments]);
 
-  /* Separate enrolled (locked) vs available */
   const activeCourseIds = enrolledCourseIds.filter((courseId) =>
     Boolean(courseStates[courseId]?.lockAccountAddress),
   );
   const activeCourses = courses.filter((c) => activeCourseIds.includes(c.id));
   const availableCourses = courses.filter((c) => !activeCourseIds.includes(c.id));
 
-  /* Available course tap — go to deposit to lock in */
-  const handleCoursePress = (course: Course) => {
-    router.push(`/onboarding/deposit?courseId=${course.id}`);
+  const isOnboardingMode = activeCourses.length === 0;
+  const selectedCourse = selectedId ? courses.find((c) => c.id === selectedId) : null;
+
+  const handleActiveCoursePress = (courseId: string) => {
+    useCourseStore.getState().setActiveCourse(courseId);
+    router.push('/dungeon');
   };
 
   const handleEnroll = (courseId: string) => {
     router.push(`/onboarding/deposit?courseId=${courseId}`);
   };
 
-  const handleActiveCoursePress = (courseId: string) => {
-    // Set as active course and navigate to dungeon hub
-    useCourseStore.getState().setActiveCourse(courseId);
-    router.push('/dungeon');
-  };
-
   return (
-    <ScreenBackground>
-      <PageHeader
-        title="Courses"
-        subtitle="Mastering your craft through proof of effort."
-      />
+    <div
+      className="min-h-screen relative"
+      style={{
+        backgroundColor: T.bg,
+        backgroundImage: "url('/images/wood.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
+      <div className={`relative max-w-2xl mx-auto px-[18px] ${isOnboardingMode ? 'pb-32' : 'pb-10'}`}>
 
-      {/* Loading state */}
-      {contentLoading && courses.length === 0 && (
-        <div
-          className="p-4 rounded-lg border mb-4"
-          style={{
-            borderColor: T.borderDormant,
-            backgroundColor: 'rgba(14,14,28,0.6)',
-          }}
-        >
-          <p className="text-xs text-center" style={{ color: T.textSecondary }}>
-            Syncing lesson modules...
-          </p>
+        {/* Header — adapts to mode */}
+        <div className="text-center pt-5 pb-7">
+          <div className="flex items-center justify-center gap-2 mb-3.5">
+            <div className="w-[30px] h-px" style={{ backgroundColor: `${T.amber}30` }} />
+            <span className="text-[7px]" style={{ color: `${T.amber}50` }}>{'\u25C6'}</span>
+            <div className="w-[30px] h-px" style={{ backgroundColor: `${T.amber}30` }} />
+          </div>
+          {isOnboardingMode ? (
+            <>
+              <h1
+                className="text-[26px] font-bold tracking-wide leading-tight mb-2"
+                style={{ color: T.textPrimary, fontFamily: 'Georgia, serif' }}
+              >
+                Choose Your {'\n'}<span style={{ color: T.amber }}>Path</span>
+              </h1>
+              <p className="text-xs leading-[18px]" style={{ color: T.textSecondary }}>
+                Mastering your craft through proof of effort.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1
+                className="text-[26px] font-bold tracking-wide leading-tight mb-2"
+                style={{ color: T.textPrimary, fontFamily: 'Georgia, serif' }}
+              >
+                Your <span style={{ color: T.amber }}>Courses</span>
+              </h1>
+              <p className="text-xs leading-[18px]" style={{ color: T.textSecondary }}>
+                Continue your journey or start a new path.
+              </p>
+            </>
+          )}
         </div>
-      )}
 
-      {/* Error state */}
-      {contentError && (
-        <div
-          className="p-4 rounded-lg border mb-4"
-          style={{
-            borderColor: 'rgba(255,68,102,0.15)',
-            backgroundColor: 'rgba(14,14,28,0.6)',
-          }}
-        >
-          <p className="text-xs text-center" style={{ color: 'rgba(255,68,102,0.6)' }}>
-            {contentError}
-          </p>
-          <button
-            onClick={() => void initializeContent(true)}
-            className="mt-3 mx-auto block px-4 py-2 rounded-md border text-[11px] font-semibold uppercase tracking-wide"
-            style={{
-              borderColor: `${T.amber}30`,
-              backgroundColor: 'rgba(212,160,74,0.08)',
-              color: T.amber,
-            }}
+        {/* Loading */}
+        {contentLoading && courses.length === 0 && (
+          <div
+            className="p-4 rounded-lg border mb-4"
+            style={{ borderColor: T.borderDormant, backgroundColor: 'rgba(14,14,28,0.6)' }}
           >
-            Retry
-          </button>
-        </div>
-      )}
+            <p className="text-xs text-center" style={{ color: T.textSecondary }}>
+              Syncing course catalog...
+            </p>
+          </div>
+        )}
 
-      {/* Active courses */}
-      {activeCourses.length > 0 && (
-        <div className="mb-5">
-          <SectionLabel>Active Courses</SectionLabel>
-          <div className="flex flex-col gap-2.5">
-            {activeCourses.map((course) => {
-              const state = courseStates[course.id];
-              return (
+        {/* Error */}
+        {contentError && (
+          <div
+            className="p-4 rounded-lg border mb-4"
+            style={{ borderColor: 'rgba(255,68,102,0.15)', backgroundColor: 'rgba(14,14,28,0.6)' }}
+          >
+            <p className="text-xs text-center" style={{ color: 'rgba(255,68,102,0.6)' }}>{contentError}</p>
+            <button
+              onClick={() => void initializeContent(true)}
+              className="mt-3 mx-auto block px-4 py-2 rounded-md border text-[11px] font-semibold uppercase tracking-wide"
+              style={{ borderColor: `${T.amber}30`, backgroundColor: 'rgba(212,160,74,0.08)', color: T.amber }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Active courses (post-onboarding only) */}
+        {activeCourses.length > 0 && (
+          <div className="mb-5">
+            <SectionLabel>Active Courses</SectionLabel>
+            <div className="flex flex-col gap-2.5">
+              {activeCourses.map((course) => (
                 <ActiveCourseCard
                   key={course.id}
                   course={course}
-                  streak={state?.currentStreak ?? 0}
+                  streak={courseStates[course.id]?.currentStreak ?? 0}
                   onPress={() => handleActiveCoursePress(course.id)}
                 />
-              );
-            })}
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Available / all courses */}
+        {availableCourses.length > 0 && (
+          <>
+            {activeCourses.length > 0 && <SectionLabel>Available Courses</SectionLabel>}
+            <div className="flex flex-col gap-3">
+              {availableCourses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  actualLessonCount={(lessons[course.id] ?? []).length}
+                  selected={isOnboardingMode && selectedId === course.id}
+                  onSelect={() =>
+                    isOnboardingMode
+                      ? setSelectedId(selectedId === course.id ? null : course.id)
+                      : handleEnroll(course.id)
+                  }
+                  showEnrollButton={!isOnboardingMode}
+                  onEnroll={() => handleEnroll(course.id)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Empty */}
+        {courses.length === 0 && !contentLoading && !contentError && (
+          <div className="text-center py-16">
+            <p className="text-sm" style={{ color: T.textMuted }}>No courses available yet.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Fixed CTA — onboarding mode only */}
+      {isOnboardingMode && selectedCourse && (
+        <div
+          className="fixed bottom-0 left-0 right-0 px-[18px] pb-8 pt-4"
+          style={{ backgroundColor: `${T.bg}F5` }}
+        >
+          <div className="max-w-2xl mx-auto">
+            <button
+              onClick={() => handleEnroll(selectedCourse.id)}
+              className="w-full py-4 rounded-[10px] text-center"
+              style={{
+                backgroundColor: T.amber,
+                border: `1px solid ${T.amber}50`,
+                boxShadow: '0 0 16px rgba(212,160,74,0.2)',
+              }}
+            >
+              <span
+                className="text-[13px] font-bold uppercase tracking-[3px]"
+                style={{ color: T.bg, fontFamily: 'Georgia, serif' }}
+              >
+                {'\u25C6'}  BEGIN DESCENT  {'\u25C6'}
+              </span>
+            </button>
           </div>
         </div>
       )}
-
-      {/* Available courses */}
-      {availableCourses.length > 0 && (
-        <>
-          {activeCourses.length > 0 && <SectionLabel>Available Courses</SectionLabel>}
-          <div className="flex flex-col gap-3">
-            {availableCourses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                actualLessonCount={(lessons[course.id] ?? []).length}
-                onPress={() => handleCoursePress(course)}
-                onEnroll={() => handleEnroll(course.id)}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Empty state */}
-      {!contentLoading && !contentError && courses.length === 0 && (
-        <div className="text-center py-16">
-          <p className="text-sm" style={{ color: T.textMuted }}>
-            No courses available yet.
-          </p>
-        </div>
-      )}
-    </ScreenBackground>
+    </div>
   );
 }

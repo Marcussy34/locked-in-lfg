@@ -14,7 +14,7 @@ import { T } from './theme';
 const PUBLIC_ROUTES = ['/'];
 
 // Routes allowed during onboarding (before active lock)
-const ONBOARDING_ROUTES = ['/onboarding/courses', '/onboarding/deposit'];
+const ONBOARDING_ROUTES = ['/courses', '/onboarding/deposit'];
 
 /**
  * Flow enforcement — mirrors AppNavigator.tsx from the RN app exactly.
@@ -72,7 +72,7 @@ function useFlowGuard() {
     if (phase === 'onboarding') {
       const isOnboardingRoute = ONBOARDING_ROUTES.some((r) => pathname.startsWith(r));
       if (!isOnboardingRoute) {
-        router.replace('/onboarding/courses');
+        router.replace('/courses');
       }
       return;
     }

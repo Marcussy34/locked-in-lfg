@@ -32,10 +32,10 @@ export default function LandingPage() {
     switch (phase) {
       case 'auth':
         // Just authenticated — move to onboarding
-        router.replace('/onboarding/courses');
+        router.replace('/courses');
         break;
       case 'onboarding':
-        router.replace('/onboarding/courses');
+        router.replace('/courses');
         break;
       case 'main':
         router.replace('/courses');
