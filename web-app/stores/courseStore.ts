@@ -501,6 +501,7 @@ export const useCourseStore = create<CourseStore>()(
               fuelCap: snapshot.fuelCap,
               lastFuelCreditDay: snapshot.lastFuelCreditDay,
               lastBrewerBurnTs: snapshot.lastBrewerBurnTs,
+              fuelFragmentsToday: snapshot.fuelFragmentsToday ?? 0,
             },
           },
         });

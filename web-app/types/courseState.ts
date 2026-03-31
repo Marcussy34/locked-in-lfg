@@ -31,6 +31,7 @@ export interface CourseGameState {
   fuelCap: number;
   lastFuelCreditDay: string | null;
   lastBrewerBurnTs: string | null;
+  fuelFragmentsToday: number;
 
   // Ichor
   ichorBalance: number;
@@ -60,6 +61,7 @@ export const DEFAULT_COURSE_STATE: CourseGameState = {
   fuelCap: 7,
   lastFuelCreditDay: null,
   lastBrewerBurnTs: null,
+  fuelFragmentsToday: 0,
   ichorBalance: 0,
   totalIchorProduced: 0,
   flameState: 'COLD',

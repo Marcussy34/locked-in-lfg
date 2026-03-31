@@ -215,6 +215,8 @@ export interface CourseRuntimeSnapshot {
   lastFuelCreditDay: string | null;
   lastBrewerBurnTs: string | null;
   fuelAwarded: number;
+  fuelFragmentAwarded: number;
+  fuelFragmentsToday: number;
   fuelEarnStatus: ApiFuelEarnStatus;
 }
 

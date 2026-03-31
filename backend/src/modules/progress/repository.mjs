@@ -40,8 +40,21 @@ import { enhanceValidatorFeedback } from '../../lib/answerValidator.mjs';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const FUEL_DAILY_REWARD = 1;
 const DEFAULT_FUEL_CAP = 7;
+const FUEL_FRAGMENT_CAP = 1.0;
+
+// Variable fragment ranges per activity type (whitepaper slot-machine psychology)
+function randomInRange(min, max) {
+  return Math.round((min + Math.random() * (max - min)) * 100) / 100;
+}
+
+function computeFuelFragment(score, totalQuestions) {
+  if (totalQuestions === 0) return 0;
+  const percent = score / totalQuestions;
+  if (percent >= 1.0) return randomInRange(0.30, 0.50);  // Perfect quiz
+  if (percent >= 0.8) return randomInRange(0.20, 0.40);  // Quiz pass
+  return 0; // Below threshold — no fragment
+}
 const SAVER_REDIRECT_BPS_BY_COUNT = {
   0: 0,
   1: 1000,
@@ -350,7 +363,9 @@ async function ensureCourseRuntimeState(client, walletAddress, courseId) {
         last_completed_day::text as "lastCompletedDay",
         last_miss_day::text as "lastMissDay",
         last_fuel_credit_day::text as "lastFuelCreditDay",
-        last_brewer_burn_ts as "lastBrewerBurnTs"
+        last_brewer_burn_ts as "lastBrewerBurnTs",
+        coalesce(fuel_fragments_today, 0)::float as "fuelFragmentsToday",
+        fuel_fragments_day::text as "fuelFragmentsDay"
       from lesson.user_course_runtime_state
       where wallet_address = $1
         and course_id = $2
@@ -365,7 +380,7 @@ async function ensureCourseRuntimeState(client, walletAddress, courseId) {
 function deriveFuelEarnStatus(state, completionDay) {
   if (state.saverRecoveryMode) return 'PAUSED_RECOVERY';
   if (state.fuelCounter >= state.fuelCap) return 'AT_CAP';
-  if (state.lastFuelCreditDay === completionDay) return 'EARNED_TODAY';
+  if ((state.fuelFragmentsToday ?? 0) >= FUEL_FRAGMENT_CAP) return 'EARNED_TODAY';
   return 'AVAILABLE';
 }
 
@@ -408,16 +423,30 @@ async function applyVerifiedCompletionToCourseRuntime(
   let fuelCounter = state.fuelCounter;
   let lastFuelCreditDay = state.lastFuelCreditDay;
   let fuelAwarded = 0;
+  let fuelFragmentAwarded = 0;
+
+  // Reset fragments if new day
+  let fuelFragmentsToday =
+    state.fuelFragmentsDay === completionDay ? state.fuelFragmentsToday : 0;
 
   if (
     rewardUnits > 0 &&
     !saverRecoveryMode &&
     fuelCounter < state.fuelCap &&
-    lastFuelCreditDay !== completionDay
+    fuelFragmentsToday < FUEL_FRAGMENT_CAP
   ) {
-    fuelCounter = Math.min(state.fuelCap, fuelCounter + FUEL_DAILY_REWARD);
-    lastFuelCreditDay = completionDay;
-    fuelAwarded = fuelCounter > state.fuelCounter ? FUEL_DAILY_REWARD : 0;
+    // Variable fragment based on score
+    const fragment = computeFuelFragment(rewardUnits, 100);
+    fuelFragmentAwarded = Math.min(fragment, FUEL_FRAGMENT_CAP - fuelFragmentsToday);
+    fuelFragmentAwarded = Math.round(fuelFragmentAwarded * 100) / 100;
+    fuelFragmentsToday = Math.round((fuelFragmentsToday + fuelFragmentAwarded) * 100) / 100;
+
+    // Credit 1 integer fuel when fragments hit 1.0
+    if (fuelFragmentsToday >= FUEL_FRAGMENT_CAP && lastFuelCreditDay !== completionDay) {
+      fuelCounter = Math.min(state.fuelCap, fuelCounter + 1);
+      lastFuelCreditDay = completionDay;
+      fuelAwarded = fuelCounter > state.fuelCounter ? 1 : 0;
+    }
   }
 
   await client.query(
@@ -433,6 +462,8 @@ async function applyVerifiedCompletionToCourseRuntime(
           fuel_counter = $10,
           last_completed_day = $11::date,
           last_fuel_credit_day = $12::date,
+          fuel_fragments_today = $13,
+          fuel_fragments_day = $14::date,
           updated_at = now()
       where wallet_address = $1
         and course_id = $2
@@ -450,6 +481,8 @@ async function applyVerifiedCompletionToCourseRuntime(
       fuelCounter,
       completionDay,
       lastFuelCreditDay,
+      fuelFragmentsToday,
+      completionDay,
     ],
   );
 
@@ -468,6 +501,8 @@ async function applyVerifiedCompletionToCourseRuntime(
     lastFuelCreditDay,
     lastBrewerBurnTs: state.lastBrewerBurnTs,
     fuelAwarded,
+    fuelFragmentAwarded,
+    fuelFragmentsToday,
     fuelEarnStatus: deriveFuelEarnStatus(
       {
         ...state,
@@ -476,6 +511,7 @@ async function applyVerifiedCompletionToCourseRuntime(
         currentYieldRedirectBps,
         fuelCounter,
         lastFuelCreditDay,
+        fuelFragmentsToday,
       },
       completionDay,
     ),
@@ -1200,6 +1236,8 @@ export async function readCourseRuntimeState(client, walletAddress, courseId) {
     lastFuelCreditDay: state.lastFuelCreditDay,
     lastBrewerBurnTs: state.lastBrewerBurnTs,
     fuelAwarded: 0,
+    fuelFragmentAwarded: 0,
+    fuelFragmentsToday: state.fuelFragmentsDay === referenceDay ? state.fuelFragmentsToday : 0,
     fuelEarnStatus: deriveFuelEarnStatus(state, referenceDay),
   };
 }

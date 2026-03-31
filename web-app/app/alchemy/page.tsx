@@ -30,6 +30,7 @@ export default function AlchemyPage() {
   const fuelBalance = activeState?.fuelCounter ?? 0;
   const fuelCap = activeState?.fuelCap ?? 7;
   const ichorBalance = activeState?.ichorBalance ?? 0;
+  const fuelFragments = activeState?.fuelFragmentsToday ?? 0;
   const canConvert = fuelBalance > 0 && !isConverting;
 
   const handleConvert = useCallback(async () => {
@@ -71,6 +72,32 @@ export default function AlchemyPage() {
           color={T.green}
         />
       </div>
+
+      {/* Daily fuel progress */}
+      <ParchmentCard className="p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-mono font-semibold" style={{ color: T.textSecondary }}>
+            Today&apos;s Fuel Progress
+          </span>
+          <span className="text-[11px] font-mono font-bold" style={{ color: fuelFragments >= 1 ? T.green : T.amber }}>
+            {fuelFragments.toFixed(2)} / 1.00
+          </span>
+        </div>
+        <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${Math.min(100, fuelFragments * 100)}%`,
+              backgroundColor: fuelFragments >= 1 ? T.green : T.amber,
+            }}
+          />
+        </div>
+        <p className="text-[10px] mt-1.5" style={{ color: T.textMuted }}>
+          {fuelFragments >= 1
+            ? 'Max fuel earned today. Come back tomorrow!'
+            : 'Complete lessons to earn fuel fragments.'}
+        </p>
+      </ParchmentCard>
 
       {/* Conversion card */}
       <ParchmentCard className="p-5 mb-4">
