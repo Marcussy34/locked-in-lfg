@@ -635,8 +635,19 @@ export const useCourseStore = create<CourseStore>()(
             console.info(
               `[content-sync] success: releaseId=${snapshot.releaseId} publishedAt=${snapshot.publishedAt}`,
             );
+            // Recalculate completedLessons from local lessonProgress so
+            // content refresh doesn't reset counts to 0
+            const currentProgress = get().lessonProgress;
+            const coursesWithProgress = snapshot.courses.map((course) => {
+              const courseLessons = snapshot.lessonsByCourse[course.id] ?? [];
+              const completedCount = courseLessons.filter(
+                (l) => currentProgress[l.id]?.completed,
+              ).length;
+              return { ...course, completedLessons: completedCount };
+            });
+
             set({
-              courses: snapshot.courses,
+              courses: coursesWithProgress,
               modules: snapshot.modulesByCourse,
               lessons: snapshot.lessonsByCourse,
               contentReleaseId: snapshot.releaseId,

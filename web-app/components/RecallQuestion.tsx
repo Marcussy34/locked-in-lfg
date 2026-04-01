@@ -25,13 +25,14 @@ export function RecallQuestion({ question, lessonTitle, onComplete }: RecallQues
 
   const handleCheck = () => {
     if (isMcq) {
-      // Find the text of the selected option to compare against correctAnswer
+      // correctAnswer may be option text OR option id — check both
       const selected = question.options?.find((opt) => {
         const id = typeof opt === 'string' ? opt : opt.id;
         return id === selectedOption;
       });
+      const selectedId = selected ? (typeof selected === 'string' ? selected : selected.id) : '';
       const selectedText = selected ? (typeof selected === 'string' ? selected : selected.text) : '';
-      const correct = selectedText === question.correctAnswer;
+      const correct = selectedText === question.correctAnswer || selectedId === question.correctAnswer;
       setIsCorrect(correct);
     } else {
       // Simple keyword check for short_text (client-side approximation)
@@ -94,7 +95,7 @@ export function RecallQuestion({ question, lessonTitle, onComplete }: RecallQues
                 const optId = typeof opt === 'string' ? opt : opt.id;
                 const isSelected = selectedOption === optId;
                 const showResult = hasChecked;
-                const isCorrectOption = optText === question.correctAnswer;
+                const isCorrectOption = optText === question.correctAnswer || optId === question.correctAnswer;
 
                 let borderColor = T.borderDormant;
                 let bgColor = 'transparent';

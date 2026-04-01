@@ -229,6 +229,20 @@ export default function LessonPage(props: {
             params.set('xpTotal', String(result.xp.xpTotal));
             params.set('xpLevel', String(result.xp.xpLevel));
           }
+          // Store question review data for result page
+          try {
+            sessionStorage.setItem('lastQuizReview', JSON.stringify({
+              questions: questions.map(q => ({
+                id: q.id,
+                prompt: q.prompt,
+                type: q.type,
+                options: q.options,
+                correctAnswer: q.correctAnswer,
+              })),
+              userAnswers: answerMap,
+              questionResults: result.questionResults ?? [],
+            }));
+          } catch { /* sessionStorage may be unavailable */ }
           router.push(`/lessons/${lessonId}/result?${params.toString()}`);
         } catch {
           setError('Submit failed. Please try again.');
@@ -246,6 +260,20 @@ export default function LessonPage(props: {
         total: String(totalQuestions),
         accepted: 'true',
       });
+      // Store question review data for result page
+      try {
+        sessionStorage.setItem('lastQuizReview', JSON.stringify({
+          questions: questions.map(q => ({
+            id: q.id,
+            prompt: q.prompt,
+            type: q.type,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+          })),
+          userAnswers: answerMap,
+          questionResults: [],
+        }));
+      } catch { /* sessionStorage may be unavailable */ }
       router.push(`/lessons/${lessonId}/result?${params.toString()}`);
     },
     [

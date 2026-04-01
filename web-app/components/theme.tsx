@@ -33,10 +33,11 @@ export function ScreenBackground({ children }: { children: ReactNode }) {
         backgroundImage: "url('/images/wood.png')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
       }}
     >
-      {/* Semi-transparent overlay — creates the 60% texture opacity matching Android's imageStyle={{ opacity: 0.6 }} */}
-      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
+      {/* Semi-transparent overlay — fixed so it doesn't scroll with content */}
+      <div className="fixed inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
       <div className="relative max-w-2xl mx-auto px-[18px] pb-10">
         {children}
       </div>

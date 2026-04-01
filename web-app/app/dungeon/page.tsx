@@ -309,10 +309,10 @@ function BookModal({
             Progress
           </p>
           <ProgressBar
-            progress={course ? course.completedLessons / course.totalLessons : 0}
+            progress={courseLessons.length > 0 ? completedLessons.length / courseLessons.length : 0}
           />
           <p className="font-mono text-xs mt-1" style={{ color: T.textMuted }}>
-            {course?.completedLessons ?? 0}/{course?.totalLessons ?? 0} lessons
+            {completedLessons.length}/{courseLessons.length} lessons
           </p>
         </ParchmentCard>
 
@@ -348,7 +348,7 @@ function BookModal({
             <button
               key={item.label}
               onClick={item.action}
-              className="flex flex-col items-center gap-1.5 py-3.5 rounded-[10px] border"
+              className="flex flex-col items-center gap-1.5 py-3.5 rounded-[10px] border transition-all duration-150 hover:border-[rgba(212,160,74,0.18)] hover:bg-[rgba(255,255,255,0.06)]"
               style={{ backgroundColor: T.bgCard, borderColor: T.borderDormant }}
             >
               <span className="text-xl">{item.icon}</span>
