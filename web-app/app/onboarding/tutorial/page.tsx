@@ -142,9 +142,10 @@ export default function OnboardingTutorialPage() {
         backgroundImage: "url('/images/wood.png')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
       }}
     >
-      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.55)' }} />
+      <div className="fixed inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.55)' }} />
 
       <div className="relative max-w-lg mx-auto px-6 min-h-screen flex flex-col">
         {/* Skip button */}

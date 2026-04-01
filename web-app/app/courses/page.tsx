@@ -106,7 +106,7 @@ function CourseCard({
 
   return (
     <div
-      className={`w-full text-left ${isComingSoon ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}
+      className={`w-full text-left transition-all duration-150 ${isComingSoon ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:scale-[1.01] hover:brightness-110'}`}
       onClick={isComingSoon ? undefined : onSelect}
       role={isComingSoon ? undefined : 'button'}
       tabIndex={isComingSoon ? undefined : 0}
@@ -260,9 +260,10 @@ export default function CoursesPage() {
         backgroundImage: "url('/images/wood.png')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
       }}
     >
-      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
+      <div className="fixed inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
       <div className={`relative max-w-2xl mx-auto px-[18px] ${isOnboardingMode ? 'pb-32' : 'pb-10'}`}>
 
         {/* Header — adapts to mode */}
