@@ -427,7 +427,7 @@ export default function ShopPage() {
           <p className="text-xs" style={{ color: T.amber }}>{error}</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <StatCard
                 icon={<ArrowUpIcon />}
                 label="Total Yield"
