@@ -396,7 +396,7 @@ export default function CoursesPage() {
                   {(activeCourses.length > 0 || comingSoonCourses.length > 0) && (
                     <SectionLabel>Available Courses</SectionLabel>
                   )}
-                  <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {readyCourses.map((course) => (
                       <CourseCard
                         key={course.id}
@@ -419,7 +419,7 @@ export default function CoursesPage() {
               {comingSoonCourses.length > 0 && (
                 <div className="mt-5">
                   <SectionLabel>Coming Soon</SectionLabel>
-                  <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {comingSoonCourses.map((course) => (
                       <CourseCard
                         key={course.id}
