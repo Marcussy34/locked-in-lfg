@@ -85,7 +85,7 @@ export function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="py-3 font-mono text-xs"
+      className="py-3 font-mono text-xs md:hidden"
       style={{ color: T.textSecondary }}
     >
       ← Back
