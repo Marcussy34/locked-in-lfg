@@ -59,7 +59,7 @@ export function ParchmentCard({
 }) {
   return (
     <div
-      className={`relative p-4 rounded-[10px] border overflow-hidden ${className}`}
+      className={`relative p-4 rounded-[10px] border overflow-hidden transition-all duration-150 hover:border-[rgba(212,160,74,0.18)] ${className}`}
       style={{
         backgroundColor: T.bgCard,
         borderColor: T.borderDormant,
@@ -165,7 +165,7 @@ export function StatBox({
   return (
     <ParchmentCard className={`flex-1 flex flex-col items-center p-3 ${className}`} opacity={0.25}>
       <span
-        className="font-mono text-[10px] uppercase tracking-[1px]"
+        className="font-mono text-[10px] uppercase tracking-[1px] whitespace-nowrap"
         style={{ color: T.textSecondary }}
       >
         {label}
