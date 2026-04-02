@@ -340,21 +340,27 @@ function BookModal({
         {/* Action grid */}
         <div className="grid grid-cols-4 gap-2.5 mt-4">
           {[
-            { icon: '⚗️', label: 'Practice' },
-            { icon: '🧩', label: 'Puzzle' },
-            { icon: '📜', label: 'Dictionary' },
+            { icon: '⚗️', label: 'Practice', soon: true },
+            { icon: '🧩', label: 'Puzzle', soon: true },
+            { icon: '📜', label: 'Dictionary', soon: true },
             { icon: '📚', label: 'Courses', action: onBrowseCourses },
           ].map((item) => (
             <button
               key={item.label}
               onClick={item.action}
-              className="flex flex-col items-center gap-1.5 py-3.5 rounded-[10px] border transition-all duration-150 hover:border-[rgba(212,160,74,0.18)] hover:bg-[rgba(255,255,255,0.06)]"
+              disabled={item.soon}
+              className={`flex flex-col items-center gap-1.5 py-3.5 rounded-[10px] border transition-all duration-150 ${item.soon ? 'opacity-40' : 'hover:border-[rgba(212,160,74,0.18)] hover:bg-[rgba(255,255,255,0.06)]'}`}
               style={{ backgroundColor: T.bgCard, borderColor: T.borderDormant }}
             >
               <span className="text-xl">{item.icon}</span>
               <span className="font-mono text-[10px] font-semibold tracking-wide" style={{ color: T.textSecondary }}>
                 {item.label}
               </span>
+              {item.soon && (
+                <span className="font-mono text-[8px] uppercase tracking-[1px]" style={{ color: T.textMuted }}>
+                  Soon
+                </span>
+              )}
             </button>
           ))}
         </div>
