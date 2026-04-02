@@ -65,15 +65,18 @@ export function IconProfile({ color, size = 18 }: { color: string; size?: number
   );
 }
 
-/** All nav items (used by desktop sidebar) */
-export const NAV_ITEMS: { href: string; label: string; icon: (props: { color: string; size?: number }) => ReactNode }[] = [
-  { href: '/courses', label: 'Courses', icon: IconCourses },
-  { href: '/dashboard', label: 'Dashboard', icon: IconFlame },
-  { href: '/alchemy', label: 'Alchemy', icon: IconAlchemy },
-  { href: '/shop', label: 'Rewards', icon: IconRewards },
-  { href: '/leaderboard', label: 'Leaderboard', icon: IconLeaderboard },
-  { href: '/community-pot', label: 'Community', icon: IconCommunity },
-  { href: '/profile', label: 'Profile', icon: IconProfile },
+/** Navigation groups for desktop sidebar */
+export type NavGroup = 'learn' | 'economy' | 'social';
+
+/** All nav items with group (used by desktop sidebar) */
+export const NAV_ITEMS: { href: string; label: string; icon: (props: { color: string; size?: number }) => ReactNode; group: NavGroup }[] = [
+  { href: '/courses', label: 'Courses', icon: IconCourses, group: 'learn' },
+  { href: '/dashboard', label: 'Dashboard', icon: IconFlame, group: 'learn' },
+  { href: '/alchemy', label: 'Alchemy', icon: IconAlchemy, group: 'economy' },
+  { href: '/shop', label: 'Rewards', icon: IconRewards, group: 'economy' },
+  { href: '/leaderboard', label: 'Leaderboard', icon: IconLeaderboard, group: 'social' },
+  { href: '/community-pot', label: 'Community', icon: IconCommunity, group: 'social' },
+  { href: '/profile', label: 'Profile', icon: IconProfile, group: 'social' },
 ];
 
 /** Primary 5 tabs for mobile bottom bar */
