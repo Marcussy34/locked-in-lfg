@@ -87,24 +87,21 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="flex flex-col gap-2.5">
-        <div className="flex gap-2.5">
-          <StatBox label="Streak" value={`${streak} day${streak !== 1 ? 's' : ''}`} color={flameColor} />
-          <StatBox label="Longest" value={`${longestStreak} day${longestStreak !== 1 ? 's' : ''}`} color={T.amber} />
-        </div>
-        <div className="flex gap-2.5">
-          <StatBox label="Fuel" value={`${fuelBalance}/${fuelCap}`} color={T.rust} />
-          <StatBox label="Ichor" value={Math.floor(ichorBalance)} color={T.green} />
-        </div>
-        <div className="flex gap-2.5">
-          <StatBox label="Lessons Done" value={`${totalCompleted}/${totalLessons}`} color={T.violet} />
-          <StatBox label="Courses" value={enrolledCount} color={T.teal} />
-        </div>
+      {/* Stats grid — 2-col on mobile, 6-col on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5">
+        <StatBox label="Streak" value={`${streak} day${streak !== 1 ? 's' : ''}`} color={flameColor} />
+        <StatBox label="Longest" value={`${longestStreak} day${longestStreak !== 1 ? 's' : ''}`} color={T.amber} />
+        <StatBox label="Fuel" value={`${fuelBalance}/${fuelCap}`} color={T.rust} />
+        <StatBox label="Ichor" value={Math.floor(ichorBalance)} color={T.green} />
+        <StatBox label="Lessons" value={`${totalCompleted}/${totalLessons}`} color={T.violet} />
+        <StatBox label="Courses" value={enrolledCount} color={T.teal} />
       </div>
 
+      {/* Cards — single column on mobile, 2-col on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+
       {/* Flame status */}
-      <ParchmentCard className="mt-4 flex items-center gap-4 p-4">
+      <ParchmentCard className="flex items-center gap-4 p-4">
         <span className="text-[32px]">
           {streak >= 3 ? '\u{1F525}' : streak >= 1 ? '\u{1FA94}' : '\u{1F9CA}'}
         </span>
@@ -123,7 +120,7 @@ export default function DashboardPage() {
       </ParchmentCard>
 
       {/* Fuel progress today */}
-      <ParchmentCard className="mt-3 p-4">
+      <ParchmentCard className="p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="font-mono text-[10px] uppercase tracking-[1px]" style={{ color: T.textSecondary }}>
             Today&apos;s Fuel
@@ -141,7 +138,7 @@ export default function DashboardPage() {
       </ParchmentCard>
 
       {/* Saver lamps */}
-      <ParchmentCard className="mt-3 p-4">
+      <ParchmentCard className="p-4">
         <SectionLabel>Saver Lamps</SectionLabel>
         <div className="flex justify-center gap-7 mt-2">
           {[0, 1, 2].map((i) => (
@@ -163,7 +160,7 @@ export default function DashboardPage() {
 
       {/* Active course */}
       {activeCourse && (
-        <ParchmentCard className="mt-3 p-4 mb-6">
+        <ParchmentCard className="p-4">
           <SectionLabel>Active Course</SectionLabel>
           <p className="text-[15px] font-bold mt-1" style={{ color: T.textPrimary, fontFamily: 'Georgia, serif' }}>
             {activeCourse.title}
@@ -173,6 +170,7 @@ export default function DashboardPage() {
           </p>
         </ParchmentCard>
       )}
+      </div>
     </ScreenBackground>
   );
 }
