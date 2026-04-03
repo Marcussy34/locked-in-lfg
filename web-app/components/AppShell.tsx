@@ -143,6 +143,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (bestStreak > 0) {
           useFlameStore.getState().updateFromStreak(bestStreak);
         }
+
+        // Promote returning users past onboarding when backend confirms enrollments
+        // (handles case where localStorage was cleared but user already has active locks)
+        if (data.enrollments.length > 0) {
+          const userState = useUserStore.getState();
+          if (userState.onboardingPhase !== 'main') {
+            userState.setOnboardingPhase('main');
+          }
+          if (!userState.tutorialCompleted) {
+            userState.completeTutorial();
+          }
+        }
       })
       .catch(() => {}); // Fail silently — local state is still usable
   }, [hydrated, isAuthenticated]);
