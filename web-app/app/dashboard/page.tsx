@@ -44,7 +44,9 @@ export default function DashboardPage() {
   const fuelFragments = activeState?.fuelFragmentsToday ?? 0;
   const ichorBalance = activeState?.ichorBalance ?? 0;
   const saverCount = activeState?.saverCount ?? 0;
-  const saversRemaining = Math.max(0, 3 - saverCount);
+  // Savers unlock after the 7-day gauntlet (Day 8+)
+  const saversUnlocked = longestStreak >= 7;
+  const saversRemaining = saversUnlocked ? Math.max(0, 3 - saverCount) : 0;
 
   // Total lessons completed across all courses
   const totalCompleted = Object.values(lessonProgress).filter((p) => p.completed).length;
@@ -143,18 +145,22 @@ export default function DashboardPage() {
         <div className="flex justify-center gap-7 mt-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex flex-col items-center">
-              <span className="text-[24px]">{i < saversRemaining ? '\u{1F525}' : '\u{1F4A8}'}</span>
+              <span className="text-[24px]">
+                {!saversUnlocked ? '\u{1F9CA}' : i < saversRemaining ? '\u{1F525}' : '\u{1F4A8}'}
+              </span>
               <span
                 className="font-mono text-[9px] mt-1 uppercase tracking-[1px]"
-                style={{ color: i < saversRemaining ? T.green : T.textMuted }}
+                style={{ color: !saversUnlocked ? T.textMuted : i < saversRemaining ? T.green : T.textMuted }}
               >
-                {i < saversRemaining ? 'Active' : 'Used'}
+                {!saversUnlocked ? 'Locked' : i < saversRemaining ? 'Active' : 'Used'}
               </span>
             </div>
           ))}
         </div>
         <p className="text-[10px] text-center mt-2" style={{ color: T.textMuted }}>
-          Miss a day? A saver protects your streak. {saversRemaining}/3 remaining.
+          {saversUnlocked
+            ? `Miss a day? A saver protects your streak. ${saversRemaining}/3 remaining.`
+            : 'Complete the 7-day gauntlet to unlock saver lamps.'}
         </p>
       </ParchmentCard>
 
