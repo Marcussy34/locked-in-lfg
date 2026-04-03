@@ -27,18 +27,19 @@ export function WalletConnect() {
       // After JWT is obtained, sync backend state.
       const waitForToken = () =>
         new Promise<string | null>((resolve) => {
-          // Poll briefly for the auth token to be set by the useAuth hook
-          let attempts = 0;
-          const check = () => {
-            const token = useUserStore.getState().authToken;
-            if (token || attempts > 20) {
-              resolve(token);
-              return;
+          // Check immediately
+          const token = useUserStore.getState().authToken;
+          if (token) { resolve(token); return; }
+
+          // Subscribe to store changes with a timeout fallback
+          const timeout = setTimeout(() => { unsub(); resolve(null); }, 5000);
+          const unsub = useUserStore.subscribe((state) => {
+            if (state.authToken) {
+              clearTimeout(timeout);
+              unsub();
+              resolve(state.authToken);
             }
-            attempts++;
-            setTimeout(check, 250);
-          };
-          check();
+          });
         });
 
       const token = await waitForToken();

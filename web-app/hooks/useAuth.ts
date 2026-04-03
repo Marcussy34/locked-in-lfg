@@ -89,7 +89,16 @@ export function useAuth() {
   }, [solanaWallet, signMessage, setWallet, setAuthSession]);
 
   // Track whether user just logged in this session (not a page reload)
-  const [freshLogin, setFreshLogin] = useState(false);
+  // Backed by sessionStorage so it survives page reloads within the same tab
+  const [freshLogin, setFreshLoginState] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('locked-in-fresh-login') === '1';
+  });
+  const setFreshLogin = useCallback((v: boolean) => {
+    setFreshLoginState(v);
+    if (v) sessionStorage.setItem('locked-in-fresh-login', '1');
+    else sessionStorage.removeItem('locked-in-fresh-login');
+  }, []);
 
   // Only auto-authenticate after a FRESH login (user clicked sign-in), not on page reload
   useEffect(() => {
@@ -105,7 +114,7 @@ export function useAuth() {
       authenticate();
       setFreshLogin(false);
     }
-  }, [freshLogin, privyAuthenticated, walletsReady, solanaWallet, accessToken, authInProgress, authError, authenticate]);
+  }, [freshLogin, privyAuthenticated, walletsReady, solanaWallet, accessToken, authInProgress, authError, authenticate, setFreshLogin]);
 
   // Manual retry — called from UI
   const retry = useCallback(() => {
@@ -113,10 +122,11 @@ export function useAuth() {
     authenticate();
   }, [authenticate]);
 
-  // Disconnect — clears Privy + our auth state
+  // Disconnect — clears Privy + all app state
   const handleDisconnect = useCallback(async () => {
     await privyLogout();
     disconnectUser();
+    useCourseStore.getState().reset();
     setAuthCookie(false);
     setAuthError(null);
   }, [privyLogout, disconnectUser]);
@@ -125,12 +135,13 @@ export function useAuth() {
   useEffect(() => {
     if (privyReady && !privyAuthenticated && walletAddress) {
       disconnectUser();
+      useCourseStore.getState().reset();
       setAuthCookie(false);
     }
   }, [privyReady, privyAuthenticated, walletAddress, disconnectUser]);
 
   // Called by WalletConnect after user deliberately clicks sign-in
-  const markFreshLogin = useCallback(() => setFreshLogin(true), []);
+  const markFreshLogin = useCallback(() => setFreshLogin(true), [setFreshLogin]);
 
   return {
     isReady: privyReady && walletsReady,

@@ -152,6 +152,20 @@ function DepositContent() {
       return;
     }
 
+    // Re-validate wallet balance before building transaction
+    try {
+      const freshBalances = await fetchWalletDepositBalances(walletAddress);
+      setBalances(freshBalances);
+      const usdcBalance = Number(freshBalances.stableBalanceUi);
+      if (usdcBalance < amount) {
+        setStatusMessage(`Insufficient USDC. You have ${freshBalances.stableBalanceUi} USDC.`);
+        return;
+      }
+    } catch {
+      // If balance fetch fails, proceed with stale balance — the on-chain tx will fail if insufficient
+      console.warn('[deposit] Could not re-fetch balance before tx');
+    }
+
     setIsSubmitting(true);
     setStatusMessage('Building transaction...');
 

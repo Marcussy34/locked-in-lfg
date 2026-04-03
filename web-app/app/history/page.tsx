@@ -1,11 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResurfaceStore, useUserStore, useCourseStore } from '@/stores';
-import { getUnlockReceipts } from '@/services/api';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api';
+import { getUnlockReceipts, fetchWithAuth } from '@/services/api';
 import {
   T,
   ScreenBackground,
@@ -19,9 +17,6 @@ export default function ResurfaceHistoryPage() {
   const router = useRouter();
 
   const walletAddress = useUserStore((s) => s.walletAddress);
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
   const courses = useCourseStore((s) => s.courses);
   const hydrateReceipts = useResurfaceStore((s) => s.hydrateReceipts);
   const allReceipts = useResurfaceStore((s) => s.receipts);
@@ -38,48 +33,20 @@ export default function ResurfaceHistoryPage() {
     [allReceipts, walletAddress],
   );
 
-  const refreshBackendAccessToken = useCallback(async () => {
-    if (!refreshToken) {
-      throw new Error('Connect your wallet again to read resurface receipts.');
-    }
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
-
   // Load receipts from backend on mount
   useEffect(() => {
     let active = true;
 
     const loadReceipts = async () => {
       setLoading(true);
-      let backendAccessToken = authToken;
-
-      if (!backendAccessToken && refreshToken) {
-        try {
-          backendAccessToken = await refreshBackendAccessToken();
-        } catch (error) {
-          if (!active) return;
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'Connect your wallet again to read resurface receipts.',
-          );
+      try {
+        const response = await fetchWithAuth((token) => getUnlockReceipts(token));
+        if (!active) return;
+        if (!response) {
+          setErrorMessage('Connect your wallet again to read resurface receipts.');
           setLoading(false);
           return;
         }
-      }
-
-      if (!backendAccessToken) {
-        if (!active) return;
-        setErrorMessage('Connect your wallet again to read resurface receipts.');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const response = await getUnlockReceipts(backendAccessToken);
-        if (!active) return;
         hydrateReceipts(
           response.receipts.map((receipt) => ({
             id: receipt.unlockTxSignature,
@@ -100,41 +67,6 @@ export default function ResurfaceHistoryPage() {
         setErrorMessage(null);
         setLoading(false);
       } catch (error) {
-        if (
-          error instanceof ApiError &&
-          (error.code === 'TOKEN_EXPIRED' || error.status === 401) &&
-          refreshToken
-        ) {
-          try {
-            const refreshedToken = await refreshBackendAccessToken();
-            const retried = await getUnlockReceipts(refreshedToken);
-            if (!active) return;
-            hydrateReceipts(
-              retried.receipts.map((receipt) => ({
-                id: receipt.unlockTxSignature,
-                walletAddress: receipt.walletAddress,
-                courseId: receipt.courseId,
-                courseTitle:
-                  courses.find((c) => c.id === receipt.courseId)?.title ??
-                  receipt.courseId,
-                lockAccountAddress: receipt.lockAccountAddress,
-                principalAmountUi: receipt.principalAmountUi,
-                skrLockedAmountUi: receipt.skrLockedAmountUi,
-                unlockedAt: receipt.unlockedAt,
-                unlockTxSignature: receipt.unlockTxSignature,
-                lockEndDate: receipt.lockEndAt,
-                verifiedBlockTime: receipt.verifiedBlockTime,
-                source: 'backend',
-              })),
-            );
-            setErrorMessage(null);
-            setLoading(false);
-            return;
-          } catch {
-            // Fall through to generic error
-          }
-        }
-
         if (!active) return;
         setErrorMessage(
           error instanceof Error
@@ -149,7 +81,7 @@ export default function ResurfaceHistoryPage() {
     return () => {
       active = false;
     };
-  }, [authToken, courses, hydrateReceipts, refreshBackendAccessToken, refreshToken]);
+  }, [courses, hydrateReceipts]);
 
   return (
     <ScreenBackground>

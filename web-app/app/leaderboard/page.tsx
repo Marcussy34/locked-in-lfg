@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUserStore } from '@/stores';
 import { getLeaderboard } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
-import type { LeaderboardResponse, LeaderboardEntry } from '@/services/api/types';
+import { fetchWithAuth } from '@/services/api/httpClient';
+import type { LeaderboardResponse } from '@/services/api/types';
 import {
   ScreenBackground,
   BackButton,
@@ -35,57 +33,30 @@ function rankBorderColor(rank: number): string {
 
 export default function LeaderboardPage() {
   const router = useRouter();
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
-
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
 
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
-
   useEffect(() => {
     let active = true;
     const load = async () => {
       setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try { token = await refreshBackendToken(); } catch {
-          if (active) { setError('Connect wallet to view leaderboard.'); setLoading(false); }
-          return;
-        }
-      }
-      if (!token) {
-        if (active) { setError('Connect wallet to view leaderboard.'); setLoading(false); }
-        return;
-      }
-
       try {
-        const resp = await getLeaderboard(token, { page, pageSize: PAGE_SIZE });
-        if (active) { setLeaderboard(resp); setError(null); setLoading(false); }
+        const resp = await fetchWithAuth((token) => getLeaderboard(token, { page, pageSize: PAGE_SIZE }));
+        if (!active) return;
+        if (!resp) { setError('Connect wallet to view leaderboard.'); setLoading(false); return; }
+        setLeaderboard(resp);
+        setError(null);
+        setLoading(false);
       } catch (err) {
-        if (err instanceof ApiError && (err.code === 'TOKEN_EXPIRED' || err.status === 401) && refreshToken) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getLeaderboard(newToken, { page, pageSize: PAGE_SIZE });
-            if (active) { setLeaderboard(retried); setError(null); setLoading(false); }
-            return;
-          } catch { /* fall through */ }
-        }
         if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
       }
     };
 
     void load();
     return () => { active = false; };
-  }, [authToken, page, refreshBackendToken, refreshToken]);
+  }, [page]);
 
   return (
     <ScreenBackground>

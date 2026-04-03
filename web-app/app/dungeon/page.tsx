@@ -8,7 +8,6 @@ import { useUserStore } from '@/stores/userStore';
 import type { Viewpoint } from '@/types';
 import { useFlameStore } from '@/stores/flameStore';
 import { useSceneStore } from '@/stores/sceneStore';
-import { useStreakStore } from '@/stores/streakStore';
 import { T, ParchmentCard, ProgressBar } from '@/components/theme';
 import { User } from 'lucide-react';
 
@@ -24,7 +23,10 @@ export default function DungeonPage() {
   const lightIntensity = useFlameStore((s) => s.lightIntensity);
   const currentViewpoint = useSceneStore((s) => s.currentViewpoint);
   const roomPhase = useSceneStore((s) => s.roomPhase);
-  const currentStreak = useStreakStore((s) => s.currentStreak);
+  const currentStreak = useCourseStore((s) => {
+    const active = s.activeCourseId;
+    return active ? (s.courseStates[active]?.currentStreak ?? 0) : 0;
+  });
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);

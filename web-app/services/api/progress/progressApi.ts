@@ -1,21 +1,17 @@
 import { httpRequest } from '../httpClient';
 import type {
   CourseRuntimeSnapshot,
-  CourseProgressSnapshot,
   FuelConversionResponse,
   XpSnapshot,
   CommunityPotHistoryResponse,
   LeaderboardResponse,
   CommunityPotWindowDetailResponse,
-  ModuleProgressSnapshot,
   ProgressStartLessonRequest,
   ProgressStartLessonResponse,
   ProgressSubmitLessonRequest,
   ProgressSubmitLessonResponse,
   RuntimeHistoryResponse,
   UnlockReceiptHistoryResponse,
-  UnlockReceiptPayload,
-  UnlockReceiptRecord,
   YieldHistoryResponse,
   UserEnrollmentsResponse,
 } from '../types';
@@ -66,15 +62,6 @@ export function getUserXp(token: string): Promise<XpSnapshot> {
   return httpRequest<XpSnapshot>('/v1/progress/xp', { token });
 }
 
-export function getCourseProgress(
-  courseId: string,
-  token: string,
-): Promise<CourseProgressSnapshot> {
-  return httpRequest<CourseProgressSnapshot>(`/v1/progress/courses/${courseId}`, {
-    token,
-  });
-}
-
 /** Fetch all enrolled courses + runtime + lesson progress for the authenticated user */
 export function getUserEnrollments(
   token: string,
@@ -104,15 +91,6 @@ export function getCourseRuntimeHistory(
       token,
     },
   );
-}
-
-export function getModuleProgress(
-  moduleId: string,
-  token: string,
-): Promise<ModuleProgressSnapshot> {
-  return httpRequest<ModuleProgressSnapshot>(`/v1/progress/modules/${moduleId}`, {
-    token,
-  });
 }
 
 export function getCommunityPotHistory(token: string): Promise<CommunityPotHistoryResponse> {
@@ -160,17 +138,6 @@ export function getYieldHistory(
 
 export function getUnlockReceipts(token: string): Promise<UnlockReceiptHistoryResponse> {
   return httpRequest<UnlockReceiptHistoryResponse>('/v1/progress/unlocks', {
-    token,
-  });
-}
-
-export function createUnlockReceipt(
-  payload: UnlockReceiptPayload,
-  token: string,
-): Promise<UnlockReceiptRecord> {
-  return httpRequest<UnlockReceiptRecord>('/v1/progress/unlocks', {
-    method: 'POST',
-    body: payload,
     token,
   });
 }

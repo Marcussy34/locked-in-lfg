@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore, useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores';
 import { getCourseRuntimeHistory } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
+import { fetchWithAuth } from '@/services/api/httpClient';
 import type { RuntimeHistoryResponse, RuntimeAuditEvent } from '@/services/api/types';
 import {
   ScreenBackground,
@@ -53,10 +52,6 @@ export default function StreaksPage() {
   const courseStates = useCourseStore((s) => s.courseStates);
   const courses = useCourseStore((s) => s.courses);
   const refreshCourseRuntime = useCourseStore((s) => s.refreshCourseRuntime);
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
-
   const [history, setHistory] = useState<RuntimeHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,49 +78,31 @@ export default function StreaksPage() {
 
   const lampsLit = saversRemaining;
 
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
-
   useEffect(() => {
     let active = true;
     const load = async () => {
       if (!activeCourseId) { setHistory(null); setLoading(false); return; }
 
       setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try { token = await refreshBackendToken(); } catch {
-          if (active) { setError('Connect wallet to view streaks.'); setLoading(false); }
-          return;
-        }
-      }
-      if (!token) { if (active) { setError('Connect wallet to view streaks.'); setLoading(false); } return; }
 
-      void refreshCourseRuntime(activeCourseId, token).catch(() => {});
+      // Fire-and-forget runtime refresh
+      void fetchWithAuth((token) => refreshCourseRuntime(activeCourseId, token)).catch(() => {});
 
       try {
-        const resp = await getCourseRuntimeHistory(activeCourseId, token);
-        if (active) { setHistory(resp); setError(null); setLoading(false); }
+        const resp = await fetchWithAuth((token) => getCourseRuntimeHistory(activeCourseId, token));
+        if (!active) return;
+        if (!resp) { setError('Connect wallet to view streaks.'); setLoading(false); return; }
+        setHistory(resp);
+        setError(null);
+        setLoading(false);
       } catch (err) {
-        if (err instanceof ApiError && (err.code === 'TOKEN_EXPIRED' || err.status === 401) && refreshToken) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getCourseRuntimeHistory(activeCourseId, newToken);
-            if (active) { setHistory(retried); setError(null); setLoading(false); }
-            return;
-          } catch { /* fall through */ }
-        }
         if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
       }
     };
 
     void load();
     return () => { active = false; };
-  }, [activeCourseId, authToken, refreshToken, refreshBackendToken, refreshCourseRuntime]);
+  }, [activeCourseId, refreshCourseRuntime]);
 
   return (
     <ScreenBackground>

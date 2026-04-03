@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore, useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores';
 import { getCommunityPotHistory } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
+import { fetchWithAuth } from '@/services/api/httpClient';
 import type { CommunityPotHistoryWindow } from '@/services/api/types';
 import {
   T,
@@ -36,71 +35,22 @@ export default function CommunityPotPage() {
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
   const courses = useCourseStore((s) => s.courses);
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
-
   const [history, setHistory] = useState<CommunityPotHistoryWindow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try {
-          token = await refreshBackendToken();
-        } catch {
-          if (active) {
-            setError('Connect wallet to view community pot.');
-            setLoading(false);
-          }
-          return;
-        }
-      }
-      if (!token) {
-        if (active) {
-          setError('Connect wallet to view community pot.');
-          setLoading(false);
-        }
-        return;
-      }
-
       try {
-        const resp = await getCommunityPotHistory(token);
-        if (active) {
-          setHistory(resp.windows);
-          setError(null);
-          setLoading(false);
-        }
+        const resp = await fetchWithAuth((token) => getCommunityPotHistory(token));
+        if (!active) return;
+        if (!resp) { setError('Connect wallet to view community pot.'); setLoading(false); return; }
+        setHistory(resp.windows);
+        setError(null);
+        setLoading(false);
       } catch (err) {
-        if (
-          err instanceof ApiError &&
-          (err.code === 'TOKEN_EXPIRED' || err.status === 401) &&
-          refreshToken
-        ) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getCommunityPotHistory(newToken);
-            if (active) {
-              setHistory(retried.windows);
-              setError(null);
-              setLoading(false);
-            }
-            return;
-          } catch {
-            /* fall through */
-          }
-        }
         if (active) {
           setError(err instanceof Error ? err.message : 'Failed to load.');
           setLoading(false);
@@ -112,7 +62,7 @@ export default function CommunityPotPage() {
     return () => {
       active = false;
     };
-  }, [authToken, refreshToken, refreshBackendToken]);
+  }, []);
 
   // Filter payouts where user has a result
   const payoutHistory = history.filter(

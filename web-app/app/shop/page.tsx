@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore, useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores';
 import { getYieldHistory } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
-import type { YieldHistoryResponse, YieldHistoryEntry } from '@/services/api/types';
+import { fetchWithAuth } from '@/services/api/httpClient';
+import type { YieldHistoryResponse } from '@/services/api/types';
 import {
   ScreenBackground,
   BackButton,
@@ -155,10 +154,6 @@ export default function ShopPage() {
   const router = useRouter();
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const courseStates = useCourseStore((s) => s.courseStates);
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
-
   const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
   const ichorBalance = activeState?.ichorBalance ?? 0;
   const lifetimeIchor = activeState?.totalIchorProduced ?? 0;
@@ -174,13 +169,6 @@ export default function ShopPage() {
   const payout = parsedAmount > 0 ? ((parsedAmount / 1000) * rate).toFixed(2) : '--';
   const balanceWorth = ((ichorBalance / 1000) * rate).toFixed(2);
 
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
-
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -190,35 +178,20 @@ export default function ShopPage() {
         return;
       }
       setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try { token = await refreshBackendToken(); } catch {
-          if (active) { setError('Connect wallet to view rewards.'); setLoading(false); }
-          return;
-        }
-      }
-      if (!token) {
-        if (active) { setError('Connect wallet to view rewards.'); setLoading(false); }
-        return;
-      }
       try {
-        const resp = await getYieldHistory(activeCourseId, token);
-        if (active) { setYieldHistory(resp); setError(null); setLoading(false); }
+        const resp = await fetchWithAuth((token) => getYieldHistory(activeCourseId, token));
+        if (!active) return;
+        if (!resp) { setError('Connect wallet to view rewards.'); setLoading(false); return; }
+        setYieldHistory(resp);
+        setError(null);
+        setLoading(false);
       } catch (err) {
-        if (err instanceof ApiError && (err.code === 'TOKEN_EXPIRED' || err.status === 401) && refreshToken) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getYieldHistory(activeCourseId, newToken);
-            if (active) { setYieldHistory(retried); setError(null); setLoading(false); }
-            return;
-          } catch { /* fall through */ }
-        }
         if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
       }
     };
     void load();
     return () => { active = false; };
-  }, [activeCourseId, authToken, refreshToken, refreshBackendToken]);
+  }, [activeCourseId]);
 
   const recentHarvests = yieldHistory?.entries ?? [];
 

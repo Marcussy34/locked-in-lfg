@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { NAV_ITEMS, type NavGroup } from './NavIcons';
-import { useStreakStore } from '@/stores/streakStore';
+import { useCourseStore } from '@/stores/courseStore';
 
 const GROUP_LABELS: Record<NavGroup, string> = {
   learn: 'Learn',
@@ -17,7 +17,7 @@ const GROUP_ORDER: NavGroup[] = ['learn', 'economy', 'social'];
 export function Sidebar() {
   const pathname = usePathname();
   const { isAuthenticated, walletAddress } = useAuth();
-  const currentStreak = useStreakStore((s) => s.currentStreak);
+  const currentStreak = useCourseStore((s) => s.getStreak());
 
   if (!isAuthenticated) return null;
 

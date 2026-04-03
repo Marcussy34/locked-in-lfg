@@ -72,19 +72,18 @@ function ResultContent({ params }: { params: Promise<{ id: string }> }) {
   const LEVEL_NAMES = ['Novice', 'Apprentice', 'Scholar', 'Adept', 'Master', 'Sage', 'Legend'];
   const levelName = xpLevel > 0 ? (LEVEL_NAMES[xpLevel - 1] ?? `Level ${xpLevel}`) : '';
 
-  // Load question review from sessionStorage
+  // Load question review from localStorage (lesson-specific key, persists across revisits)
   const [reviewData, setReviewData] = useState<QuizReviewData | null>(null);
   const [showReview, setShowReview] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem('lastQuizReview');
+      const raw = localStorage.getItem(`quizReview::${_lessonId}`);
       if (raw) {
         setReviewData(JSON.parse(raw));
-        sessionStorage.removeItem('lastQuizReview');
       }
     } catch { /* ignore */ }
-  }, []);
+  }, [_lessonId]);
 
   return (
     <ScreenBackground>
