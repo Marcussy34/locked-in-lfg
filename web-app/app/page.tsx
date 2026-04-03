@@ -1,11 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { WalletConnect } from '@/components/WalletConnect';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserStore } from '@/stores/userStore';
 import { useCourseStore } from '@/stores/courseStore';
+import { getUserEnrollments } from '@/services/api/progress/progressApi';
 import { ScreenBackground, T } from '@/components/theme';
 
 export default function LandingPage() {
@@ -17,6 +18,7 @@ export default function LandingPage() {
   const tutorialCompleted = useUserStore((s) => s.tutorialCompleted);
 
   // Redirect after auth — mirror AppNavigator logic
+  const checkingBackend = useRef(false);
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -33,7 +35,32 @@ export default function LandingPage() {
     switch (phase) {
       case 'auth':
       case 'onboarding':
-        router.replace(tutorialCompleted ? '/courses' : '/onboarding/tutorial');
+        if (tutorialCompleted) {
+          router.replace('/courses');
+        } else {
+          // Before showing tutorial, check if backend knows this user.
+          // Returning users (cleared localStorage) should skip tutorial.
+          const token = useUserStore.getState().authToken;
+          if (token && !checkingBackend.current) {
+            checkingBackend.current = true;
+            getUserEnrollments(token)
+              .then((data) => {
+                if (data.enrollments.length > 0) {
+                  useUserStore.getState().completeTutorial();
+                  useUserStore.getState().setOnboardingPhase('main');
+                  router.replace('/courses');
+                } else {
+                  router.replace('/onboarding/tutorial');
+                }
+              })
+              .catch(() => {
+                router.replace('/onboarding/tutorial');
+              })
+              .finally(() => { checkingBackend.current = false; });
+          } else if (!token) {
+            router.replace('/onboarding/tutorial');
+          }
+        }
         break;
       case 'main':
         router.replace('/courses');
