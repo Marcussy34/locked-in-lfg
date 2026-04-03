@@ -45,6 +45,8 @@ export const useUserStore = create<UserStore>()(
                 onboardingPhase: 'onboarding',
                 displayName: null,
                 avatarUrl: null,
+                tutorialCompleted: false,
+                dungeonTourCompleted: false,
                 createdAt: new Date().toISOString(),
               }
             : {
@@ -72,7 +74,13 @@ export const useUserStore = create<UserStore>()(
       setRefreshToken: (refreshToken) => set({ refreshToken }),
       setAuthSession: (authToken, refreshToken) => set({ authToken, refreshToken }),
 
-      disconnect: () => set(initialState),
+      disconnect: () =>
+        set((state) => ({
+          ...initialState,
+          // Preserve UX flags — reset only on wallet change (setWallet)
+          tutorialCompleted: state.tutorialCompleted,
+          dungeonTourCompleted: state.dungeonTourCompleted,
+        })),
 
       setOnboardingPhase: (phase) => set({ onboardingPhase: phase }),
 
