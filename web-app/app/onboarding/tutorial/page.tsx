@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/stores';
 import { T, ParchmentCard } from '@/components/theme';
@@ -58,6 +59,15 @@ const QUESTS = [
 export default function OnboardingTutorialPage() {
   const router = useRouter();
   const completeTutorial = useUserStore((s) => s.completeTutorial);
+
+  // Bounce returning users — tutorial is for NEW users only
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('locked-in-tutorial-done') === '1') {
+        router.replace('/courses');
+      }
+    } catch {}
+  }, [router]);
 
   const handleContinue = () => {
     completeTutorial();

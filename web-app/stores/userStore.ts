@@ -87,7 +87,11 @@ export const useUserStore = create<UserStore>()(
       setDisplayName: (name) => set({ displayName: name }),
 
       completeDungeonTour: () => set({ dungeonTourCompleted: true }),
-      completeTutorial: () => set({ tutorialCompleted: true }),
+      completeTutorial: () => {
+        set({ tutorialCompleted: true });
+        // Also persist outside Zustand — survives store resets / disconnect
+        try { localStorage.setItem('locked-in-tutorial-done', '1'); } catch {}
+      },
     }),
     {
       name: 'locked-in-user',
@@ -98,6 +102,13 @@ export const useUserStore = create<UserStore>()(
         if ((merged.onboardingPhase as string) === 'gauntlet') {
           merged.onboardingPhase = 'main';
         }
+        // Restore tutorialCompleted from direct localStorage flag
+        // (survives Zustand store resets that the persist layer misses)
+        try {
+          if (localStorage.getItem('locked-in-tutorial-done') === '1') {
+            merged.tutorialCompleted = true;
+          }
+        } catch {}
         return merged;
       },
     },
