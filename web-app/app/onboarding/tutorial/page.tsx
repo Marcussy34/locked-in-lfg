@@ -63,7 +63,10 @@ export default function OnboardingTutorialPage() {
   // Bounce returning users — tutorial is for NEW users only
   useEffect(() => {
     try {
-      if (localStorage.getItem('locked-in-tutorial-done') === '1') {
+      if (
+        localStorage.getItem('locked-in-tutorial-done') === '1' ||
+        document.cookie.includes('locked-in-tutorial-done=1')
+      ) {
         router.replace('/courses');
       }
     } catch {}
