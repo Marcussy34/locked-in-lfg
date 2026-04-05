@@ -44,13 +44,14 @@ export default function DashboardPage() {
   const fuelFragments = activeState?.fuelFragmentsToday ?? 0;
   const ichorBalance = activeState?.ichorBalance ?? 0;
   const saverCount = activeState?.saverCount ?? 0;
-  // Savers unlock after the 7-day gauntlet (Day 8+)
-  const saversUnlocked = longestStreak >= 7;
-  const saversRemaining = saversUnlocked ? Math.max(0, 3 - saverCount) : 0;
 
   // Total lessons completed across all courses
   const totalCompleted = Object.values(lessonProgress).filter((p) => p.completed).length;
   const totalLessons = Object.values(lessons).reduce((sum, arr) => sum + arr.length, 0);
+
+  // Savers unlock after completing first lesson
+  const saversUnlocked = totalCompleted >= 1;
+  const saversRemaining = saversUnlocked ? Math.max(0, 3 - saverCount) : 0;
 
   // Enrolled course count
   const enrolledCount = enrolledCourseIds.filter((id) => Boolean(courseStates[id]?.lockAccountAddress)).length;
@@ -160,7 +161,7 @@ export default function DashboardPage() {
         <p className="text-[10px] text-center mt-2" style={{ color: T.textMuted }}>
           {saversUnlocked
             ? `Miss a day? A saver protects your streak. ${saversRemaining}/3 remaining.`
-            : 'Complete the 7-day gauntlet to unlock saver lamps.'}
+            : 'Complete your first lesson to unlock saver lamps.'}
         </p>
       </ParchmentCard>
 

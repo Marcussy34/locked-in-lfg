@@ -6,7 +6,6 @@ import { useDungeon } from '@/components/DungeonProvider';
 import { useCourseStore } from '@/stores/courseStore';
 import { useUserStore } from '@/stores/userStore';
 import type { Viewpoint } from '@/types';
-import { useFlameStore } from '@/stores/flameStore';
 import { useSceneStore } from '@/stores/sceneStore';
 import { T, ParchmentCard, ProgressBar } from '@/components/theme';
 import { User } from 'lucide-react';
@@ -18,9 +17,13 @@ export default function DungeonPage() {
     sceneReady, loadProgress, iframeError,
   } = useDungeon();
 
-  // Store subscriptions
-  const flameState = useFlameStore((s) => s.flameState);
-  const lightIntensity = useFlameStore((s) => s.lightIntensity);
+  // Store subscriptions — derive flame from courseStore (matches dashboard)
+  const activeGameState = useCourseStore((s) => {
+    const id = s.activeCourseId;
+    return id ? s.courseStates[id] ?? null : null;
+  });
+  const flameState = activeGameState?.flameState ?? 'COLD';
+  const lightIntensity = activeGameState?.lightIntensity ?? 0.15;
   const currentViewpoint = useSceneStore((s) => s.currentViewpoint);
   const roomPhase = useSceneStore((s) => s.roomPhase);
   const currentStreak = useCourseStore((s) => {
@@ -161,16 +164,7 @@ export default function DungeonPage() {
   // Refresh course runtime from backend and sync flame if real streak data exists
   useEffect(() => {
     if (!activeCourseId || !authToken) return;
-    refreshCourseRuntime(activeCourseId, authToken)
-      .then(() => {
-        // Only sync flame if the backend actually returned streak data
-        // (courseState.currentStreak is set by syncCourseRuntime from the API response)
-        const state = useCourseStore.getState().courseStates[activeCourseId];
-        if (state && state.currentStreak > 0) {
-          useFlameStore.getState().updateFromStreak(state.currentStreak);
-        }
-      })
-      .catch(() => {});
+    refreshCourseRuntime(activeCourseId, authToken).catch(() => {});
   }, [activeCourseId, authToken, refreshCourseRuntime]);
 
   // Error state — fixed z-[5] so it stacks above the dungeon iframe (z-0)
