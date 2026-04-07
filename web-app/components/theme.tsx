@@ -154,11 +154,13 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 export function StatBox({
   label,
   value,
+  suffix,
   color,
   className = '',
 }: {
   label: string;
   value: string | number;
+  suffix?: string;
   color?: string;
   className?: string;
 }) {
@@ -175,6 +177,11 @@ export function StatBox({
         style={{ color: color ?? T.textPrimary }}
       >
         {value}
+        {suffix && (
+          <span className="text-[10px] font-normal ml-1" style={{ color: T.textMuted }}>
+            {suffix}
+          </span>
+        )}
       </span>
     </ParchmentCard>
   );

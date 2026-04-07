@@ -56,6 +56,25 @@ export function IconCommunity({ color, size = 18 }: { color: string; size?: numb
   );
 }
 
+export function IconStreaks({ color, size = 18 }: { color: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l2.1 6.5H21l-5.6 4 2.1 6.5L12 15l-5.5 4 2.1-6.5L3 8.5h6.9z" />
+      <path d="M12 8v4M12 15v1" />
+    </svg>
+  );
+}
+
+export function IconInventory({ color, size = 18 }: { color: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" />
+      <path d="M5 10V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3" />
+      <path d="M10 14h4" />
+    </svg>
+  );
+}
+
 export function IconProfile({ color, size = 18 }: { color: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -69,11 +88,13 @@ export function IconProfile({ color, size = 18 }: { color: string; size?: number
 export type NavGroup = 'learn' | 'economy' | 'social';
 
 /** All nav items with group (used by desktop sidebar) */
-export const NAV_ITEMS: { href: string; label: string; icon: (props: { color: string; size?: number }) => ReactNode; group: NavGroup }[] = [
+export const NAV_ITEMS: { href: string; label: string; icon: (props: { color: string; size?: number }) => ReactNode; group: NavGroup; isNew?: boolean }[] = [
   { href: '/courses', label: 'Courses', icon: IconCourses, group: 'learn' },
   { href: '/dashboard', label: 'Dashboard', icon: IconFlame, group: 'learn' },
+  { href: '/streaks', label: 'Streaks', icon: IconStreaks, group: 'learn', isNew: true },
   { href: '/alchemy', label: 'Alchemy', icon: IconAlchemy, group: 'economy' },
   { href: '/shop', label: 'Rewards', icon: IconRewards, group: 'economy' },
+  { href: '/inventory', label: 'Inventory', icon: IconInventory, group: 'economy', isNew: true },
   { href: '/leaderboard', label: 'Leaderboard', icon: IconLeaderboard, group: 'social' },
   { href: '/community-pot', label: 'Community', icon: IconCommunity, group: 'social' },
   { href: '/profile', label: 'Profile', icon: IconProfile, group: 'social' },

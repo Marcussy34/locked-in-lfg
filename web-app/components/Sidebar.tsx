@@ -139,6 +139,11 @@ export function Sidebar() {
                   <span className="relative z-[1] group-hover:text-[rgba(255,255,255,0.55)] transition-colors duration-150">
                     {item.label}
                   </span>
+                  {item.isNew && (
+                    <span className="font-mono text-[7px] uppercase tracking-[1px] relative z-[1]" style={{ color: '#3EE68A' }}>
+                      new
+                    </span>
+                  )}
                 </Link>
               );
             })}
