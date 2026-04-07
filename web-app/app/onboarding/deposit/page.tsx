@@ -135,10 +135,8 @@ function DepositContent() {
   const [faucetClaiming, setFaucetClaiming] = useState(false);
   const [faucetClaimed, setFaucetClaimed] = useState(false);
   const [faucetMessage, setFaucetMessage] = useState<string | null>(null);
-  const [faucetCooldownUntil, setFaucetCooldownUntil] = useState<string | null>(null);
 
-  const faucetDisabled = faucetClaiming || faucetClaimed ||
-    (faucetCooldownUntil != null && new Date(faucetCooldownUntil) > new Date());
+  const faucetDisabled = faucetClaiming || faucetClaimed;
 
   const handleClaimFaucet = async () => {
     setFaucetClaiming(true);
@@ -151,9 +149,8 @@ function DepositContent() {
         return;
       }
       if (!resp.claimed) {
-        setFaucetCooldownUntil(resp.nextClaimAt);
         setFaucetClaimed(true);
-        setFaucetMessage(resp.message ?? 'Already claimed. Try again later.');
+        setFaucetMessage(resp.message ?? 'Already claimed.');
         setFaucetClaiming(false);
         return;
       }
@@ -163,7 +160,6 @@ function DepositContent() {
       parts.push(`${resp.usdc.amountUsdc} USDC`);
       setFaucetMessage(`Claimed ${parts.join(' + ')}!`);
       setFaucetClaimed(true);
-      if (resp.nextClaimAt) setFaucetCooldownUntil(resp.nextClaimAt);
       // Refresh wallet balances
       if (walletAddress) {
         fetchWalletDepositBalances(walletAddress)
@@ -531,7 +527,7 @@ function DepositContent() {
             </p>
             <p className="text-[12px] mt-1 leading-relaxed" style={{ color: T.textSecondary }}>
               {faucetClaimed
-                ? 'Come back in 24 hours to claim again.'
+                ? 'You\'ve already claimed your test tokens.'
                 : 'This is Solana devnet. Claim free SOL & USDC to try the platform.'}
             </p>
             <button

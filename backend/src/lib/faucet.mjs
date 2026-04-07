@@ -146,32 +146,25 @@ export async function transferUsdc(walletAddress, amountUi) {
 export async function checkCooldown(walletAddress) {
   const pool = getPool();
   const { rows } = await pool.query(
-    `SELECT created_at FROM lesson.faucet_claims
-     WHERE wallet_address = $1
-     ORDER BY created_at DESC LIMIT 1`,
-    [walletAddress],
+    `SELECT 1 FROM lesson.faucet_claims
+     WHERE wallet_address = $1 AND round = $2
+     LIMIT 1`,
+    [walletAddress, appConfig.faucetRound],
   );
 
   if (rows.length === 0) {
-    return { eligible: true, nextClaimAt: null };
+    return { eligible: true };
   }
 
-  const lastClaim = new Date(rows[0].created_at);
-  const nextClaimAt = new Date(lastClaim.getTime() + appConfig.faucetCooldownSeconds * 1000);
-
-  if (new Date() >= nextClaimAt) {
-    return { eligible: true, nextClaimAt: null };
-  }
-
-  return { eligible: false, nextClaimAt: nextClaimAt.toISOString() };
+  return { eligible: false };
 }
 
 export async function recordClaim(walletAddress, solSignature, usdcSignature, solLamports, usdcAtomic) {
   const pool = getPool();
   await pool.query(
     `INSERT INTO lesson.faucet_claims
-       (wallet_address, sol_signature, usdc_signature, sol_amount_lamports, usdc_amount_atomic)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [walletAddress, solSignature, usdcSignature, solLamports, usdcAtomic],
+       (wallet_address, sol_signature, usdc_signature, sol_amount_lamports, usdc_amount_atomic, round)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [walletAddress, solSignature, usdcSignature, solLamports, usdcAtomic, appConfig.faucetRound],
   );
 }
