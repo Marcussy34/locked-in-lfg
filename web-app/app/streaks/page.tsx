@@ -113,6 +113,7 @@ export default function StreaksPage() {
 
   return (
     <ScreenBackground>
+      <div className="pt-14" />
       <BackButton onClick={() => router.back()} />
 
       {/* Title */}
@@ -123,7 +124,7 @@ export default function StreaksPage() {
         Streak Status
       </h1>
       {activeCourse && (
-        <p className="text-xs mt-1 mb-2" style={{ color: T.textSecondary }}>
+        <p className="text-sm mt-1 mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
           {activeCourse.title}
         </p>
       )}

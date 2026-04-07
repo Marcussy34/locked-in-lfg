@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useWallets, useSignTransaction } from '@privy-io/react-auth/solana';
 import { useCourseStore, useUserStore } from '@/stores';
 import { defaultCourseLockPolicyForDifficulty } from '@/types';
-import type { CourseLockPolicy } from '@/types';
+import type { CourseLockPolicy, CourseDifficulty } from '@/types';
 import {
   buildLockFundsTransaction,
   hasLockVaultConfig,
   fetchWalletDepositBalances,
   type LockDurationDays as SolanaLockDuration,
 } from '@/services/solana';
+import { claimFaucet } from '@/services/api/faucet/faucetApi';
+import { fetchWithAuth } from '@/services/api/httpClient';
 import { connection } from '@/services/solana/connection';
 import {
   ScreenBackground,
@@ -21,6 +23,20 @@ import {
   PrimaryButton,
   T,
 } from '@/components/theme';
+
+const DIFFICULTY_COLORS: Record<CourseDifficulty, string> = {
+  beginner: T.green,
+  intermediate: T.teal,
+  advanced: T.crimson,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  solana: T.violet,
+  web3: T.teal,
+  defi: T.teal,
+  security: T.crimson,
+  rust: T.rust,
+};
 
 // Lock duration presets supported by the on-chain program
 type LockDurationDays = 14 | 30 | 45 | 60 | 90 | 180 | 365;
@@ -114,6 +130,52 @@ function DepositContent() {
   const [skrAmount, setSkrAmount] = useState('0');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Faucet state
+  const [faucetClaiming, setFaucetClaiming] = useState(false);
+  const [faucetClaimed, setFaucetClaimed] = useState(false);
+  const [faucetMessage, setFaucetMessage] = useState<string | null>(null);
+  const [faucetCooldownUntil, setFaucetCooldownUntil] = useState<string | null>(null);
+
+  const faucetDisabled = faucetClaiming || faucetClaimed ||
+    (faucetCooldownUntil != null && new Date(faucetCooldownUntil) > new Date());
+
+  const handleClaimFaucet = async () => {
+    setFaucetClaiming(true);
+    setFaucetMessage(null);
+    try {
+      const resp = await fetchWithAuth((token) => claimFaucet(token));
+      if (!resp) {
+        setFaucetMessage('Connect wallet first.');
+        setFaucetClaiming(false);
+        return;
+      }
+      if (!resp.claimed) {
+        setFaucetCooldownUntil(resp.nextClaimAt);
+        setFaucetClaimed(true);
+        setFaucetMessage(resp.message ?? 'Already claimed. Try again later.');
+        setFaucetClaiming(false);
+        return;
+      }
+      const parts: string[] = [];
+      if (resp.sol.signature) parts.push(`${resp.sol.amountSol} SOL`);
+      if (resp.sol.error) parts.push(`SOL skipped`);
+      parts.push(`${resp.usdc.amountUsdc} USDC`);
+      setFaucetMessage(`Claimed ${parts.join(' + ')}!`);
+      setFaucetClaimed(true);
+      if (resp.nextClaimAt) setFaucetCooldownUntil(resp.nextClaimAt);
+      // Refresh wallet balances
+      if (walletAddress) {
+        fetchWalletDepositBalances(walletAddress)
+          .then(setBalances)
+          .catch(() => {});
+      }
+    } catch (err) {
+      setFaucetMessage(err instanceof Error ? err.message : 'Claim failed.');
+    } finally {
+      setFaucetClaiming(false);
+    }
+  };
 
   // Clamp lock duration to what the policy allows
   useEffect(() => {
@@ -227,24 +289,46 @@ function DepositContent() {
 
   const isDisabled = isSubmitting;
 
+  // --- MOCKUP PICKER (remove after choosing) ---
+  const diffColor = DIFFICULTY_COLORS[course?.difficulty ?? 'beginner'];
+  const catColor = CATEGORY_COLORS[course?.category ?? 'solana'] ?? T.teal;
+  const courseTitle = course?.title ?? 'Selected Course';
+  const lessonCount = course?.totalLessons ?? 0;
+
   return (
     <ScreenBackground>
-      {/* Page title */}
-      <h1
-        className="text-2xl font-bold tracking-wide mb-1"
-        style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}
-      >
-        Lock Your <span style={{ color: T.amber }}>Funds</span>
-      </h1>
-      <p className="text-sm mt-1" style={{ color: T.textSecondary }}>
-        {course?.title ?? 'Selected Course'}
-      </p>
-      <p
-        className="text-xs leading-[18px] mt-0.5 mb-4"
-        style={{ color: T.textSecondary }}
-      >
-        Create the on-chain lock to start learning.
-      </p>
+      <div className="pt-10" />
+
+      {/* Header — Minimal with glowing underline */}
+      <div className="mb-6 px-1">
+        <h1 className="text-2xl font-bold tracking-wide mb-3" style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}>
+          Lock Your <span style={{ color: T.amber }}>Funds</span>
+        </h1>
+        <p className="text-[17px] font-semibold" style={{ color: T.textPrimary }}>{courseTitle}</p>
+        <div className="h-[2px] w-[60px] rounded-full mt-1.5 mb-2" style={{ background: `linear-gradient(90deg, ${catColor}, transparent)`, boxShadow: `0 0 8px ${catColor}40` }} />
+        <div className="flex items-center gap-2 mb-2">
+          {course?.difficulty && (
+            <span
+              className="text-[9px] font-mono font-bold uppercase tracking-[1px] px-1.5 py-[2px] rounded"
+              style={{ color: diffColor, backgroundColor: `${diffColor}15`, border: `1px solid ${diffColor}25` }}
+            >
+              {course.difficulty}
+            </span>
+          )}
+          {course?.category && (
+            <span
+              className="text-[9px] font-mono font-bold uppercase tracking-[1px] px-1.5 py-[2px] rounded"
+              style={{ color: catColor, backgroundColor: `${catColor}15`, border: `1px solid ${catColor}25` }}
+            >
+              {course.category}
+            </span>
+          )}
+          <span className="text-[10px] font-mono" style={{ color: T.textMuted }}>
+            {lessonCount} lessons
+          </span>
+        </div>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>Create the on-chain lock to start learning.</p>
+      </div>
 
       {/* Two-column layout: form left, info right */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
@@ -432,6 +516,48 @@ function DepositContent() {
                 </div>
               </div>
             </div>
+          </ParchmentCard>
+
+          {/* Faucet — Get Test Tokens */}
+          <ParchmentCard
+            className="mt-4"
+            style={{ padding: 20, borderLeftWidth: 3, borderLeftColor: faucetClaimed ? T.textMuted : T.teal }}
+          >
+            <p
+              className="text-[15px] font-bold"
+              style={{ fontFamily: 'Georgia, serif', color: faucetClaimed ? T.textMuted : T.teal }}
+            >
+              {faucetClaimed ? 'Test tokens claimed' : 'Need test tokens?'}
+            </p>
+            <p className="text-[12px] mt-1 leading-relaxed" style={{ color: T.textSecondary }}>
+              {faucetClaimed
+                ? 'Come back in 24 hours to claim again.'
+                : 'This is Solana devnet. Claim free SOL & USDC to try the platform.'}
+            </p>
+            <button
+              onClick={handleClaimFaucet}
+              disabled={faucetDisabled}
+              className="w-full mt-3 py-3 rounded-lg font-bold text-sm transition-opacity"
+              style={{
+                background: faucetDisabled
+                  ? 'rgba(255,255,255,0.06)'
+                  : `linear-gradient(135deg, ${T.teal}, ${T.teal}cc)`,
+                color: faucetDisabled ? T.textMuted : '#0e0e1c',
+                opacity: faucetDisabled ? 0.5 : 1,
+                cursor: faucetDisabled ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {faucetClaiming
+                ? 'Claiming...'
+                : faucetClaimed
+                  ? 'Claimed'
+                  : 'Claim Test Tokens'}
+            </button>
+            {faucetMessage && (
+              <p className="text-[11px] mt-2 text-center" style={{ color: faucetClaimed ? T.green : T.amber }}>
+                {faucetMessage}
+              </p>
+            )}
           </ParchmentCard>
         </div>
       </div>

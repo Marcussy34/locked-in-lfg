@@ -16,7 +16,7 @@ export const T = {
   rust: '#E8845A',
   textPrimary: '#E8DED0',
   textSecondary: 'rgba(255,255,255,0.42)',
-  textMuted: 'rgba(255,255,255,0.22)',
+  textMuted: 'rgba(255,255,255,0.45)',
   borderAlive: 'rgba(212,160,74,0.18)',
   borderDormant: 'rgba(255,255,255,0.06)',
 };
@@ -142,7 +142,7 @@ export function PageHeader({
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <p
-      className="font-mono text-[10px] font-bold uppercase tracking-[2px] mb-2.5 mt-1"
+      className="font-mono text-[13px] font-bold uppercase tracking-[2px] mb-2.5 mt-1"
       style={{ color: T.textMuted }}
     >
       {children}
