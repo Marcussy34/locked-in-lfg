@@ -45,6 +45,8 @@ export const useUserStore = create<UserStore>()(
                 onboardingPhase: 'onboarding',
                 displayName: null,
                 avatarUrl: null,
+                tutorialCompleted: false,
+                dungeonTourCompleted: false,
                 createdAt: new Date().toISOString(),
               }
             : {
@@ -72,14 +74,25 @@ export const useUserStore = create<UserStore>()(
       setRefreshToken: (refreshToken) => set({ refreshToken }),
       setAuthSession: (authToken, refreshToken) => set({ authToken, refreshToken }),
 
-      disconnect: () => set(initialState),
+      disconnect: () =>
+        set((state) => ({
+          ...initialState,
+          // Preserve UX flags — reset only on wallet change (setWallet)
+          tutorialCompleted: state.tutorialCompleted,
+          dungeonTourCompleted: state.dungeonTourCompleted,
+        })),
 
       setOnboardingPhase: (phase) => set({ onboardingPhase: phase }),
 
       setDisplayName: (name) => set({ displayName: name }),
 
       completeDungeonTour: () => set({ dungeonTourCompleted: true }),
-      completeTutorial: () => set({ tutorialCompleted: true }),
+      completeTutorial: () => {
+        set({ tutorialCompleted: true });
+        // Persist outside Zustand — survives store resets AND localStorage.clear()
+        try { localStorage.setItem('locked-in-tutorial-done', '1'); } catch {}
+        try { document.cookie = 'locked-in-tutorial-done=1; path=/; max-age=31536000; samesite=lax'; } catch {}
+      },
     }),
     {
       name: 'locked-in-user',
@@ -90,6 +103,20 @@ export const useUserStore = create<UserStore>()(
         if ((merged.onboardingPhase as string) === 'gauntlet') {
           merged.onboardingPhase = 'main';
         }
+        // Restore tutorialCompleted from direct flags outside Zustand
+        // localStorage flag survives store resets; cookie survives localStorage.clear()
+        try {
+          const hasLocalFlag = localStorage.getItem('locked-in-tutorial-done') === '1';
+          const hasCookie = document.cookie.includes('locked-in-tutorial-done=1');
+          if (hasLocalFlag || hasCookie) {
+            merged.tutorialCompleted = true;
+          }
+          // Backfill: if store says done but cookie/flag missing, set them
+          if (merged.tutorialCompleted) {
+            if (!hasLocalFlag) localStorage.setItem('locked-in-tutorial-done', '1');
+            if (!hasCookie) document.cookie = 'locked-in-tutorial-done=1; path=/; max-age=31536000; samesite=lax';
+          }
+        } catch {}
         return merged;
       },
     },

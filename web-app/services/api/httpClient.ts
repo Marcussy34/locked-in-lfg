@@ -5,6 +5,8 @@ import {
   setLessonApiBaseUrl,
 } from './config';
 import { ApiError } from './errors';
+import { refreshAuthSession } from './auth/authApi';
+import { useUserStore } from '@/stores/userStore';
 
 interface RequestOptions {
   method?: 'GET' | 'POST';
@@ -171,5 +173,56 @@ export async function httpRequest<T>(
     throw new ApiError('Network request failed', 0, 'NETWORK_ERROR');
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+/**
+ * Execute an authenticated request with automatic token refresh on 401.
+ *
+ * 1. Reads the current authToken from userStore.
+ * 2. Calls `requestFn(token)`.
+ * 3. On 401 / TOKEN_EXPIRED, refreshes the session, updates the store, and retries once.
+ * 4. Returns `null` when no token is available or refresh fails (lets callers handle gracefully).
+ * 5. Re-throws non-auth errors so callers can display them.
+ */
+export async function fetchWithAuth<T>(
+  requestFn: (token: string) => Promise<T>,
+): Promise<T | null> {
+  const { authToken, refreshToken, setAuthSession } = useUserStore.getState();
+
+  // If we have no access token, try a proactive refresh before giving up.
+  let token = authToken;
+  if (!token) {
+    if (!refreshToken) return null;
+    try {
+      const session = await refreshAuthSession({ refreshToken });
+      setAuthSession(session.accessToken, session.refreshToken);
+      token = session.accessToken;
+    } catch {
+      setAuthSession(null, null);
+      return null;
+    }
+  }
+
+  try {
+    return await requestFn(token);
+  } catch (err) {
+    // Only intercept auth errors; anything else bubbles up.
+    if (
+      err instanceof ApiError &&
+      (err.status === 401 || err.code === 'TOKEN_EXPIRED')
+    ) {
+      const currentRefreshToken = useUserStore.getState().refreshToken;
+      if (!currentRefreshToken) return null;
+      try {
+        const session = await refreshAuthSession({ refreshToken: currentRefreshToken });
+        setAuthSession(session.accessToken, session.refreshToken);
+        return await requestFn(session.accessToken);
+      } catch {
+        setAuthSession(null, null);
+        return null;
+      }
+    }
+    throw err;
   }
 }

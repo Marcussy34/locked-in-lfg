@@ -77,9 +77,9 @@ export async function listCourses(releaseId) {
       from lesson.courses c
       join lesson.publish_releases r on r.id::text = $1
       left join lesson.published_modules pm
-        on pm.course_id = c.id and pm.release_id::text = $1
+        on pm.course_id = c.id
       left join lesson.published_lessons pl
-        on pl.module_id = pm.module_id and pl.release_id::text = $1
+        on pl.module_id = pm.module_id
       group by
         c.id,
         c.slug,
@@ -102,14 +102,14 @@ export async function listCourses(releaseId) {
   return result.rows;
 }
 
-export async function listCourseModules(courseId, releaseId) {
+export async function listCourseModules(courseId, _releaseId) {
   if (!hasDatabase()) {
     return [];
   }
 
   const result = await query(
     `
-      select
+      select distinct on (pm.module_id)
         coalesce((pm.payload->>'id'), m.id) as id,
         $1::text as "courseId",
         coalesce((pm.payload->>'slug'), m.slug) as slug,
@@ -122,35 +122,37 @@ export async function listCourseModules(courseId, releaseId) {
       from lesson.published_modules pm
       join lesson.modules m on m.id = pm.module_id
       where pm.course_id = $1
-        and pm.release_id::text = $2
-      order by pm.module_order asc
+      order by pm.module_id, pm.release_id desc
     `,
-    [courseId, releaseId],
+    [courseId],
   );
 
+  // Re-sort by module_order since DISTINCT ON requires its own ordering
+  result.rows.sort((a, b) => a.order - b.order);
   return result.rows;
 }
 
-export async function listModuleLessons(moduleId, releaseId) {
+export async function listModuleLessons(moduleId, _releaseId) {
   if (!hasDatabase()) {
     return [];
   }
 
   const result = await query(
     `
-      select payload
-      from lesson.published_lessons
-      where module_id = $1
-        and release_id::text = $2
-      order by lesson_order asc
+      select distinct on (pl.lesson_id) payload, pl.lesson_order
+      from lesson.published_lessons pl
+      where pl.module_id = $1
+      order by pl.lesson_id, pl.release_id desc
     `,
-    [moduleId, releaseId],
+    [moduleId],
   );
 
+  // Re-sort by lesson_order since DISTINCT ON requires its own ordering
+  result.rows.sort((a, b) => a.lesson_order - b.lesson_order);
   return result.rows.map((row) => sanitizeLessonPayload(row.payload));
 }
 
-export async function getLessonPayload(lessonId, releaseId) {
+export async function getLessonPayload(lessonId, _releaseId) {
   if (!hasDatabase()) {
     return null;
   }
@@ -160,10 +162,10 @@ export async function getLessonPayload(lessonId, releaseId) {
       select payload
       from lesson.published_lesson_payloads
       where lesson_id = $1
-        and release_id::text = $2
+      order by release_id desc
       limit 1
     `,
-    [lessonId, releaseId],
+    [lessonId],
   );
 
   if (result.rowCount === 0) {

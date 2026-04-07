@@ -225,25 +225,27 @@ export const useCourseStore = create<CourseStore>()(
 
       // --- Per-course actions ---
       completeDayForCourse: (courseId) => {
-        const { courseStates } = get();
-        const state = courseStates[courseId];
-        if (!state) return;
-
+        const state = get();
+        const existing = normalizeCourseGameState(state.courseStates[courseId]);
         const today = new Date().toISOString().split('T')[0];
-        const newStreak = state.currentStreak + 1;
+        if (existing.lastCompletedDate === today) return; // already done today
+
+        const newStreak = existing.currentStreak + 1;
+        const flameState = newStreak >= 3 ? 'BURNING' : newStreak >= 1 ? 'LIT' : 'COLD';
+        const INTENSITY: Record<string, number> = { BURNING: 1.0, LIT: 0.6, COLD: 0.15 };
 
         set({
           courseStates: {
-            ...courseStates,
+            ...state.courseStates,
             [courseId]: {
-              ...state,
+              ...existing,
               currentStreak: newStreak,
-              longestStreak: Math.max(state.longestStreak, newStreak),
+              longestStreak: Math.max(newStreak, existing.longestStreak),
               lastCompletedDate: today,
               todayCompleted: true,
-              // Light flame on first streak
-              flameState: newStreak >= 1 ? 'LIT' : state.flameState,
-              lightIntensity: newStreak >= 1 ? Math.min(0.3 + newStreak * 0.05, 1.0) : state.lightIntensity,
+              saverRecoveryMode: false,
+              flameState: flameState as CourseGameState['flameState'],
+              lightIntensity: INTENSITY[flameState] ?? 0.15,
             },
           },
         });
@@ -593,9 +595,12 @@ export const useCourseStore = create<CourseStore>()(
 
           for (const [courseId, snapshot] of lockMap) {
             // Enroll + activate with lock data from chain
+            const derivedDuration = snapshot.lockEndDate && snapshot.lockStartDate
+              ? Math.round((new Date(snapshot.lockEndDate).getTime() - new Date(snapshot.lockStartDate).getTime()) / 86400000)
+              : 30;
             get().activateCourse(courseId, {
               amount: parseFloat(snapshot.principalAmountUi),
-              duration: 30, // default — exact duration derived from lock dates
+              duration: derivedDuration as 14 | 30 | 45 | 60 | 90 | 180 | 365,
               lockAccountAddress: snapshot.lockAccountAddress,
             });
             get().syncLockSnapshot(courseId, snapshot);

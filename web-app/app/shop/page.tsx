@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore, useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores';
 import { getYieldHistory } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
-import type { YieldHistoryResponse, YieldHistoryEntry } from '@/services/api/types';
+import { fetchWithAuth } from '@/services/api/httpClient';
+import type { YieldHistoryResponse } from '@/services/api/types';
 import {
   ScreenBackground,
   BackButton,
+  ParchmentCard,
   T,
 } from '@/components/theme';
 
@@ -155,10 +155,6 @@ export default function ShopPage() {
   const router = useRouter();
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const courseStates = useCourseStore((s) => s.courseStates);
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
-
   const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
   const ichorBalance = activeState?.ichorBalance ?? 0;
   const lifetimeIchor = activeState?.totalIchorProduced ?? 0;
@@ -174,13 +170,6 @@ export default function ShopPage() {
   const payout = parsedAmount > 0 ? ((parsedAmount / 1000) * rate).toFixed(2) : '--';
   const balanceWorth = ((ichorBalance / 1000) * rate).toFixed(2);
 
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
-
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -190,35 +179,20 @@ export default function ShopPage() {
         return;
       }
       setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try { token = await refreshBackendToken(); } catch {
-          if (active) { setError('Connect wallet to view rewards.'); setLoading(false); }
-          return;
-        }
-      }
-      if (!token) {
-        if (active) { setError('Connect wallet to view rewards.'); setLoading(false); }
-        return;
-      }
       try {
-        const resp = await getYieldHistory(activeCourseId, token);
-        if (active) { setYieldHistory(resp); setError(null); setLoading(false); }
+        const resp = await fetchWithAuth((token) => getYieldHistory(activeCourseId, token));
+        if (!active) return;
+        if (!resp) { setError('Connect wallet to view rewards.'); setLoading(false); return; }
+        setYieldHistory(resp);
+        setError(null);
+        setLoading(false);
       } catch (err) {
-        if (err instanceof ApiError && (err.code === 'TOKEN_EXPIRED' || err.status === 401) && refreshToken) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getYieldHistory(activeCourseId, newToken);
-            if (active) { setYieldHistory(retried); setError(null); setLoading(false); }
-            return;
-          } catch { /* fall through */ }
-        }
         if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
       }
     };
     void load();
     return () => { active = false; };
-  }, [activeCourseId, authToken, refreshToken, refreshBackendToken]);
+  }, [activeCourseId]);
 
   const recentHarvests = yieldHistory?.entries ?? [];
 
@@ -226,296 +200,194 @@ export default function ShopPage() {
     <ScreenBackground>
       <BackButton onClick={() => router.back()} />
 
-      {/* Title */}
       <h1
         className="text-2xl font-bold tracking-wide"
         style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}
       >
-        Claim Rewards
+        Rewards
       </h1>
-      <p className="text-xs leading-[18px] mb-4" style={{ color: T.textSecondary }}>
-        Redeem Ichor earned from learning
+      <p className="text-xs leading-[18px] mb-5" style={{ color: T.textSecondary }}>
+        Redeem ichor for USDC
       </p>
 
-      {/* ── Zone 1: Hero Balance ────────────────────────────────────── */}
-      <div
-        className="rounded-2xl p-6 text-center relative overflow-hidden"
-        style={{
-          background: 'linear-gradient(135deg, rgba(212,160,74,0.12) 0%, rgba(212,160,74,0.04) 100%)',
-          border: `1px solid rgba(212,160,74,0.25)`,
-        }}
-      >
-        {/* Radial glow */}
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(212,160,74,0.12) 0%, transparent 70%)' }}
-        />
+      {/* 2-column layout on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* ── Left: Redemption UI ── */}
+        <ParchmentCard
+          style={{ padding: 24, borderColor: T.borderAlive }}
+        >
+          {/* Ichor hero */}
+          <div className="text-center mb-5">
+            <p className="text-4xl font-bold" style={{ color: T.green }}>
+              {ichorBalance.toLocaleString()}
+            </p>
+            <p
+              className="font-mono text-[10px] uppercase tracking-[1px] mt-1"
+              style={{ color: T.textMuted }}
+            >
+              Ichor Balance
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span
+                className="font-mono text-[10px] px-2.5 py-1 rounded-xl"
+                style={{ color: T.teal, background: 'rgba(42,232,212,0.08)', border: '1px solid rgba(42,232,212,0.15)' }}
+              >
+                {tierLabel}
+              </span>
+              <span className="font-mono text-[10px]" style={{ color: T.textMuted }}>
+                1,000 = {rate.toFixed(2)} USDC
+              </span>
+            </div>
+            <p className="text-[14px] font-bold mt-2" style={{ color: T.teal }}>
+              Worth ~${balanceWorth} USDC
+            </p>
+          </div>
 
-        <div className="relative">
-          <div className="flex justify-center mb-2.5">
-            <PotionIcon />
-          </div>
-          <span
-            className="font-mono text-[9px] uppercase tracking-[2px]"
-            style={{ color: 'rgba(255,255,255,0.4)' }}
-          >
-            Your Ichor
-          </span>
-          <div className="text-[40px] font-bold mt-1.5" style={{ color: T.amber }}>
-            {ichorBalance.toLocaleString()}
-          </div>
-          <div className="text-[11px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            Worth approximately{' '}
-            <strong style={{ color: T.green }}>${balanceWorth} USDC</strong>
-          </div>
-
-          {/* Tier badge */}
-          <div
-            className="inline-flex items-center gap-1.5 mt-3.5 rounded-full px-3.5 py-1.5"
-            style={{
-              background: 'rgba(0,0,0,0.3)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <StarIcon />
-            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              {tierLabel} &middot; 1,000 = {rate.toFixed(2)} USDC
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Zone 2: Redeem Card ─────────────────────────────────────── */}
-      <div
-        className="mt-5 rounded-[14px] p-[18px]"
-        style={{
-          backgroundColor: T.bgCard,
-          border: `1px solid ${T.borderAlive}`,
-        }}
-      >
-        <div className="flex items-center gap-2 mb-3.5">
-          <ArrowDownIcon />
-          <span
-            className="font-mono text-[10px] uppercase tracking-[2px] font-bold"
-            style={{ color: T.amber }}
+          {/* Redeem section */}
+          <p
+            className="font-mono text-[10px] font-bold uppercase tracking-[2px] text-center mb-3"
+            style={{ color: T.textMuted }}
           >
             Redeem Ichor
-          </span>
-        </div>
-
-        {/* Amount label */}
-        <span
-          className="font-mono text-[9px] uppercase tracking-[1px] mb-1.5 block"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
-        >
-          Amount
-        </span>
-
-        {/* Input */}
-        <div
-          className="rounded-[10px] border px-3.5 py-3.5 flex items-center justify-between"
-          style={{ backgroundColor: T.bg, borderColor: 'rgba(255,255,255,0.08)' }}
-        >
-          <input
-            type="number"
-            value={ichorAmount}
-            onChange={(e) => setIchorAmount(e.target.value)}
-            placeholder="1000"
-            className="bg-transparent outline-none text-xl w-full"
-            style={{ color: T.textPrimary }}
-          />
-          <span
-            className="text-[10px] rounded-md px-2.5 py-1 ml-2 shrink-0"
-            style={{ color: 'rgba(212,160,74,0.6)', backgroundColor: 'rgba(212,160,74,0.1)' }}
-          >
-            ICHOR
-          </span>
-        </div>
-
-        {/* Preset pills */}
-        <div className="flex gap-2 mt-2.5">
-          {PRESETS.map((preset) => {
-            const selected = parsedAmount === preset;
-            return (
-              <button
-                key={preset}
-                onClick={() => setIchorAmount(String(preset))}
-                className="px-3.5 py-1.5 rounded-full text-[10px] transition-colors"
-                style={{
-                  border: `1px solid ${selected ? 'rgba(212,160,74,0.4)' : 'rgba(255,255,255,0.06)'}`,
-                  backgroundColor: selected ? 'rgba(212,160,74,0.12)' : 'transparent',
-                  color: selected ? T.amber : 'rgba(255,255,255,0.35)',
-                  fontWeight: selected ? 700 : 400,
-                }}
-              >
-                {preset.toLocaleString()}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => setIchorAmount(String(ichorBalance))}
-            className="px-3.5 py-1.5 rounded-full text-[10px] transition-colors"
-            style={{
-              border: `1px solid ${parsedAmount === ichorBalance && ichorBalance > 0 ? 'rgba(212,160,74,0.4)' : 'rgba(255,255,255,0.06)'}`,
-              backgroundColor: parsedAmount === ichorBalance && ichorBalance > 0 ? 'rgba(212,160,74,0.12)' : 'transparent',
-              color: parsedAmount === ichorBalance && ichorBalance > 0 ? T.amber : 'rgba(255,255,255,0.35)',
-              fontWeight: parsedAmount === ichorBalance && ichorBalance > 0 ? 700 : 400,
-            }}
-          >
-            All
-          </button>
-        </div>
-
-        {/* Payout preview */}
-        <div
-          className="mt-3.5 rounded-[10px] border p-3.5"
-          style={{
-            backgroundColor: 'rgba(62,230,138,0.05)',
-            borderColor: 'rgba(62,230,138,0.12)',
-          }}
-        >
-          <div className="flex justify-between items-center">
-            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              You&apos;ll receive
-            </span>
-            <span className="text-[22px] font-bold" style={{ color: T.green }}>
-              {payout === '--' ? '--' : `${payout} USDC`}
-            </span>
-          </div>
-          <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            Sent directly to your connected wallet
           </p>
-        </div>
 
-        {/* CTA */}
-        <button
-          className="w-full mt-4 rounded-[10px] py-3.5 text-center"
-          style={{
-            backgroundColor: T.amber,
-            border: '1px solid #E8B860',
-            fontFamily: 'Georgia, serif',
-          }}
-          disabled
-        >
-          <span
-            className="text-[13px] font-extrabold uppercase tracking-[2px]"
-            style={{ color: '#1A1000' }}
-          >
-            Claim Rewards
-          </span>
-        </button>
-        <p className="text-center text-[10px] mt-1.5" style={{ color: 'rgba(255,255,255,0.18)' }}>
-          On-chain redemption requires wallet connection
-        </p>
-      </div>
-
-      {/* ── Zone 3: Earnings Breakdown ──────────────────────────────── */}
-      <div className="mt-5">
-        <div className="flex items-center gap-2 mb-3">
-          <HexPlusIcon />
-          <span
-            className="font-mono text-[10px] uppercase tracking-[2px] font-bold"
-            style={{ color: 'rgba(255,255,255,0.4)' }}
-          >
-            Earnings Breakdown
-          </span>
-        </div>
-
-        {loading ? (
-          <p className="text-sm" style={{ color: T.textSecondary }}>Loading earnings...</p>
-        ) : error ? (
-          <p className="text-xs" style={{ color: T.amber }}>{error}</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              <StatCard
-                icon={<ArrowUpIcon />}
-                label="Total Yield"
-                value={`${yieldHistory?.totalGrossYieldUi ?? '0'}`}
-                unit="USDC"
-              />
-              <StatCard
-                icon={<MinusBoxIcon />}
-                label="Fees"
-                value={`${yieldHistory?.totalPlatformFeeUi ?? '0'}`}
-                unit="USDC"
-              />
-              <StatCard
-                icon={<DoubleChevronIcon />}
-                label="Redirected"
-                value={`${yieldHistory?.totalRedirectedUi ?? '0'}`}
-                unit="USDC"
-              />
-              <StatCard
-                icon={<SmallPotionIcon />}
-                label="Ichor Earned"
-                value={Number(yieldHistory?.totalIchorAwarded ?? '0').toLocaleString()}
-                valueColor={T.amber}
-              />
-            </div>
-            <p className="text-center text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.15)' }}>
-              {yieldHistory?.totalHarvests ?? 0} harvests total
-            </p>
-          </>
-        )}
-      </div>
-
-      {/* ── Zone 4: Recent Activity ─────────────────────────────────── */}
-      <div className="mt-5 mb-8">
-        <div className="flex items-center gap-2 mb-3">
-          <ClockIcon />
-          <span
-            className="font-mono text-[10px] uppercase tracking-[2px] font-bold"
-            style={{ color: 'rgba(255,255,255,0.4)' }}
-          >
-            Recent Activity
-          </span>
-        </div>
-
-        {loading ? (
-          <p className="text-sm" style={{ color: T.textSecondary }}>Loading activity...</p>
-        ) : error ? (
-          <p className="text-xs" style={{ color: T.amber }}>{error}</p>
-        ) : recentHarvests.length === 0 ? (
+          {/* Amount input */}
           <div
-            className="rounded-[10px] border p-4 text-center"
-            style={{ backgroundColor: T.bgCard, borderColor: T.borderDormant }}
+            className="rounded-[10px] border px-3.5 py-3 flex items-center justify-center mb-3"
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: T.borderAlive }}
           >
-            <p className="text-sm" style={{ color: T.textSecondary }}>No activity yet.</p>
+            <input
+              type="number"
+              value={ichorAmount}
+              onChange={(e) => setIchorAmount(e.target.value)}
+              placeholder="1000"
+              className="bg-transparent outline-none text-2xl font-bold font-mono text-center w-full"
+              style={{ color: T.amber }}
+            />
+            <span className="text-[11px] ml-2 flex-shrink-0" style={{ color: T.textMuted }}>ICHOR</span>
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {recentHarvests.map((entry) => (
-              <div
-                key={entry.harvestId}
-                className="rounded-[10px] border p-3.5"
-                style={{ backgroundColor: T.bgCard, borderColor: T.borderDormant }}
-              >
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <ActivityBadge />
+
+          {/* Preset pills */}
+          <div className="flex justify-center gap-2 mb-4">
+            {PRESETS.map((preset) => {
+              const selected = parsedAmount === preset;
+              return (
+                <button
+                  key={preset}
+                  onClick={() => setIchorAmount(String(preset))}
+                  className="px-3.5 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-colors"
+                  style={{
+                    borderColor: selected ? T.amber : T.borderDormant,
+                    backgroundColor: selected ? 'rgba(212,160,74,0.1)' : 'transparent',
+                    color: selected ? T.amber : T.textSecondary,
+                  }}
+                >
+                  {preset.toLocaleString()}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setIchorAmount(String(ichorBalance))}
+              className="px-3.5 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-colors"
+              style={{
+                borderColor: parsedAmount === ichorBalance && ichorBalance > 0 ? T.amber : T.borderDormant,
+                backgroundColor: parsedAmount === ichorBalance && ichorBalance > 0 ? 'rgba(212,160,74,0.1)' : 'transparent',
+                color: parsedAmount === ichorBalance && ichorBalance > 0 ? T.amber : T.textSecondary,
+              }}
+            >
+              All
+            </button>
+          </div>
+
+          {/* Payout preview */}
+          <div
+            className="rounded-lg p-3.5 text-center mb-4"
+            style={{ background: 'rgba(62,230,138,0.04)', border: '1px solid rgba(62,230,138,0.1)' }}
+          >
+            <p className="font-mono text-[10px] uppercase tracking-[1px]" style={{ color: T.textMuted }}>Payout</p>
+            <p className="text-[22px] font-bold mt-1" style={{ color: T.green }}>
+              {payout === '--' ? '--' : `${payout} USDC`}
+            </p>
+          </div>
+
+          {/* Claim button (disabled) */}
+          <button
+            className="w-full py-3 rounded-lg text-center font-bold text-sm uppercase tracking-[1px]"
+            style={{
+              border: `1px solid ${T.amber}`,
+              background: 'rgba(212,160,74,0.12)',
+              color: T.amber,
+              fontFamily: 'Georgia, serif',
+              opacity: 0.4,
+              cursor: 'not-allowed',
+            }}
+            disabled
+          >
+            ◆ Claim Rewards ◆
+          </button>
+          <p className="text-center text-[10px] mt-2" style={{ color: T.textMuted }}>
+            On-chain redemption requires wallet connection
+          </p>
+        </ParchmentCard>
+
+        {/* ── Right: Earnings + Activity ── */}
+        <div>
+          {/* Earnings stats 2x2 */}
+          {loading ? (
+            <p className="text-sm" style={{ color: T.textSecondary }}>Loading earnings...</p>
+          ) : error ? (
+            <p className="text-xs" style={{ color: T.amber }}>{error}</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2.5 mb-3">
+                <StatCard icon={<ArrowUpIcon />} label="Total Yield" value={`${yieldHistory?.totalGrossYieldUi ?? '0'}`} unit="USDC" />
+                <StatCard icon={<MinusBoxIcon />} label="Fees" value={`${yieldHistory?.totalPlatformFeeUi ?? '0'}`} unit="USDC" />
+                <StatCard icon={<DoubleChevronIcon />} label="Redirected" value={`${yieldHistory?.totalRedirectedUi ?? '0'}`} unit="USDC" />
+                <StatCard icon={<SmallPotionIcon />} label="Ichor Earned" value={Number(yieldHistory?.totalIchorAwarded ?? '0').toLocaleString()} valueColor={T.amber} />
+              </div>
+              <ParchmentCard className="text-center mb-4" style={{ padding: 12 }}>
+                <p className="font-mono text-[9px] uppercase tracking-[1.5px]" style={{ color: T.textMuted }}>Harvests</p>
+                <p className="text-base font-bold mt-0.5" style={{ color: T.amber }}>
+                  {yieldHistory?.totalHarvests ?? 0} harvests total
+                </p>
+              </ParchmentCard>
+            </>
+          )}
+
+          {/* Recent Activity */}
+          <ParchmentCard style={{ padding: 16 }}>
+            <p
+              className="font-mono text-[10px] font-bold uppercase tracking-[2px] mb-3"
+              style={{ color: T.textMuted }}
+            >
+              Recent Activity
+            </p>
+            {loading ? (
+              <p className="text-sm" style={{ color: T.textSecondary }}>Loading...</p>
+            ) : recentHarvests.length === 0 ? (
+              <p className="text-sm" style={{ color: T.textSecondary }}>No activity yet.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {recentHarvests.map((entry) => (
+                  <div
+                    key={entry.harvestId}
+                    className="flex justify-between items-center py-2"
+                    style={{ borderBottom: `1px solid ${T.borderDormant}` }}
+                  >
                     <div>
-                      <p className="text-[12px] font-semibold" style={{ color: T.textPrimary }}>
-                        Yield Earned
-                      </p>
-                      <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.22)' }}>
-                        {relativeTime(entry.harvestedAt)}
-                      </p>
+                      <p className="text-[12px] font-semibold" style={{ color: T.textPrimary }}>Yield Earned</p>
+                      <p className="font-mono text-[9px] mt-0.5" style={{ color: T.textMuted }}>{relativeTime(entry.harvestedAt)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[12px] font-bold" style={{ color: T.green }}>+{entry.grossYieldAmountUi} USDC</p>
+                      <p className="font-mono text-[9px] mt-0.5" style={{ color: T.textMuted }}>+{Number(entry.ichorAwarded).toLocaleString()} Ichor</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[14px] font-bold" style={{ color: T.green }}>
-                      +{entry.grossYieldAmountUi} USDC
-                    </p>
-                    <p className="text-[10px] mt-0.5" style={{ color: T.amber }}>
-                      +{Number(entry.ichorAwarded).toLocaleString()} Ichor
-                    </p>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
+          </ParchmentCard>
+        </div>
       </div>
     </ScreenBackground>
   );
@@ -537,10 +409,7 @@ function StatCard({
   valueColor?: string;
 }) {
   return (
-    <div
-      className="rounded-[10px] border p-3.5"
-      style={{ backgroundColor: T.bgCard, borderColor: T.borderDormant }}
-    >
+    <ParchmentCard style={{ padding: 14 }}>
       <div className="flex items-center gap-1.5 mb-1.5">
         {icon}
         <span
@@ -558,6 +427,6 @@ function StatCard({
           </span>
         )}
       </span>
-    </div>
+    </ParchmentCard>
   );
 }

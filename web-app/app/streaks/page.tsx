@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore, useUserStore } from '@/stores';
+import { useCourseStore } from '@/stores';
 import { getCourseRuntimeHistory } from '@/services/api/progress/progressApi';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
+import { fetchWithAuth } from '@/services/api/httpClient';
 import type { RuntimeHistoryResponse, RuntimeAuditEvent } from '@/services/api/types';
 import {
   ScreenBackground,
@@ -13,22 +12,23 @@ import {
   ParchmentCard,
   StatBox,
   SectionLabel,
-  Divider,
   T,
 } from '@/components/theme';
 
-/* Human-readable event title */
+/* Human-readable event title — streak-focused labels
+ * Backend uses FUEL_BURN / MISS event types from the old whitepaper model.
+ * We translate these into user-facing streak language. */
 function renderEventTitle(event: RuntimeAuditEvent) {
   if (event.eventType === 'FUEL_BURN') {
-    if (event.reason === 'BURNED') return 'Fuel Burned';
-    if (event.reason === 'NO_FUEL') return 'Burn Skipped';
-    if (event.reason === 'GAUNTLET_LOCKED') return 'Burn Locked';
-    return 'Fuel Event';
+    if (event.reason === 'BURNED') return 'Lesson Completed';
+    if (event.reason === 'NO_FUEL') return 'Lesson Missed';
+    if (event.reason === 'GAUNTLET_LOCKED') return 'Gauntlet Day';
+    return 'Streak Event';
   }
-  if (event.reason === 'FULL_CONSEQUENCE') return 'Full Consequence';
-  if (event.reason === 'SAVER_CONSUMED') return 'Saver Consumed';
-  if (event.reason === 'GAUNTLET_LOCKED') return 'Miss Locked';
-  return 'Miss Event';
+  if (event.reason === 'FULL_CONSEQUENCE') return 'Streak Broken';
+  if (event.reason === 'SAVER_CONSUMED') return 'Saver Used';
+  if (event.reason === 'GAUNTLET_LOCKED') return 'Gauntlet Day';
+  return 'Streak Event';
 }
 
 function renderRelayStatus(status: RuntimeAuditEvent['lockVaultStatus']) {
@@ -53,10 +53,6 @@ export default function StreaksPage() {
   const courseStates = useCourseStore((s) => s.courseStates);
   const courses = useCourseStore((s) => s.courses);
   const refreshCourseRuntime = useCourseStore((s) => s.refreshCourseRuntime);
-  const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
-
   const [history, setHistory] = useState<RuntimeHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,49 +79,37 @@ export default function StreaksPage() {
 
   const lampsLit = saversRemaining;
 
-  const refreshBackendToken = useCallback(async () => {
-    if (!refreshToken) throw new Error('No refresh token');
-    const refreshed = await refreshAuthSession({ refreshToken });
-    setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-    return refreshed.accessToken;
-  }, [refreshToken, setAuthSession]);
-
   useEffect(() => {
     let active = true;
     const load = async () => {
       if (!activeCourseId) { setHistory(null); setLoading(false); return; }
 
       setLoading(true);
-      let token = authToken;
-      if (!token && refreshToken) {
-        try { token = await refreshBackendToken(); } catch {
-          if (active) { setError('Connect wallet to view streaks.'); setLoading(false); }
-          return;
-        }
-      }
-      if (!token) { if (active) { setError('Connect wallet to view streaks.'); setLoading(false); } return; }
 
-      void refreshCourseRuntime(activeCourseId, token).catch(() => {});
+      // Fire-and-forget runtime refresh
+      void fetchWithAuth((token) => refreshCourseRuntime(activeCourseId, token)).catch(() => {});
 
       try {
-        const resp = await getCourseRuntimeHistory(activeCourseId, token);
-        if (active) { setHistory(resp); setError(null); setLoading(false); }
+        const resp = await fetchWithAuth((token) => getCourseRuntimeHistory(activeCourseId, token));
+        if (!active) return;
+        if (!resp) { setError('Connect wallet to view streaks.'); setLoading(false); return; }
+        setHistory(resp);
+        setError(null);
+        setLoading(false);
       } catch (err) {
-        if (err instanceof ApiError && (err.code === 'TOKEN_EXPIRED' || err.status === 401) && refreshToken) {
-          try {
-            const newToken = await refreshBackendToken();
-            const retried = await getCourseRuntimeHistory(activeCourseId, newToken);
-            if (active) { setHistory(retried); setError(null); setLoading(false); }
-            return;
-          } catch { /* fall through */ }
-        }
         if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
       }
     };
 
     void load();
     return () => { active = false; };
-  }, [activeCourseId, authToken, refreshToken, refreshBackendToken, refreshCourseRuntime]);
+  }, [activeCourseId, refreshCourseRuntime]);
+
+  /* Event colors */
+  const isCompletedEvent = (e: RuntimeAuditEvent) =>
+    e.eventType === 'FUEL_BURN' && e.reason === 'BURNED';
+  const isMissEvent = (e: RuntimeAuditEvent) =>
+    e.eventType === 'MISS' || (e.eventType === 'FUEL_BURN' && e.reason !== 'BURNED');
 
   return (
     <ScreenBackground>
@@ -144,189 +128,212 @@ export default function StreaksPage() {
         </p>
       )}
 
-      {/* Flame state */}
-      <ParchmentCard className="flex flex-col items-center py-6 mt-4">
-        <p
-          className="text-[32px] font-bold tracking-[2px]"
-          style={{ fontFamily: 'Georgia, serif', color: flameColor }}
-        >
-          {flameState}
-        </p>
-        <p className="text-xs mt-2" style={{ color: T.textSecondary }}>
-          {flameState === 'BURNING'
-            ? 'Your flame burns bright'
-            : flameState === 'LIT'
-              ? 'Your flame is lit'
-              : 'Your flame is cold'}
-        </p>
-      </ParchmentCard>
+      {/* Row 1: Flame | Stats | Savers — 3-col on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+        {/* Flame hero */}
+        <ParchmentCard className="flex flex-col items-center justify-center py-7">
+          <span className="text-[56px]">
+            {flameState === 'BURNING'
+              ? '\u{1F525}'
+              : flameState === 'LIT'
+                ? '\u{1FA94}'
+                : '\u{1F9CA}'}
+          </span>
+          <p
+            className="text-[22px] font-bold mt-3 tracking-[1px]"
+            style={{ fontFamily: 'Georgia, serif', color: flameColor }}
+          >
+            {flameState === 'BURNING'
+              ? 'Burning'
+              : flameState === 'LIT'
+                ? 'Lit'
+                : 'Cold'}
+          </p>
+          <p className="text-xs mt-2" style={{ color: T.textSecondary }}>
+            {flameState === 'BURNING'
+              ? `Yield is active. ${streak}-day streak.`
+              : flameState === 'LIT'
+                ? `Building momentum. ${streak}-day streak.`
+                : 'Complete a lesson to light the flame.'}
+          </p>
+        </ParchmentCard>
 
-      {/* Streak stats */}
-      <div className="flex gap-2.5 mt-3">
-        <StatBox label="Current Streak" value={`${streak}`} color={T.amber} />
-        <StatBox label="Longest Streak" value={`${longestStreak}`} color={T.amber} />
+        {/* Stats stacked */}
+        <div className="flex flex-col gap-3">
+          <StatBox label="Current Streak" value={`${streak} day${streak !== 1 ? 's' : ''}`} color={T.amber} />
+          <StatBox label="Longest Streak" value={`${longestStreak} day${longestStreak !== 1 ? 's' : ''}`} color={T.amber} />
+        </div>
+
+        {/* Saver Lamps */}
+        <ParchmentCard className="flex flex-col items-center justify-center">
+          <SectionLabel>Saver Lamps</SectionLabel>
+          <div className="flex justify-center gap-7 mt-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex flex-col items-center">
+                <span className="text-[28px]">
+                  {i < lampsLit ? '\u{1F525}' : '\u{1F4A8}'}
+                </span>
+                <span
+                  className="font-mono text-[10px] mt-1 uppercase tracking-[1px]"
+                  style={{ color: i < lampsLit ? T.green : T.textMuted }}
+                >
+                  {i < lampsLit ? 'Active' : 'Used'}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-center mt-3" style={{ color: T.textSecondary }}>
+            {saversRemaining}/3 remaining
+          </p>
+        </ParchmentCard>
       </div>
 
-      {/* Saver Lamps */}
-      <ParchmentCard className="mt-3">
-        <SectionLabel>Saver Lamps</SectionLabel>
-        <div className="flex justify-center gap-7 mt-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col items-center">
-              <span className="text-[28px]">
-                {i < lampsLit ? '\u{1F525}' : '\u{1F4A8}'}
-              </span>
-              <span
-                className="font-mono text-[10px] mt-1 uppercase tracking-[1px]"
-                style={{ color: i < lampsLit ? T.violet : T.textMuted }}
-              >
-                {i < lampsLit ? 'Active' : 'Used'}
-              </span>
-            </div>
-          ))}
-        </div>
-        <p className="text-[11px] text-center mt-3" style={{ color: T.textSecondary }}>
-          {saversRemaining}/3 savers remaining
-        </p>
-      </ParchmentCard>
+      {/* Row 2: Consequence State — 3 stat boxes */}
+      <div className="grid grid-cols-3 gap-3 mt-3">
+        <StatBox
+          label="Yield Redirect"
+          value={`${redirectPercent}%`}
+          color={redirectPercent > 0 ? T.crimson : T.green}
+        />
+        <StatBox
+          label="Saver Recovery"
+          value={saverRecoveryMode ? 'Active' : 'Inactive'}
+          color={saverRecoveryMode ? T.green : T.green}
+        />
+        <StatBox
+          label="Extension Total"
+          value={`${extensionDays} day${extensionDays !== 1 ? 's' : ''}`}
+          color={extensionDays > 0 ? T.crimson : T.textSecondary}
+        />
+      </div>
 
-      {/* Consequence State */}
+      {/* Row 3: Streak History */}
       <ParchmentCard className="mt-3">
-        <SectionLabel>Consequence State</SectionLabel>
         <div className="flex justify-between items-center">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[1px]"
-            style={{ color: T.textSecondary }}
-          >
-            Yield redirect
-          </span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: redirectPercent > 0 ? T.crimson : T.textPrimary }}
-          >
-            {redirectPercent}%
-          </span>
+          <SectionLabel>Streak History</SectionLabel>
+          {history && (
+            <span
+              className="font-mono text-[10px]"
+              style={{ color: T.textMuted }}
+            >
+              {history.burnCount} completed {'\u00B7'} {history.missCount} missed {'\u00B7'} {history.extensionDaysAdded} extensions
+            </span>
+          )}
         </div>
-        <Divider />
-        <div className="flex justify-between items-center">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[1px]"
-            style={{ color: T.textSecondary }}
-          >
-            Saver recovery
-          </span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: saverRecoveryMode ? T.green : T.textPrimary }}
-          >
-            {saverRecoveryMode ? 'Active' : 'Inactive'}
-          </span>
-        </div>
-        <Divider />
-        <div className="flex justify-between items-center">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[1px]"
-            style={{ color: T.textSecondary }}
-          >
-            Extension total
-          </span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: extensionDays > 0 ? T.crimson : T.textPrimary }}
-          >
-            {extensionDays} day{extensionDays !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </ParchmentCard>
 
-      {/* Runtime Audit */}
-      <ParchmentCard className="mt-3">
-        <SectionLabel>Runtime Audit</SectionLabel>
         {loading ? (
           <p className="text-xs mt-2" style={{ color: T.textSecondary }}>
-            Loading runtime history...
+            Loading streak history...
           </p>
         ) : error ? (
           <p className="text-[11px] mt-1.5" style={{ color: T.amber }}>{error}</p>
         ) : history ? (
           <>
-            {/* Summary line */}
-            <p className="text-[13px] mt-1" style={{ color: T.textPrimary }}>
-              Burns: {history.burnCount}
-              {' \u00B7 '}Misses: {history.missCount}
-              {' \u00B7 '}Extensions added: {history.extensionDaysAdded} day
-              {history.extensionDaysAdded === 1 ? '' : 's'}
-            </p>
-
-            {/* Event cards */}
             {history.events.length > 0 ? (
-              history.events.map((event) => {
-                const saversBefore =
-                  event.saverCountBefore == null ? null : Math.max(0, 3 - event.saverCountBefore);
-                const saversAfter =
-                  event.saverCountAfter == null ? null : Math.max(0, 3 - event.saverCountAfter);
-                const extensionDelta =
-                  event.extensionDaysBefore != null && event.extensionDaysAfter != null
-                    ? Math.max(0, event.extensionDaysAfter - event.extensionDaysBefore)
-                    : 0;
+              <div className="flex flex-col gap-2.5 mt-3">
+                {history.events.map((event) => {
+                  const title = renderEventTitle(event);
+                  const status = renderEventRelayStatus(event);
+                  const completed = isCompletedEvent(event);
+                  const missed = isMissEvent(event);
+                  const dotColor = completed ? T.green : missed ? T.crimson : T.textMuted;
 
-                return (
-                  <ParchmentCard key={event.eventId} className="mt-2.5 p-3">
-                    {/* Header */}
-                    <div className="flex justify-between items-center">
+                  const saversBefore =
+                    event.saverCountBefore == null ? null : Math.max(0, 3 - event.saverCountBefore);
+                  const saversAfter =
+                    event.saverCountAfter == null ? null : Math.max(0, 3 - event.saverCountAfter);
+
+                  /* Build subtitle */
+                  const datePart = event.eventDay ? `Day ${event.eventDay}` : '';
+                  const timePart = new Date(event.occurredAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  });
+                  let detailPart = 'Streak maintained';
+                  if (event.reason === 'SAVER_CONSUMED' && saversBefore != null && saversAfter != null) {
+                    detailPart = `Savers: ${saversBefore} \u2192 ${saversAfter}`;
+                  } else if (event.reason === 'FULL_CONSEQUENCE') {
+                    detailPart = `Redirect: ${Math.round((event.redirectBpsBefore ?? 0) / 100)}% \u2192 ${Math.round((event.redirectBpsAfter ?? 0) / 100)}%`;
+                  } else if (event.reason === 'NO_FUEL') {
+                    detailPart = 'No lesson completed';
+                  }
+
+                  /* Status pill colors */
+                  const statusColor =
+                    status === 'Published'
+                      ? T.green
+                      : status === 'Failed'
+                        ? T.crimson
+                        : T.textSecondary;
+                  const statusBg =
+                    status === 'Published'
+                      ? 'rgba(62,230,138,0.08)'
+                      : status === 'Failed'
+                        ? 'rgba(255,68,102,0.08)'
+                        : 'rgba(255,255,255,0.04)';
+
+                  /* Right-side indicator */
+                  const rightLabel = completed
+                    ? '\u2713'
+                    : event.reason === 'SAVER_CONSUMED'
+                      ? '-1 Saver'
+                      : event.reason === 'FULL_CONSEQUENCE'
+                        ? 'Broken'
+                        : '';
+                  const rightColor = completed ? T.green : T.crimson;
+
+                  return (
+                    <div
+                      key={event.eventId}
+                      className="flex items-center gap-4 px-4 py-3.5 rounded-[10px]"
+                      style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        border: `1px solid ${missed ? 'rgba(255,68,102,0.12)' : T.borderDormant}`,
+                      }}
+                    >
+                      {/* Dot */}
+                      <div
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ background: dotColor }}
+                      />
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center">
+                          <span
+                            className="text-[13px] font-bold"
+                            style={{ color: missed ? T.crimson : T.textPrimary }}
+                          >
+                            {title}
+                          </span>
+                          <span
+                            className="font-mono text-[10px] uppercase tracking-[1px] px-2.5 py-0.5 rounded-xl"
+                            style={{
+                              color: statusColor,
+                              background: statusBg,
+                              border: `1px solid ${statusColor}30`,
+                            }}
+                          >
+                            {status}
+                          </span>
+                        </div>
+                        <p className="font-mono text-[10px] mt-1" style={{ color: T.textMuted }}>
+                          {datePart} {'\u00B7'} {timePart} {'\u00B7'} {detailPart}
+                        </p>
+                      </div>
+
+                      {/* Right indicator */}
                       <span
-                        className="text-[13px] font-bold"
-                        style={{ color: T.textPrimary }}
+                        className="text-xs font-bold flex-shrink-0"
+                        style={{ color: rightColor }}
                       >
-                        {renderEventTitle(event)}
-                      </span>
-                      <span
-                        className="font-mono text-[10px] uppercase tracking-[1px]"
-                        style={{ color: T.textSecondary }}
-                      >
-                        {renderEventRelayStatus(event)}
+                        {rightLabel}
                       </span>
                     </div>
-                    {/* Timestamp */}
-                    <p className="text-[10px] mt-1" style={{ color: T.textMuted }}>
-                      {new Date(event.occurredAt).toLocaleString()}
-                      {event.eventDay ? ` \u00B7 Day ${event.eventDay}` : ''}
-                    </p>
-                    {/* Details */}
-                    {event.eventType === 'FUEL_BURN' ? (
-                      <p className="text-xs mt-2.5" style={{ color: T.textPrimary }}>
-                        Fuel: {event.fuelBefore ?? '--'} → {event.fuelAfter ?? '--'}
-                      </p>
-                    ) : (
-                      <>
-                        <p className="text-xs mt-2.5" style={{ color: T.textPrimary }}>
-                          Savers remaining: {saversBefore ?? '--'} → {saversAfter ?? '--'}
-                        </p>
-                        <p className="text-xs mt-1" style={{ color: T.textPrimary }}>
-                          Redirect: {Math.round((event.redirectBpsBefore ?? 0) / 100)}%
-                          {' → '}
-                          {Math.round((event.redirectBpsAfter ?? 0) / 100)}%
-                        </p>
-                        <p className="text-xs mt-1" style={{ color: T.textPrimary }}>
-                          Extension: +{extensionDelta} day{extensionDelta === 1 ? '' : 's'}
-                        </p>
-                      </>
-                    )}
-                    {/* Tx hash */}
-                    {event.lockVaultTransactionSignature && (
-                      <p className="font-mono text-[10px] mt-2" style={{ color: T.textMuted }}>
-                        Tx: {event.lockVaultTransactionSignature.slice(0, 12)}...
-                      </p>
-                    )}
-                    {/* Error */}
-                    {event.lockVaultLastError && (
-                      <p className="text-[11px] mt-1.5" style={{ color: T.amber }}>
-                        {event.lockVaultLastError}
-                      </p>
-                    )}
-                  </ParchmentCard>
-                );
-              })
+                  );
+                })}
+              </div>
             ) : (
               <p className="text-xs mt-2" style={{ color: T.textSecondary }}>
                 No runtime events recorded yet.

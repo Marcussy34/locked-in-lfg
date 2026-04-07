@@ -264,7 +264,7 @@ export default function CoursesPage() {
       }}
     >
       <div className="fixed inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
-      <div className={`relative max-w-2xl mx-auto px-[18px] ${isOnboardingMode ? 'pb-32' : 'pb-10'}`}>
+      <div className={`relative max-w-[1100px] mx-auto px-[18px] ${isOnboardingMode ? 'pb-32' : 'pb-10'}`}>
 
         {/* Header — adapts to mode */}
         <div className="text-center pt-5 pb-7">
@@ -396,7 +396,7 @@ export default function CoursesPage() {
                   {(activeCourses.length > 0 || comingSoonCourses.length > 0) && (
                     <SectionLabel>Available Courses</SectionLabel>
                   )}
-                  <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {readyCourses.map((course) => (
                       <CourseCard
                         key={course.id}
@@ -419,7 +419,7 @@ export default function CoursesPage() {
               {comingSoonCourses.length > 0 && (
                 <div className="mt-5">
                   <SectionLabel>Coming Soon</SectionLabel>
-                  <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {comingSoonCourses.map((course) => (
                       <CourseCard
                         key={course.id}
@@ -449,7 +449,7 @@ export default function CoursesPage() {
           className="fixed bottom-0 left-0 right-0 px-[18px] pb-8 pt-4"
           style={{ backgroundColor: `${T.bg}F5` }}
         >
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-[1100px] mx-auto">
             <button
               onClick={() => handleEnroll(selectedCourse.id)}
               className="w-full py-4 rounded-[10px] text-center"

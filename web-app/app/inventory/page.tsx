@@ -57,77 +57,116 @@ export default function InventoryPage() {
     }
   }, [activeCourseId, authToken, refreshCourseRuntime]);
 
+  const earnStatusColor =
+    fuelEarnStatus === 'PAUSED_RECOVERY' || fuelEarnStatus === 'AT_CAP'
+      ? T.amber
+      : T.green;
+
   return (
     <ScreenBackground>
       <BackButton onClick={() => router.back()} />
 
-      {/* Title */}
       <h1
         className="text-2xl font-bold tracking-wide mt-2 mb-1"
         style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}
       >
         Inventory
       </h1>
-      <p className="text-xs leading-[18px]" style={{ color: T.textSecondary }}>
-        Your dungeon resources
+      <p className="text-xs leading-[18px] mb-5" style={{ color: T.textSecondary }}>
+        Your on-chain resources
       </p>
 
-      {/* Fuel card */}
-      <ParchmentCard
-        className="mt-4"
-        style={{ padding: 20, borderColor: `${T.rust}25` }}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <p
-              className="font-mono text-[10px] uppercase tracking-[1px]"
-              style={{ color: T.textSecondary }}
+      {/* 2-column layout on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Fuel card */}
+        <ParchmentCard
+          style={{ padding: 24, borderLeftWidth: 3, borderLeftColor: T.rust }}
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div
+              className="w-12 h-12 rounded-[10px] flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'rgba(232,132,90,0.08)',
+                border: '1px solid rgba(232,132,90,0.15)',
+              }}
             >
-              Fuel
-            </p>
-            <p className="text-[30px] font-bold mt-1" style={{ color: T.rust }}>
-              {fuelBalance}
-              <span className="text-sm font-normal" style={{ color: T.textSecondary }}>
-                /{fuelCap}
-              </span>
-            </p>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T.rust} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14 0-5.5 3-7 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.38-2.35 1-3.5.5.88 1.13 1.62 1.5 3z" />
+              </svg>
+            </div>
+            <div>
+              <p
+                className="text-[20px] font-bold"
+                style={{ fontFamily: 'Georgia, serif', color: T.rust }}
+              >
+                Fuel
+              </p>
+              <p className="text-[28px] font-bold" style={{ color: T.rust }}>
+                {fuelBalance} / {fuelCap}
+              </p>
+            </div>
           </div>
-          <span className="text-[30px]">{'\u26FD'}</span>
-        </div>
-        <p className="text-[11px] mt-2" style={{ color: T.textSecondary }}>
-          {formatFuelEarnStatus(fuelEarnStatus)}
-        </p>
-        <p className="text-[11px] mt-1" style={{ color: T.textMuted }}>
-          Next burn: {formatBurnTime(nextFuelBurnAt)}
-        </p>
-        <p className="text-[11px] mt-1" style={{ color: T.textMuted }}>
-          Brewer: {brewerStatus}
-        </p>
-      </ParchmentCard>
 
-      {/* Dungeon Ichor card */}
-      <ParchmentCard
-        className="mt-3"
-        style={{ padding: 20, borderColor: `${T.amber}25` }}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <p
-              className="font-mono text-[10px] uppercase tracking-[1px]"
-              style={{ color: T.textSecondary }}
+          <div className="flex flex-col gap-3">
+            <div className="flex justify-between items-center py-3" style={{ borderBottom: '1px dashed rgba(255,255,255,0.04)' }}>
+              <span className="text-[13px]" style={{ fontFamily: 'Georgia, serif', color: T.textSecondary }}>Earn Status</span>
+              <span className="text-[13px] font-bold" style={{ color: earnStatusColor }}>{formatFuelEarnStatus(fuelEarnStatus)}</span>
+            </div>
+            <div className="flex justify-between items-center py-3" style={{ borderBottom: '1px dashed rgba(255,255,255,0.04)' }}>
+              <span className="text-[13px]" style={{ fontFamily: 'Georgia, serif', color: T.textSecondary }}>Next Burn</span>
+              <span className="text-[13px] font-bold" style={{ color: T.textSecondary }}>{formatBurnTime(nextFuelBurnAt)}</span>
+            </div>
+            <div className="flex justify-between items-center py-3">
+              <span className="text-[13px]" style={{ fontFamily: 'Georgia, serif', color: T.textSecondary }}>Brewer Status</span>
+              <span className="text-[13px] font-bold" style={{ color: fuelBalance > 0 ? T.green : T.textMuted }}>{brewerStatus}</span>
+            </div>
+          </div>
+        </ParchmentCard>
+
+        {/* Dungeon Ichor card */}
+        <ParchmentCard
+          style={{ padding: 24, borderLeftWidth: 3, borderLeftColor: T.amber }}
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div
+              className="w-12 h-12 rounded-[10px] flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'rgba(212,160,74,0.08)',
+                border: '1px solid rgba(212,160,74,0.15)',
+              }}
             >
-              Dungeon Ichor
-            </p>
-            <p className="text-[30px] font-bold mt-1" style={{ color: T.amber }}>
-              {Math.floor(dungeonIchor).toLocaleString()}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T.amber} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.8H6.8A2 2 0 0 1 5 17l4-9V3z" />
+                <path d="M9 3h6" />
+                <path d="M7 15h10" />
+              </svg>
+            </div>
+            <div>
+              <p
+                className="text-[20px] font-bold"
+                style={{ fontFamily: 'Georgia, serif', color: T.amber }}
+              >
+                Dungeon Ichor
+              </p>
+              <p className="text-[28px] font-bold" style={{ color: T.green }}>
+                {Math.floor(dungeonIchor).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="rounded-lg p-3"
+            style={{
+              background: 'rgba(212,160,74,0.04)',
+              border: '1px solid rgba(212,160,74,0.1)',
+            }}
+          >
+            <p className="text-[11px] leading-relaxed" style={{ color: T.textSecondary }}>
+              Locked until course complete + lock period ends. Redeem via Rewards page.
             </p>
           </div>
-          <span className="text-[30px]">{'\u2697'}</span>
-        </div>
-        <p className="text-[11px] mt-2" style={{ color: T.textMuted }}>
-          Locked until course complete + lock period ends
-        </p>
-      </ParchmentCard>
+        </ParchmentCard>
+      </div>
     </ScreenBackground>
   );
 }

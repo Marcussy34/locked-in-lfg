@@ -6,9 +6,7 @@ import { useDungeon } from '@/components/DungeonProvider';
 import { useCourseStore } from '@/stores/courseStore';
 import { useUserStore } from '@/stores/userStore';
 import type { Viewpoint } from '@/types';
-import { useFlameStore } from '@/stores/flameStore';
 import { useSceneStore } from '@/stores/sceneStore';
-import { useStreakStore } from '@/stores/streakStore';
 import { T, ParchmentCard, ProgressBar } from '@/components/theme';
 import { User } from 'lucide-react';
 
@@ -19,12 +17,19 @@ export default function DungeonPage() {
     sceneReady, loadProgress, iframeError,
   } = useDungeon();
 
-  // Store subscriptions
-  const flameState = useFlameStore((s) => s.flameState);
-  const lightIntensity = useFlameStore((s) => s.lightIntensity);
+  // Store subscriptions — derive flame from courseStore (matches dashboard)
+  const activeGameState = useCourseStore((s) => {
+    const id = s.activeCourseId;
+    return id ? s.courseStates[id] ?? null : null;
+  });
+  const flameState = activeGameState?.flameState ?? 'COLD';
+  const lightIntensity = activeGameState?.lightIntensity ?? 0.15;
   const currentViewpoint = useSceneStore((s) => s.currentViewpoint);
   const roomPhase = useSceneStore((s) => s.roomPhase);
-  const currentStreak = useStreakStore((s) => s.currentStreak);
+  const currentStreak = useCourseStore((s) => {
+    const active = s.activeCourseId;
+    return active ? (s.courseStates[active]?.currentStreak ?? 0) : 0;
+  });
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
   const activeCourseIds = useCourseStore((s) => s.activeCourseIds);
   const courseStates = useCourseStore((s) => s.courseStates);
@@ -159,16 +164,7 @@ export default function DungeonPage() {
   // Refresh course runtime from backend and sync flame if real streak data exists
   useEffect(() => {
     if (!activeCourseId || !authToken) return;
-    refreshCourseRuntime(activeCourseId, authToken)
-      .then(() => {
-        // Only sync flame if the backend actually returned streak data
-        // (courseState.currentStreak is set by syncCourseRuntime from the API response)
-        const state = useCourseStore.getState().courseStates[activeCourseId];
-        if (state && state.currentStreak > 0) {
-          useFlameStore.getState().updateFromStreak(state.currentStreak);
-        }
-      })
-      .catch(() => {});
+    refreshCourseRuntime(activeCourseId, authToken).catch(() => {});
   }, [activeCourseId, authToken, refreshCourseRuntime]);
 
   // Error state — fixed z-[5] so it stacks above the dungeon iframe (z-0)
@@ -340,21 +336,27 @@ function BookModal({
         {/* Action grid */}
         <div className="grid grid-cols-4 gap-2.5 mt-4">
           {[
-            { icon: '⚗️', label: 'Practice' },
-            { icon: '🧩', label: 'Puzzle' },
-            { icon: '📜', label: 'Dictionary' },
+            { icon: '⚗️', label: 'Practice', soon: true },
+            { icon: '🧩', label: 'Puzzle', soon: true },
+            { icon: '📜', label: 'Dictionary', soon: true },
             { icon: '📚', label: 'Courses', action: onBrowseCourses },
           ].map((item) => (
             <button
               key={item.label}
               onClick={item.action}
-              className="flex flex-col items-center gap-1.5 py-3.5 rounded-[10px] border transition-all duration-150 hover:border-[rgba(212,160,74,0.18)] hover:bg-[rgba(255,255,255,0.06)]"
+              disabled={item.soon}
+              className={`flex flex-col items-center gap-1.5 py-3.5 rounded-[10px] border transition-all duration-150 ${item.soon ? 'opacity-40' : 'hover:border-[rgba(212,160,74,0.18)] hover:bg-[rgba(255,255,255,0.06)]'}`}
               style={{ backgroundColor: T.bgCard, borderColor: T.borderDormant }}
             >
               <span className="text-xl">{item.icon}</span>
               <span className="font-mono text-[10px] font-semibold tracking-wide" style={{ color: T.textSecondary }}>
                 {item.label}
               </span>
+              {item.soon && (
+                <span className="font-mono text-[8px] uppercase tracking-[1px]" style={{ color: T.textMuted }}>
+                  Soon
+                </span>
+              )}
             </button>
           ))}
         </div>

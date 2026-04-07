@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore, useUserStore } from '@/stores';
-import { getUserXp } from '@/services/api/progress/progressApi';
+import { getUserXp, getYieldHistory } from '@/services/api/progress/progressApi';
+import { fetchWithAuth } from '@/services/api/httpClient';
 import {
   ScreenBackground,
   BackButton,
@@ -27,6 +28,7 @@ export default function DashboardPage() {
   const authToken = useUserStore((s) => s.authToken);
 
   const [xp, setXp] = useState({ xpTotal: 0, xpLevel: 1 });
+  const [yieldData, setYieldData] = useState({ totalYield: 0, redirected: 0, fees: 0 });
 
   useEffect(() => {
     if (authToken) {
@@ -34,17 +36,26 @@ export default function DashboardPage() {
     }
   }, [authToken]);
 
+  useEffect(() => {
+    if (!activeCourseId) return;
+    fetchWithAuth((token) => getYieldHistory(activeCourseId, token))
+      .then((data) => {
+        if (data) setYieldData({
+          totalYield: parseFloat(data.totalGrossYieldUi || '0'),
+          redirected: parseFloat(data.totalRedirectedUi || '0'),
+          fees: parseFloat(data.totalPlatformFeeUi || '0'),
+        });
+      })
+      .catch(() => {});
+  }, [activeCourseId]);
+
   const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
   const activeCourse = activeCourseId ? courses.find((c) => c.id === activeCourseId) : null;
 
-  const streak = activeState?.currentStreak ?? 0;
-  const longestStreak = activeState?.longestStreak ?? 0;
   const fuelBalance = activeState?.fuelCounter ?? 0;
   const fuelCap = activeState?.fuelCap ?? 7;
   const fuelFragments = activeState?.fuelFragmentsToday ?? 0;
   const ichorBalance = activeState?.ichorBalance ?? 0;
-  const saverCount = activeState?.saverCount ?? 0;
-  const saversRemaining = Math.max(0, 3 - saverCount);
 
   // Total lessons completed across all courses
   const totalCompleted = Object.values(lessonProgress).filter((p) => p.completed).length;
@@ -58,8 +69,17 @@ export default function DashboardPage() {
   const nextThreshold = XP_THRESHOLDS[xp.xpLevel] ?? currentThreshold + 1000;
   const xpProgress = (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold);
 
-  const flameLabel = streak >= 3 ? 'Burning' : streak >= 1 ? 'Lit' : 'Cold';
-  const flameColor = streak >= 3 ? T.amber : streak >= 1 ? T.rust : T.textMuted;
+  // Lock progress
+  const lockProgress = useMemo(() => {
+    if (!activeState?.lockStartDate) return null;
+    const start = new Date(activeState.lockStartDate).getTime();
+    const totalDays = (activeState.lockDuration ?? 30) + (activeState.extensionDays ?? 0);
+    const endDate = new Date(start + totalDays * 86400000);
+    const elapsed = Math.max(0, Math.floor((Date.now() - start) / 86400000));
+    return { totalDays, elapsed: Math.min(elapsed, totalDays), endDate };
+  }, [activeState?.lockStartDate, activeState?.lockDuration, activeState?.extensionDays]);
+
+  const netEarned = yieldData.totalYield - yieldData.redirected - yieldData.fees;
 
   return (
     <ScreenBackground>
@@ -87,43 +107,53 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="flex flex-col gap-2.5">
-        <div className="flex gap-2.5">
-          <StatBox label="Streak" value={`${streak} day${streak !== 1 ? 's' : ''}`} color={flameColor} />
-          <StatBox label="Longest" value={`${longestStreak} day${longestStreak !== 1 ? 's' : ''}`} color={T.amber} />
-        </div>
-        <div className="flex gap-2.5">
-          <StatBox label="Fuel" value={`${fuelBalance}/${fuelCap}`} color={T.rust} />
-          <StatBox label="Ichor" value={Math.floor(ichorBalance)} color={T.green} />
-        </div>
-        <div className="flex gap-2.5">
-          <StatBox label="Lessons Done" value={`${totalCompleted}/${totalLessons}`} color={T.violet} />
-          <StatBox label="Courses" value={enrolledCount} color={T.teal} />
-        </div>
+      {/* Stats grid — 2-col on mobile, 6-col on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5">
+        <StatBox label="Locked" value={`${activeState?.lockAmount ?? 0}`} suffix="USDC" color={T.amber} />
+        <StatBox label="Earned" value={yieldData.totalYield.toFixed(2)} suffix="USDC" color={T.green} />
+        <StatBox label="Fuel" value={`${fuelBalance}/${fuelCap}`} color={T.rust} />
+        <StatBox label="Ichor" value={Math.floor(ichorBalance)} color={T.green} />
+        <StatBox label="Lessons" value={`${totalCompleted}/${totalLessons}`} color={T.violet} />
+        <StatBox label="Courses" value={enrolledCount} color={T.teal} />
       </div>
 
-      {/* Flame status */}
-      <ParchmentCard className="mt-4 flex items-center gap-4 p-4">
-        <span className="text-[32px]">
-          {streak >= 3 ? '\u{1F525}' : streak >= 1 ? '\u{1FA94}' : '\u{1F9CA}'}
-        </span>
-        <div>
-          <p className="text-[15px] font-bold" style={{ color: flameColor, fontFamily: 'Georgia, serif' }}>
-            Flame: {flameLabel}
-          </p>
-          <p className="text-[11px] mt-0.5" style={{ color: T.textSecondary }}>
-            {streak >= 3
-              ? 'Yield is active. Keep the streak alive.'
-              : streak >= 1
-                ? 'Building momentum. 3-day streak activates yield.'
-                : 'Complete a lesson today to light the flame.'}
-          </p>
+      {/* Cards — single column on mobile, 2-col on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+
+      {/* Earnings Overview */}
+      <ParchmentCard className="p-4">
+        <SectionLabel>Earnings Overview</SectionLabel>
+        <div className="flex flex-col gap-2 mt-1">
+          <div className="flex justify-between items-center">
+            <span className="text-[12px]" style={{ color: T.textSecondary }}>Total Yield</span>
+            <span className="text-[13px] font-mono font-bold" style={{ color: T.green }}>
+              {yieldData.totalYield.toFixed(4)} USDC
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[12px]" style={{ color: T.textSecondary }}>Redirected</span>
+            <span className="text-[13px] font-mono" style={{ color: T.rust }}>
+              -{yieldData.redirected.toFixed(4)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[12px]" style={{ color: T.textSecondary }}>Community Share</span>
+            <span className="text-[13px] font-mono" style={{ color: T.textMuted }}>
+              -{yieldData.fees.toFixed(4)}
+            </span>
+          </div>
+          <div className="w-full h-px my-1" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
+          <div className="flex justify-between items-center">
+            <span className="text-[12px] font-bold" style={{ color: T.textPrimary }}>Net Earned</span>
+            <span className="text-[13px] font-mono font-bold" style={{ color: T.amber }}>
+              {netEarned.toFixed(4)} USDC
+            </span>
+          </div>
         </div>
       </ParchmentCard>
 
       {/* Fuel progress today */}
-      <ParchmentCard className="mt-3 p-4">
+      <ParchmentCard className="p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="font-mono text-[10px] uppercase tracking-[1px]" style={{ color: T.textSecondary }}>
             Today&apos;s Fuel
@@ -140,30 +170,45 @@ export default function DashboardPage() {
         </div>
       </ParchmentCard>
 
-      {/* Saver lamps */}
-      <ParchmentCard className="mt-3 p-4">
-        <SectionLabel>Saver Lamps</SectionLabel>
-        <div className="flex justify-center gap-7 mt-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col items-center">
-              <span className="text-[24px]">{i < saversRemaining ? '\u{1F525}' : '\u{1F4A8}'}</span>
-              <span
-                className="font-mono text-[9px] mt-1 uppercase tracking-[1px]"
-                style={{ color: i < saversRemaining ? T.green : T.textMuted }}
-              >
-                {i < saversRemaining ? 'Active' : 'Used'}
-              </span>
-            </div>
-          ))}
+      {/* Lock Status */}
+      <ParchmentCard className="p-4">
+        <SectionLabel>Lock Status</SectionLabel>
+        <div className="flex items-center gap-3 mt-1">
+          <span className="text-[28px]">{'\u{1F512}'}</span>
+          <div className="flex-1">
+            <p className="text-[15px] font-bold" style={{ color: T.amber, fontFamily: 'Georgia, serif' }}>
+              {activeState?.lockAmount ?? 0} USDC
+            </p>
+            {lockProgress ? (
+              <>
+                <p className="text-[11px] mt-0.5" style={{ color: T.textSecondary }}>
+                  Unlocks {lockProgress.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+                <div className="w-full h-1.5 rounded-full overflow-hidden mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (lockProgress.elapsed / lockProgress.totalDays) * 100)}%`,
+                      backgroundColor: T.amber,
+                    }}
+                  />
+                </div>
+                <p className="text-[10px] font-mono mt-1" style={{ color: T.textMuted }}>
+                  {lockProgress.elapsed}/{lockProgress.totalDays} days elapsed
+                </p>
+              </>
+            ) : (
+              <p className="text-[11px] mt-0.5" style={{ color: T.textMuted }}>
+                No active lock
+              </p>
+            )}
+          </div>
         </div>
-        <p className="text-[10px] text-center mt-2" style={{ color: T.textMuted }}>
-          Miss a day? A saver protects your streak. {saversRemaining}/3 remaining.
-        </p>
       </ParchmentCard>
 
       {/* Active course */}
       {activeCourse && (
-        <ParchmentCard className="mt-3 p-4 mb-6">
+        <ParchmentCard className="p-4">
           <SectionLabel>Active Course</SectionLabel>
           <p className="text-[15px] font-bold mt-1" style={{ color: T.textPrimary, fontFamily: 'Georgia, serif' }}>
             {activeCourse.title}
@@ -171,8 +216,21 @@ export default function DashboardPage() {
           <p className="text-[11px] mt-1" style={{ color: T.textSecondary }}>
             {activeCourse.completedLessons}/{(lessons[activeCourse.id] ?? []).length || activeCourse.totalLessons} lessons completed
           </p>
+          <button
+            onClick={() => router.push('/dungeon')}
+            className="w-full mt-3 py-2.5 rounded-lg text-center font-bold text-sm uppercase tracking-[1px]"
+            style={{
+              border: `1px solid ${T.amber}`,
+              background: 'rgba(212,160,74,0.12)',
+              color: T.amber,
+              fontFamily: 'Georgia, serif',
+            }}
+          >
+            {'\u25C6'} Continue Lesson {'\u25C6'}
+          </button>
         </ParchmentCard>
       )}
+      </div>
     </ScreenBackground>
   );
 }

@@ -6,8 +6,9 @@ import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit';
 import { DungeonProvider } from '@/components/DungeonProvider';
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? '';
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
-const WS_URL = process.env.NEXT_PUBLIC_SOLANA_WS_URL ?? 'wss://api.devnet.solana.com';
+const SOLANA_CLUSTER = process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? 'devnet';
+const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? `https://api.${SOLANA_CLUSTER}.solana.com`;
+const WS_URL = process.env.NEXT_PUBLIC_SOLANA_WS_URL ?? `wss://api.${SOLANA_CLUSTER}.solana.com`;
 
 const solanaRpc = createSolanaRpc(RPC_URL);
 const solanaRpcSubscriptions = createSolanaRpcSubscriptions(WS_URL);
@@ -19,7 +20,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       config={{
         solana: {
           rpcs: {
-            'solana:devnet': {
+            [`solana:${SOLANA_CLUSTER}`]: {
               rpc: solanaRpc,
               rpcSubscriptions: solanaRpcSubscriptions,
             },

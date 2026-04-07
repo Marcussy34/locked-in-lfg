@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
+import { BottomNav } from './BottomNav';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserStore } from '@/stores/userStore';
 import { useCourseStore } from '@/stores/courseStore';
@@ -142,6 +143,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (bestStreak > 0) {
           useFlameStore.getState().updateFromStreak(bestStreak);
         }
+
+        // Promote returning users past onboarding when backend confirms enrollments
+        // (handles case where localStorage was cleared but user already has active locks)
+        if (data.enrollments.length > 0) {
+          const userState = useUserStore.getState();
+          if (userState.onboardingPhase !== 'main') {
+            userState.setOnboardingPhase('main');
+          }
+          if (!userState.tutorialCompleted) {
+            userState.completeTutorial();
+          }
+        }
       })
       .catch(() => {}); // Fail silently — local state is still usable
   }, [hydrated, isAuthenticated]);
@@ -170,7 +183,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       {isInMainApp && <Sidebar />}
-      <main className={`flex-1 ${isInMainApp ? 'md:ml-56' : ''}`}>
+      {isInMainApp && <BottomNav />}
+      <main className={`flex-1 ${isInMainApp ? 'md:ml-[240px] pb-[72px] md:pb-0' : ''}`}>
         {children}
       </main>
     </>

@@ -2,10 +2,8 @@
 
 import { useCallback, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCourseStore, useUserStore, useStreakStore, useFlameStore } from '@/stores';
-import { hasRemoteLessonApi, startLesson, submitLesson } from '@/services/api';
-import { refreshAuthSession } from '@/services/api/auth/authApi';
-import { ApiError } from '@/services/api/errors';
+import { useCourseStore, useUserStore, useFlameStore } from '@/stores';
+import { hasRemoteLessonApi, startLesson, submitLesson, fetchWithAuth } from '@/services/api';
 import type { Question, Lesson } from '@/types';
 import {
   T,
@@ -29,8 +27,6 @@ export default function LessonPage(props: {
   const lesson = useCourseStore((s) => s.getLesson(lessonId));
   const walletAddress = useUserStore((s) => s.walletAddress);
   const authToken = useUserStore((s) => s.authToken);
-  const refreshToken = useUserStore((s) => s.refreshToken);
-  const setAuthSession = useUserStore((s) => s.setAuthSession);
 
   // Recall: pick a random question from completed previous lessons
   const lessonProgress = useCourseStore((s) => s.lessonProgress);
@@ -100,47 +96,12 @@ export default function LessonPage(props: {
   const lessonOrder = lesson?.order ?? 0;
   const totalLessonsInCourse = courseLessons.length;
 
-  // Auth helpers
-  const refreshBackendAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!refreshToken) return null;
-    try {
-      const refreshed = await refreshAuthSession({ refreshToken });
-      setAuthSession(refreshed.accessToken, refreshed.refreshToken);
-      return refreshed.accessToken;
-    } catch {
-      setAuthSession(null, null);
-      return null;
-    }
-  }, [refreshToken, setAuthSession]);
-
-  const ensureBackendAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!usesRemoteVerification) return null;
-    if (authToken) return authToken;
-    return refreshBackendAccessToken();
-  }, [usesRemoteVerification, authToken, refreshBackendAccessToken]);
-
-  const runWithTokenRefreshRetry = useCallback(
-    async <TResult,>(operation: (token: string) => Promise<TResult>): Promise<TResult | null> => {
-      const token = await ensureBackendAccessToken();
-      if (!token) return null;
-      try {
-        return await operation(token);
-      } catch (err) {
-        if (!(err instanceof ApiError) || err.status !== 401) throw err;
-        const refreshedToken = await refreshBackendAccessToken();
-        if (!refreshedToken) return null;
-        return operation(refreshedToken);
-      }
-    },
-    [ensureBackendAccessToken, refreshBackendAccessToken],
-  );
-
   // Lesson completion
   const applyLessonCompletion = useCallback(
     (score: number) => {
       useCourseStore.getState().completeLesson(lessonId, courseId, score);
-      useStreakStore.getState().completeDay();
-      const newStreak = useStreakStore.getState().currentStreak;
+      useCourseStore.getState().completeDayForCourse(courseId);
+      const newStreak = useCourseStore.getState().courseStates[courseId]?.currentStreak ?? 0;
       useFlameStore.getState().updateFromStreak(newStreak);
     },
     [courseId, lessonId],
@@ -150,13 +111,13 @@ export default function LessonPage(props: {
     (nextAttemptId: string, startedAt: string) => {
       if (startSynced || !usesRemoteVerification) return;
       setStartSynced(true);
-      runWithTokenRefreshRetry((token) =>
+      fetchWithAuth((token) =>
         startLesson(lessonId, { attemptId: nextAttemptId, startedAt }, token),
       ).catch(() => {
         setStartSynced(false);
       });
     },
-    [lessonId, runWithTokenRefreshRetry, startSynced, usesRemoteVerification],
+    [lessonId, startSynced, usesRemoteVerification],
   );
 
   const gradeCurrentAnswer = useCallback(() => {
@@ -182,7 +143,7 @@ export default function LessonPage(props: {
       if (!attemptId || !attemptStartedAt) {
         throw new Error('Lesson attempt was not initialized.');
       }
-      const response = await runWithTokenRefreshRetry((token) =>
+      const response = await fetchWithAuth((token) =>
         submitLesson(
           lessonId,
           {
@@ -200,7 +161,7 @@ export default function LessonPage(props: {
       if (!response) throw new Error('Backend session expired.');
       return response;
     },
-    [attemptId, attemptStartedAt, lessonId, questions, runWithTokenRefreshRetry],
+    [attemptId, attemptStartedAt, lessonId, questions],
   );
 
   const finalizeLesson = useCallback(
@@ -229,9 +190,9 @@ export default function LessonPage(props: {
             params.set('xpTotal', String(result.xp.xpTotal));
             params.set('xpLevel', String(result.xp.xpLevel));
           }
-          // Store question review data for result page
+          // Store question review data for result page (lesson-specific, persists across revisits)
           try {
-            sessionStorage.setItem('lastQuizReview', JSON.stringify({
+            localStorage.setItem(`quizReview::${lessonId}`, JSON.stringify({
               questions: questions.map(q => ({
                 id: q.id,
                 prompt: q.prompt,
@@ -242,7 +203,7 @@ export default function LessonPage(props: {
               userAnswers: answerMap,
               questionResults: result.questionResults ?? [],
             }));
-          } catch { /* sessionStorage may be unavailable */ }
+          } catch { /* localStorage may be unavailable */ }
           router.push(`/lessons/${lessonId}/result?${params.toString()}`);
         } catch {
           setError('Submit failed. Please try again.');
@@ -260,9 +221,9 @@ export default function LessonPage(props: {
         total: String(totalQuestions),
         accepted: 'true',
       });
-      // Store question review data for result page
+      // Store question review data for result page (lesson-specific, persists across revisits)
       try {
-        sessionStorage.setItem('lastQuizReview', JSON.stringify({
+        localStorage.setItem(`quizReview::${lessonId}`, JSON.stringify({
           questions: questions.map(q => ({
             id: q.id,
             prompt: q.prompt,
@@ -273,7 +234,7 @@ export default function LessonPage(props: {
           userAnswers: answerMap,
           questionResults: [],
         }));
-      } catch { /* sessionStorage may be unavailable */ }
+      } catch { /* localStorage may be unavailable */ }
       router.push(`/lessons/${lessonId}/result?${params.toString()}`);
     },
     [

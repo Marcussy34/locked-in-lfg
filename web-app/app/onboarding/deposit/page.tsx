@@ -152,6 +152,20 @@ function DepositContent() {
       return;
     }
 
+    // Re-validate wallet balance before building transaction
+    try {
+      const freshBalances = await fetchWalletDepositBalances(walletAddress);
+      setBalances(freshBalances);
+      const usdcBalance = Number(freshBalances.stableBalanceUi);
+      if (usdcBalance < amount) {
+        setStatusMessage(`Insufficient USDC. You have ${freshBalances.stableBalanceUi} USDC.`);
+        return;
+      }
+    } catch {
+      // If balance fetch fails, proceed with stale balance — the on-chain tx will fail if insufficient
+      console.warn('[deposit] Could not re-fetch balance before tx');
+    }
+
     setIsSubmitting(true);
     setStatusMessage('Building transaction...');
 
@@ -215,15 +229,12 @@ function DepositContent() {
 
   return (
     <ScreenBackground>
-      {/* Back button */}
-      <BackButton onClick={() => router.back()} />
-
       {/* Page title */}
       <h1
         className="text-2xl font-bold tracking-wide mb-1"
         style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}
       >
-        Lock Your Funds
+        Lock Your <span style={{ color: T.amber }}>Funds</span>
       </h1>
       <p className="text-sm mt-1" style={{ color: T.textSecondary }}>
         {course?.title ?? 'Selected Course'}
@@ -235,185 +246,197 @@ function DepositContent() {
         Create the on-chain lock to start learning.
       </p>
 
-      {/* Main card with all deposit fields */}
-      <ParchmentCard className="mt-4">
-        {/* Course Lock Policy */}
-        <SectionLabel>Course Lock Policy</SectionLabel>
+      {/* Two-column layout: form left, info right */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
+        {/* Left column — Form */}
+        <div>
+          <ParchmentCard>
+            {/* Principal Amount */}
+            <SectionLabel>Amount</SectionLabel>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={principalAmount}
+              onChange={(e) => setPrincipalAmount(e.target.value)}
+              placeholder={courseLockPolicy.minPrincipalAmountUi}
+              className="w-full px-3.5 py-3.5 rounded-lg border text-2xl font-bold bg-transparent outline-none mt-1.5 transition-colors focus:border-[rgba(212,160,74,0.3)]"
+              style={{
+                color: T.textPrimary,
+                borderColor: T.borderDormant,
+                backgroundColor: 'rgba(0,0,0,0.3)',
+              }}
+            />
 
-        <div
-          className="rounded-lg border px-3.5 py-3 mb-4"
-          style={{
-            backgroundColor: 'rgba(0,0,0,0.3)',
-            borderColor: T.borderDormant,
-          }}
-        >
-          <p className="text-[13px] mt-0.5" style={{ color: T.textSecondary }}>
-            Minimum deposit: {courseLockPolicy.minPrincipalAmountUi} USDC
-          </p>
-          <p className="text-[13px] mt-0.5" style={{ color: T.textSecondary }}>
-            Maximum deposit:{' '}
-            {courseLockPolicy.maxPrincipalAmountUi
-              ? `${courseLockPolicy.maxPrincipalAmountUi} USDC`
-              : 'No course max'}
-          </p>
-          <p className="text-[13px] mt-0.5" style={{ color: T.textSecondary }}>
-            Demo preset:{' '}
-            {courseLockPolicy.demoPrincipalAmountUi
-              ? `${courseLockPolicy.demoPrincipalAmountUi} USDC`
-              : 'None'}
-          </p>
-          <p className="text-[13px] mt-0.5" style={{ color: T.textSecondary }}>
-            Policy duration: {courseLockPolicy.minLockDurationDays}-
-            {courseLockPolicy.maxLockDurationDays} days
-          </p>
-          <p className="text-[13px] mt-0.5" style={{ color: T.textMuted }}>
-            Current on-chain presets:{' '}
-            {availableLockDurations.length > 0
-              ? availableLockDurations.map((d) => `${d}d`).join(' / ')
-              : 'None yet'}
-          </p>
-        </div>
+            {/* Preset pills */}
+            <div className="flex flex-wrap gap-2 mt-2.5">
+              {principalPresets.map((value) => {
+                const selected = Number(principalAmount) === value;
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setPrincipalAmount(String(value))}
+                    className="px-3 py-2 rounded-full border text-[13px] font-semibold transition-colors"
+                    style={{
+                      borderColor: selected ? T.amber : T.borderDormant,
+                      backgroundColor: selected
+                        ? `${T.amber}15`
+                        : 'rgba(0,0,0,0.2)',
+                      color: selected ? T.amber : T.textSecondary,
+                    }}
+                  >
+                    {value} USDC
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* Stablecoin */}
-        <SectionLabel>Stablecoin</SectionLabel>
-        <div
-          className="rounded-lg border py-2.5 text-center mb-1"
-          style={{
-            backgroundColor: `${T.green}12`,
-            borderColor: `${T.green}30`,
-          }}
-        >
-          <span className="text-sm font-semibold" style={{ color: T.green }}>
-            USDC only
-          </span>
-        </div>
+            {/* Hint text */}
+            <p className="text-[11px] mt-1.5" style={{ color: T.textMuted }}>
+              {courseLockPolicy.demoPrincipalAmountUi
+                ? `Demo preset: ${courseLockPolicy.demoPrincipalAmountUi} USDC`
+                : 'Course minimums apply to all lock amounts.'}
+            </p>
 
-        {/* Principal Amount */}
-        <SectionLabel>Principal Amount</SectionLabel>
-        <input
-          type="number"
-          inputMode="decimal"
-          value={principalAmount}
-          onChange={(e) => setPrincipalAmount(e.target.value)}
-          placeholder={courseLockPolicy.minPrincipalAmountUi}
-          className="w-full px-3.5 py-3.5 rounded-lg border text-[17px] bg-transparent outline-none mt-1.5"
-          style={{
-            color: T.textPrimary,
-            borderColor: T.borderDormant,
-            backgroundColor: 'rgba(0,0,0,0.3)',
-          }}
-        />
-
-        {/* Preset pills */}
-        <div className="flex flex-wrap gap-2 mt-2.5">
-          {principalPresets.map((value) => {
-            const selected = Number(principalAmount) === value;
-            return (
-              <button
-                key={value}
-                onClick={() => setPrincipalAmount(String(value))}
-                className="px-3 py-2 rounded-full border text-[13px] font-semibold transition-colors"
+            {/* SKR Boost */}
+            <div className="mt-5">
+              <SectionLabel>SKR Boost (optional)</SectionLabel>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={skrAmount}
+                onChange={(e) => setSkrAmount(e.target.value)}
+                placeholder="0"
+                className="w-full px-3.5 py-3.5 rounded-lg border text-[17px] bg-transparent outline-none mt-1.5 transition-colors focus:border-[rgba(212,160,74,0.3)]"
                 style={{
-                  borderColor: selected ? T.amber : T.borderDormant,
-                  backgroundColor: selected
-                    ? `${T.amber}15`
-                    : 'rgba(0,0,0,0.2)',
-                  color: selected ? T.amber : T.textSecondary,
+                  color: T.textPrimary,
+                  borderColor: T.borderDormant,
+                  backgroundColor: 'rgba(0,0,0,0.3)',
                 }}
-              >
-                {value} USDC
-              </button>
-            );
-          })}
-        </div>
+              />
+            </div>
 
-        {/* Hint text */}
-        <p className="text-[11px] mt-1.5" style={{ color: T.textMuted }}>
-          {courseLockPolicy.demoPrincipalAmountUi
-            ? `${courseLockPolicy.demoPrincipalAmountUi} USDC stays available as the demo preset for this course.`
-            : 'Course minimums apply to all lock amounts.'}
-        </p>
+            {/* Lock Duration */}
+            <div className="mt-5">
+              <SectionLabel>Lock Duration</SectionLabel>
+              <div className="flex gap-2.5 mt-1.5">
+                {availableLockDurations.map((duration) => {
+                  const selected = lockDuration === duration;
+                  return (
+                    <button
+                      key={duration}
+                      onClick={() => setLockDuration(duration)}
+                      className="flex-1 py-2.5 rounded-lg border text-sm font-semibold text-center transition-colors"
+                      style={{
+                        borderColor: selected ? T.teal : T.borderDormant,
+                        backgroundColor: selected
+                          ? `${T.teal}12`
+                          : 'rgba(0,0,0,0.2)',
+                        color: selected ? T.teal : T.textPrimary,
+                      }}
+                    >
+                      {duration}d
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </ParchmentCard>
 
-        {/* Optional SKR */}
-        <div className="mt-4">
-          <SectionLabel>Optional SKR Amount</SectionLabel>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={skrAmount}
-            onChange={(e) => setSkrAmount(e.target.value)}
-            placeholder="0"
-            className="w-full px-3.5 py-3.5 rounded-lg border text-[17px] bg-transparent outline-none mt-1.5"
-            style={{
-              color: T.textPrimary,
-              borderColor: T.borderDormant,
-              backgroundColor: 'rgba(0,0,0,0.3)',
-            }}
-          />
-        </div>
+          {/* Status message */}
+          {statusMessage && (
+            <ParchmentCard className="mt-4">
+              <p className="text-[13px]" style={{ color: T.textSecondary }}>
+                {statusMessage}
+              </p>
+            </ParchmentCard>
+          )}
 
-        {/* Lock Duration */}
-        <div className="mt-4">
-          <SectionLabel>Lock Duration</SectionLabel>
-          <div className="flex gap-2.5 mt-1.5">
-            {availableLockDurations.map((duration) => {
-              const selected = lockDuration === duration;
-              return (
-                <button
-                  key={duration}
-                  onClick={() => setLockDuration(duration)}
-                  className="flex-1 py-2.5 rounded-lg border text-sm font-semibold text-center transition-colors"
-                  style={{
-                    borderColor: selected ? T.teal : T.borderDormant,
-                    backgroundColor: selected
-                      ? `${T.teal}12`
-                      : 'rgba(0,0,0,0.2)',
-                    color: selected ? T.teal : T.textPrimary,
-                  }}
-                >
-                  {duration}d
-                </button>
-              );
-            })}
+          {/* Deposit button */}
+          <div className="mt-4">
+            <PrimaryButton onClick={handleDeposit} disabled={isDisabled}>
+              {isSubmitting ? 'Creating Lock...' : 'Deposit & Start Learning'}
+            </PrimaryButton>
           </div>
         </div>
 
-        {/* Wallet Balances */}
-        <div
-          className="mt-5 rounded-lg border px-3.5 py-3"
-          style={{
-            backgroundColor: 'rgba(0,0,0,0.3)',
-            borderColor: T.borderDormant,
-          }}
-        >
-          <SectionLabel>Wallet Balances</SectionLabel>
-          <p className="text-[13px] mt-1" style={{ color: T.textSecondary }}>
-            USDC: {balances?.stableBalanceUi ?? '...'}
-          </p>
-          <p className="text-[13px] mt-1" style={{ color: T.textSecondary }}>
-            SKR: {balances?.skrBalanceUi ?? '...'}
-          </p>
-          <p className="text-[13px] mt-1" style={{ color: T.textSecondary }}>
-            SOL: {balances?.solBalanceUi ?? '...'}
-          </p>
+        {/* Right column — Info */}
+        <div>
+          <ParchmentCard>
+            {/* Course Policy */}
+            <SectionLabel>Course Policy</SectionLabel>
+            <div
+              className="rounded-lg border px-3.5 py-3"
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.3)',
+                borderColor: T.borderDormant,
+              }}
+            >
+              <p className="text-[13px]" style={{ color: T.textSecondary }}>
+                Min deposit: {courseLockPolicy.minPrincipalAmountUi} USDC
+              </p>
+              <p className="text-[13px] mt-1" style={{ color: T.textSecondary }}>
+                Max deposit:{' '}
+                {courseLockPolicy.maxPrincipalAmountUi
+                  ? `${courseLockPolicy.maxPrincipalAmountUi} USDC`
+                  : 'No course max'}
+              </p>
+              <p className="text-[13px] mt-1" style={{ color: T.textSecondary }}>
+                Duration: {courseLockPolicy.minLockDurationDays}-
+                {courseLockPolicy.maxLockDurationDays} days
+              </p>
+              <p className="text-[13px] mt-1" style={{ color: T.textMuted }}>
+                Presets:{' '}
+                {availableLockDurations.length > 0
+                  ? availableLockDurations.map((d) => `${d}d`).join(' / ')
+                  : 'None yet'}
+              </p>
+            </div>
+
+            {/* Stablecoin */}
+            <div className="mt-5">
+              <SectionLabel>Stablecoin</SectionLabel>
+              <div
+                className="rounded-lg border py-2.5 text-center"
+                style={{
+                  backgroundColor: `${T.green}12`,
+                  borderColor: `${T.green}30`,
+                }}
+              >
+                <span className="text-sm font-semibold" style={{ color: T.green }}>
+                  USDC only
+                </span>
+              </div>
+            </div>
+
+            {/* Wallet Balances */}
+            <div className="mt-5">
+              <SectionLabel>Wallet</SectionLabel>
+              <div
+                className="rounded-lg border px-3.5 py-3"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  borderColor: T.borderDormant,
+                }}
+              >
+                <div className="flex justify-between py-1.5" style={{ borderBottom: `1px solid ${T.borderDormant}` }}>
+                  <span className="text-[13px]" style={{ color: T.textSecondary }}>USDC</span>
+                  <span className="text-[13px] font-semibold" style={{ color: T.textPrimary }}>{balances?.stableBalanceUi ?? '...'}</span>
+                </div>
+                <div className="flex justify-between py-1.5" style={{ borderBottom: `1px solid ${T.borderDormant}` }}>
+                  <span className="text-[13px]" style={{ color: T.textSecondary }}>SKR</span>
+                  <span className="text-[13px] font-semibold" style={{ color: T.textPrimary }}>{balances?.skrBalanceUi ?? '...'}</span>
+                </div>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-[13px]" style={{ color: T.textSecondary }}>SOL</span>
+                  <span className="text-[13px] font-semibold" style={{ color: T.textPrimary }}>{balances?.solBalanceUi ?? '...'}</span>
+                </div>
+              </div>
+            </div>
+          </ParchmentCard>
         </div>
-      </ParchmentCard>
-
-      {/* Status message */}
-      {statusMessage && (
-        <ParchmentCard className="mt-4">
-          <p className="text-[13px]" style={{ color: T.textSecondary }}>
-            {statusMessage}
-          </p>
-        </ParchmentCard>
-      )}
-
-      {/* Deposit button */}
-      <div className="mt-5 mb-8">
-        <PrimaryButton onClick={handleDeposit} disabled={isDisabled}>
-          {isSubmitting ? 'Creating Lock...' : 'Deposit & Start Learning'}
-        </PrimaryButton>
       </div>
+
+      <div className="mb-8" />
     </ScreenBackground>
   );
 }
