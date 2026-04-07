@@ -286,8 +286,12 @@ export default function CoursesPage() {
               </p>
               <button
                 onClick={disconnect}
-                className="text-[10px] font-mono uppercase tracking-[1.5px]"
-                style={{ color: T.textMuted }}
+                className="mt-3 px-5 py-2 rounded-lg border text-[11px] font-mono font-bold uppercase tracking-[1.5px] transition-opacity hover:opacity-80"
+                style={{
+                  color: T.crimson,
+                  borderColor: `${T.crimson}30`,
+                  backgroundColor: `${T.crimson}0a`,
+                }}
               >
                 Disconnect Wallet
               </button>

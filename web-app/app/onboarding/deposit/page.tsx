@@ -302,7 +302,17 @@ function DepositContent() {
 
   return (
     <ScreenBackground>
-      <div className="pt-10" />
+      <button
+        onClick={() => router.back()}
+        className="mt-2 mb-2 px-4 py-2 rounded-lg border text-[12px] font-mono font-bold tracking-[1px] transition-opacity hover:opacity-80"
+        style={{
+          color: T.textPrimary,
+          borderColor: T.borderDormant,
+          backgroundColor: 'rgba(255,255,255,0.04)',
+        }}
+      >
+        ← Back
+      </button>
 
       {/* Header — Minimal with glowing underline */}
       <div className="mb-6 px-1">
