@@ -12,6 +12,8 @@ import {
   fetchWalletDepositBalances,
   type LockDurationDays as SolanaLockDuration,
 } from '@/services/solana';
+import { claimFaucet } from '@/services/api/faucet/faucetApi';
+import { fetchWithAuth } from '@/services/api/httpClient';
 import { connection } from '@/services/solana/connection';
 import {
   ScreenBackground,
@@ -128,6 +130,52 @@ function DepositContent() {
   const [skrAmount, setSkrAmount] = useState('0');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Faucet state
+  const [faucetClaiming, setFaucetClaiming] = useState(false);
+  const [faucetClaimed, setFaucetClaimed] = useState(false);
+  const [faucetMessage, setFaucetMessage] = useState<string | null>(null);
+  const [faucetCooldownUntil, setFaucetCooldownUntil] = useState<string | null>(null);
+
+  const faucetDisabled = faucetClaiming || faucetClaimed ||
+    (faucetCooldownUntil != null && new Date(faucetCooldownUntil) > new Date());
+
+  const handleClaimFaucet = async () => {
+    setFaucetClaiming(true);
+    setFaucetMessage(null);
+    try {
+      const resp = await fetchWithAuth((token) => claimFaucet(token));
+      if (!resp) {
+        setFaucetMessage('Connect wallet first.');
+        setFaucetClaiming(false);
+        return;
+      }
+      if (!resp.claimed) {
+        setFaucetCooldownUntil(resp.nextClaimAt);
+        setFaucetClaimed(true);
+        setFaucetMessage(resp.message ?? 'Already claimed. Try again later.');
+        setFaucetClaiming(false);
+        return;
+      }
+      const parts: string[] = [];
+      if (resp.sol.signature) parts.push(`${resp.sol.amountSol} SOL`);
+      if (resp.sol.error) parts.push(`SOL skipped`);
+      parts.push(`${resp.usdc.amountUsdc} USDC`);
+      setFaucetMessage(`Claimed ${parts.join(' + ')}!`);
+      setFaucetClaimed(true);
+      if (resp.nextClaimAt) setFaucetCooldownUntil(resp.nextClaimAt);
+      // Refresh wallet balances
+      if (walletAddress) {
+        fetchWalletDepositBalances(walletAddress)
+          .then(setBalances)
+          .catch(() => {});
+      }
+    } catch (err) {
+      setFaucetMessage(err instanceof Error ? err.message : 'Claim failed.');
+    } finally {
+      setFaucetClaiming(false);
+    }
+  };
 
   // Clamp lock duration to what the policy allows
   useEffect(() => {
@@ -468,6 +516,48 @@ function DepositContent() {
                 </div>
               </div>
             </div>
+          </ParchmentCard>
+
+          {/* Faucet — Get Test Tokens */}
+          <ParchmentCard
+            className="mt-4"
+            style={{ padding: 20, borderLeftWidth: 3, borderLeftColor: faucetClaimed ? T.textMuted : T.teal }}
+          >
+            <p
+              className="text-[15px] font-bold"
+              style={{ fontFamily: 'Georgia, serif', color: faucetClaimed ? T.textMuted : T.teal }}
+            >
+              {faucetClaimed ? 'Test tokens claimed' : 'Need test tokens?'}
+            </p>
+            <p className="text-[12px] mt-1 leading-relaxed" style={{ color: T.textSecondary }}>
+              {faucetClaimed
+                ? 'Come back in 24 hours to claim again.'
+                : 'This is Solana devnet. Claim free SOL & USDC to try the platform.'}
+            </p>
+            <button
+              onClick={handleClaimFaucet}
+              disabled={faucetDisabled}
+              className="w-full mt-3 py-3 rounded-lg font-bold text-sm transition-opacity"
+              style={{
+                background: faucetDisabled
+                  ? 'rgba(255,255,255,0.06)'
+                  : `linear-gradient(135deg, ${T.teal}, ${T.teal}cc)`,
+                color: faucetDisabled ? T.textMuted : '#0e0e1c',
+                opacity: faucetDisabled ? 0.5 : 1,
+                cursor: faucetDisabled ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {faucetClaiming
+                ? 'Claiming...'
+                : faucetClaimed
+                  ? 'Claimed'
+                  : 'Claim Test Tokens'}
+            </button>
+            {faucetMessage && (
+              <p className="text-[11px] mt-2 text-center" style={{ color: faucetClaimed ? T.green : T.amber }}>
+                {faucetMessage}
+              </p>
+            )}
           </ParchmentCard>
         </div>
       </div>

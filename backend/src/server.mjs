@@ -6,6 +6,7 @@ import { getPool, hasDatabase } from './lib/db.mjs';
 import { contentRoutes } from './modules/content/routes.mjs';
 import { authRoutes } from './modules/auth/routes.mjs';
 import { progressRoutes } from './modules/progress/routes.mjs';
+import { faucetRoutes } from './modules/faucet/routes.mjs';
 import { registerLeaderboardSnapshotWorker } from './workers/leaderboardSnapshotWorker.mjs';
 import { registerLockVaultRelayWorker } from './workers/lockVaultRelayWorker.mjs';
 import { registerRedemptionVaultAutofundWorker } from './workers/redemptionVaultAutofundWorker.mjs';
@@ -111,6 +112,7 @@ function buildServer() {
   app.register(contentRoutes);
   app.register(authRoutes);
   app.register(progressRoutes);
+  app.register(faucetRoutes);
   registerLeaderboardSnapshotWorker(app);
   registerLockVaultRelayWorker(app);
   registerRedemptionVaultAutofundWorker(app);

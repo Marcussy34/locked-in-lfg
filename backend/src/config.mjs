@@ -195,6 +195,10 @@ export const appConfig = {
     process.env.LOCK_VAULT_WORKER_PRIVATE_KEY ??
     process.env.DEPLOYER_PRIVATE_KEY ??
     '',
+  faucetEnabled: optionalBool('FAUCET_ENABLED', false),
+  faucetSolLamports: optionalInt('FAUCET_SOL_LAMPORTS', 100_000_000),
+  faucetUsdcAmountUi: process.env.FAUCET_USDC_AMOUNT_UI ?? '20',
+  faucetCooldownSeconds: optionalInt('FAUCET_COOLDOWN_SECONDS', 86_400),
   corsAllowedOrigins: sanitizeOrigins(
     configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins,
   ),
