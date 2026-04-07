@@ -195,12 +195,21 @@ function DepositContent() {
     }
 
     const min = Number(courseLockPolicy.minPrincipalAmountUi);
+    const max = courseLockPolicy.maxPrincipalAmountUi
+      ? Number(courseLockPolicy.maxPrincipalAmountUi)
+      : null;
     const demo = courseLockPolicy.demoPrincipalAmountUi
       ? Number(courseLockPolicy.demoPrincipalAmountUi)
       : null;
     if (amount < min && amount !== demo) {
       setStatusMessage(
         `This course requires at least ${courseLockPolicy.minPrincipalAmountUi} USDC.`,
+      );
+      return;
+    }
+    if (max != null && amount > max) {
+      setStatusMessage(
+        `This course allows at most ${courseLockPolicy.maxPrincipalAmountUi} USDC.`,
       );
       return;
     }
