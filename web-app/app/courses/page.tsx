@@ -267,7 +267,7 @@ export default function CoursesPage() {
       <div className={`relative max-w-[1100px] mx-auto px-[18px] ${isOnboardingMode ? 'pb-32' : 'pb-10'}`}>
 
         {/* Header — adapts to mode */}
-        <div className="text-center pt-5 pb-7">
+        <div className="text-center pt-14 pb-7">
           <div className="flex items-center justify-center gap-2 mb-3.5">
             <div className="w-[30px] h-px" style={{ backgroundColor: `${T.amber}30` }} />
             <span className="text-[7px]" style={{ color: `${T.amber}50` }}>{'\u25C6'}</span>
@@ -300,7 +300,7 @@ export default function CoursesPage() {
               >
                 Your <span style={{ color: T.amber }}>Courses</span>
               </h1>
-              <p className="text-xs leading-[18px] mb-4" style={{ color: T.textSecondary }}>
+              <p className="text-sm leading-[20px] mb-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
                 Continue your journey or start a new path.
               </p>
               {/* XP Bar */}

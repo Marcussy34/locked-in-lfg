@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useWallets, useSignTransaction } from '@privy-io/react-auth/solana';
 import { useCourseStore, useUserStore } from '@/stores';
 import { defaultCourseLockPolicyForDifficulty } from '@/types';
-import type { CourseLockPolicy } from '@/types';
+import type { CourseLockPolicy, CourseDifficulty } from '@/types';
 import {
   buildLockFundsTransaction,
   hasLockVaultConfig,
@@ -21,6 +21,20 @@ import {
   PrimaryButton,
   T,
 } from '@/components/theme';
+
+const DIFFICULTY_COLORS: Record<CourseDifficulty, string> = {
+  beginner: T.green,
+  intermediate: T.teal,
+  advanced: T.crimson,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  solana: T.violet,
+  web3: T.teal,
+  defi: T.teal,
+  security: T.crimson,
+  rust: T.rust,
+};
 
 // Lock duration presets supported by the on-chain program
 type LockDurationDays = 14 | 30 | 45 | 60 | 90 | 180 | 365;
@@ -227,24 +241,46 @@ function DepositContent() {
 
   const isDisabled = isSubmitting;
 
+  // --- MOCKUP PICKER (remove after choosing) ---
+  const diffColor = DIFFICULTY_COLORS[course?.difficulty ?? 'beginner'];
+  const catColor = CATEGORY_COLORS[course?.category ?? 'solana'] ?? T.teal;
+  const courseTitle = course?.title ?? 'Selected Course';
+  const lessonCount = course?.totalLessons ?? 0;
+
   return (
     <ScreenBackground>
-      {/* Page title */}
-      <h1
-        className="text-2xl font-bold tracking-wide mb-1"
-        style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}
-      >
-        Lock Your <span style={{ color: T.amber }}>Funds</span>
-      </h1>
-      <p className="text-sm mt-1" style={{ color: T.textSecondary }}>
-        {course?.title ?? 'Selected Course'}
-      </p>
-      <p
-        className="text-xs leading-[18px] mt-0.5 mb-4"
-        style={{ color: T.textSecondary }}
-      >
-        Create the on-chain lock to start learning.
-      </p>
+      <div className="pt-10" />
+
+      {/* Header — Minimal with glowing underline */}
+      <div className="mb-6 px-1">
+        <h1 className="text-2xl font-bold tracking-wide mb-3" style={{ fontFamily: 'Georgia, serif', color: T.textPrimary }}>
+          Lock Your <span style={{ color: T.amber }}>Funds</span>
+        </h1>
+        <p className="text-[17px] font-semibold" style={{ color: T.textPrimary }}>{courseTitle}</p>
+        <div className="h-[2px] w-[60px] rounded-full mt-1.5 mb-2" style={{ background: `linear-gradient(90deg, ${catColor}, transparent)`, boxShadow: `0 0 8px ${catColor}40` }} />
+        <div className="flex items-center gap-2 mb-2">
+          {course?.difficulty && (
+            <span
+              className="text-[9px] font-mono font-bold uppercase tracking-[1px] px-1.5 py-[2px] rounded"
+              style={{ color: diffColor, backgroundColor: `${diffColor}15`, border: `1px solid ${diffColor}25` }}
+            >
+              {course.difficulty}
+            </span>
+          )}
+          {course?.category && (
+            <span
+              className="text-[9px] font-mono font-bold uppercase tracking-[1px] px-1.5 py-[2px] rounded"
+              style={{ color: catColor, backgroundColor: `${catColor}15`, border: `1px solid ${catColor}25` }}
+            >
+              {course.category}
+            </span>
+          )}
+          <span className="text-[10px] font-mono" style={{ color: T.textMuted }}>
+            {lessonCount} lessons
+          </span>
+        </div>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>Create the on-chain lock to start learning.</p>
+      </div>
 
       {/* Two-column layout: form left, info right */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">

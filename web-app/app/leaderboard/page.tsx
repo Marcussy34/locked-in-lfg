@@ -57,6 +57,7 @@ export default function LeaderboardPage() {
 
   return (
     <ScreenBackground>
+      <div className="pt-14" />
       <BackButton onClick={() => router.back()} />
 
       <h1
@@ -65,7 +66,7 @@ export default function LeaderboardPage() {
       >
         Leaderboard
       </h1>
-      <p className="text-xs leading-[18px] mb-5" style={{ color: T.textSecondary }}>
+      <p className="text-sm leading-[18px] mb-5" style={{ color: 'rgba(255,255,255,0.6)' }}>
         See how you rank against other adventurers
       </p>
 

@@ -82,6 +82,7 @@ export default function ProfilePage() {
 
   return (
     <ScreenBackground>
+      <div className="pt-14" />
       <BackButton onClick={() => router.back()} />
 
       {/* Page title */}
