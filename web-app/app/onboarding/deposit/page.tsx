@@ -135,10 +135,8 @@ function DepositContent() {
   const [faucetClaiming, setFaucetClaiming] = useState(false);
   const [faucetClaimed, setFaucetClaimed] = useState(false);
   const [faucetMessage, setFaucetMessage] = useState<string | null>(null);
-  const [faucetCooldownUntil, setFaucetCooldownUntil] = useState<string | null>(null);
 
-  const faucetDisabled = faucetClaiming || faucetClaimed ||
-    (faucetCooldownUntil != null && new Date(faucetCooldownUntil) > new Date());
+  const faucetDisabled = faucetClaiming || faucetClaimed;
 
   const handleClaimFaucet = async () => {
     setFaucetClaiming(true);
@@ -151,9 +149,8 @@ function DepositContent() {
         return;
       }
       if (!resp.claimed) {
-        setFaucetCooldownUntil(resp.nextClaimAt);
         setFaucetClaimed(true);
-        setFaucetMessage(resp.message ?? 'Already claimed. Try again later.');
+        setFaucetMessage(resp.message ?? 'Already claimed.');
         setFaucetClaiming(false);
         return;
       }
@@ -163,7 +160,6 @@ function DepositContent() {
       parts.push(`${resp.usdc.amountUsdc} USDC`);
       setFaucetMessage(`Claimed ${parts.join(' + ')}!`);
       setFaucetClaimed(true);
-      if (resp.nextClaimAt) setFaucetCooldownUntil(resp.nextClaimAt);
       // Refresh wallet balances
       if (walletAddress) {
         fetchWalletDepositBalances(walletAddress)
@@ -199,12 +195,21 @@ function DepositContent() {
     }
 
     const min = Number(courseLockPolicy.minPrincipalAmountUi);
+    const max = courseLockPolicy.maxPrincipalAmountUi
+      ? Number(courseLockPolicy.maxPrincipalAmountUi)
+      : null;
     const demo = courseLockPolicy.demoPrincipalAmountUi
       ? Number(courseLockPolicy.demoPrincipalAmountUi)
       : null;
     if (amount < min && amount !== demo) {
       setStatusMessage(
         `This course requires at least ${courseLockPolicy.minPrincipalAmountUi} USDC.`,
+      );
+      return;
+    }
+    if (max != null && amount > max) {
+      setStatusMessage(
+        `This course allows at most ${courseLockPolicy.maxPrincipalAmountUi} USDC.`,
       );
       return;
     }
@@ -297,7 +302,17 @@ function DepositContent() {
 
   return (
     <ScreenBackground>
-      <div className="pt-10" />
+      <button
+        onClick={() => router.back()}
+        className="mt-2 mb-2 px-4 py-2 rounded-lg border text-[12px] font-mono font-bold tracking-[1px] transition-opacity hover:opacity-80"
+        style={{
+          color: T.textPrimary,
+          borderColor: T.borderDormant,
+          backgroundColor: 'rgba(255,255,255,0.04)',
+        }}
+      >
+        ← Back
+      </button>
 
       {/* Header — Minimal with glowing underline */}
       <div className="mb-6 px-1">
@@ -531,7 +546,7 @@ function DepositContent() {
             </p>
             <p className="text-[12px] mt-1 leading-relaxed" style={{ color: T.textSecondary }}>
               {faucetClaimed
-                ? 'Come back in 24 hours to claim again.'
+                ? 'You\'ve already claimed your test tokens.'
                 : 'This is Solana devnet. Claim free SOL & USDC to try the platform.'}
             </p>
             <button

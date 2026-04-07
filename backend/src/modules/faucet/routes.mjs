@@ -28,8 +28,7 @@ export async function faucetRoutes(app) {
       if (!cooldown.eligible) {
         return reply.status(429).send({
           claimed: false,
-          message: 'Faucet on cooldown.',
-          nextClaimAt: cooldown.nextClaimAt,
+          message: 'Already claimed for this round.',
         });
       }
 
@@ -56,8 +55,6 @@ export async function faucetRoutes(app) {
         Number(usdc.amountAtomic),
       );
 
-      const nextCooldown = new Date(Date.now() + appConfig.faucetCooldownSeconds * 1000);
-
       return {
         claimed: true,
         sol: {
@@ -69,7 +66,6 @@ export async function faucetRoutes(app) {
           signature: usdc.signature,
           amountUsdc: appConfig.faucetUsdcAmountUi,
         },
-        nextClaimAt: nextCooldown.toISOString(),
       };
     },
   });
