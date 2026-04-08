@@ -12,7 +12,7 @@ import { getUserEnrollments } from '@/services/api/progress/progressApi';
 import { T } from './theme';
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ['/'];
+const PUBLIC_ROUTES = ['/', '/courses'];
 
 // Routes allowed during onboarding (before active lock)
 const ONBOARDING_ROUTES = ['/courses', '/onboarding/deposit', '/onboarding/tutorial'];
@@ -46,15 +46,15 @@ function useFlowGuard() {
     // Skip guard on public routes
     if (PUBLIC_ROUTES.includes(pathname)) return;
 
-    // Gate 1: No wallet/JWT → back to landing
+    // Gate 1: No wallet/JWT → courses (they can browse without auth)
     if (!walletAddress || !isAuthenticated) {
-      router.replace('/');
+      router.replace('/courses');
       return;
     }
 
-    // Gate 2: phase 'auth' → back to landing
+    // Gate 2: phase 'auth' → courses
     if (phase === 'auth') {
-      router.replace('/');
+      router.replace('/courses');
       return;
     }
 

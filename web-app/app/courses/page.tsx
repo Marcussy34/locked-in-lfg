@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLogin } from '@privy-io/react-auth';
 import { useAuth } from '@/hooks/useAuth';
-import { getUserXp } from '@/services/api/progress/progressApi';
+import { useFlameStore } from '@/stores/flameStore';
+import { getUserEnrollments, getUserXp } from '@/services/api/progress/progressApi';
 import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
@@ -201,7 +203,38 @@ function ActiveCourseCard({ course, streak, lessonCount, onPress }: { course: Co
 /* ── Main page — adapts between onboarding and post-onboarding ── */
 export default function CoursesPage() {
   const router = useRouter();
-  const { disconnect } = useAuth();
+  const { isAuthenticated, markFreshLogin, disconnect } = useAuth();
+
+  const { login } = useLogin({
+    onComplete: async () => {
+      const waitForToken = () =>
+        new Promise<string | null>((resolve) => {
+          const token = useUserStore.getState().authToken;
+          if (token) { resolve(token); return; }
+          const timeout = setTimeout(() => { unsub(); resolve(null); }, 5000);
+          const unsub = useUserStore.subscribe((state) => {
+            if (state.authToken) {
+              clearTimeout(timeout);
+              unsub();
+              resolve(state.authToken);
+            }
+          });
+        });
+      const token = await waitForToken();
+      if (!token) return;
+      try {
+        const data = await getUserEnrollments(token);
+        useCourseStore.getState().restoreFromBackend(data);
+        const bestStreak = Math.max(
+          ...data.enrollments.map((e) => e.runtime?.currentStreak ?? 0),
+          0,
+        );
+        if (bestStreak > 0) {
+          useFlameStore.getState().updateFromStreak(bestStreak);
+        }
+      } catch { /* Fail silently */ }
+    },
+  });
 
   const courses = useCourseStore((s) => s.courses);
   const contentLoading = useCourseStore((s) => s.contentLoading);
@@ -248,7 +281,16 @@ export default function CoursesPage() {
     router.push('/dungeon');
   };
 
+  const handleSignIn = () => {
+    markFreshLogin();
+    login({ loginMethods: ['google', 'wallet'] });
+  };
+
   const handleEnroll = (courseId: string) => {
+    if (!isAuthenticated) {
+      handleSignIn();
+      return;
+    }
     router.push(`/onboarding/deposit?courseId=${courseId}`);
   };
 
@@ -284,17 +326,31 @@ export default function CoursesPage() {
               <p className="text-xs leading-[18px] mb-3" style={{ color: T.textSecondary }}>
                 Mastering your craft through proof of effort.
               </p>
-              <button
-                onClick={disconnect}
-                className="mt-3 px-5 py-2 rounded-lg border text-[11px] font-mono font-bold uppercase tracking-[1.5px] transition-opacity hover:opacity-80"
-                style={{
-                  color: T.crimson,
-                  borderColor: `${T.crimson}30`,
-                  backgroundColor: `${T.crimson}0a`,
-                }}
-              >
-                Disconnect Wallet
-              </button>
+              {isAuthenticated ? (
+                <button
+                  onClick={disconnect}
+                  className="mt-3 px-5 py-2 rounded-lg border text-[11px] font-mono font-bold uppercase tracking-[1.5px] transition-opacity hover:opacity-80"
+                  style={{
+                    color: T.crimson,
+                    borderColor: `${T.crimson}30`,
+                    backgroundColor: `${T.crimson}0a`,
+                  }}
+                >
+                  Disconnect Wallet
+                </button>
+              ) : (
+                <button
+                  onClick={handleSignIn}
+                  className="mt-3 px-5 py-2 rounded-lg border text-[11px] font-mono font-bold uppercase tracking-[1.5px] transition-opacity hover:opacity-80"
+                  style={{
+                    color: T.amber,
+                    borderColor: `${T.amber}30`,
+                    backgroundColor: `${T.amber}0a`,
+                  }}
+                >
+                  Sign In
+                </button>
+              )}
             </>
           ) : (
             <>
