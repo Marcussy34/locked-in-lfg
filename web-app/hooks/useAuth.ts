@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useWallets, useSignMessage } from '@privy-io/react-auth/solana';
 import { useUserStore, useCourseStore } from '@/stores';
@@ -35,8 +35,19 @@ export function useAuth() {
   const setAuthSession = useUserStore((s) => s.setAuthSession);
   const disconnectUser = useUserStore((s) => s.disconnect);
 
-  // Get the first Solana wallet (embedded or external)
-  const solanaWallet = wallets[0] ?? null;
+  // Detect embedded (Privy) wallet — the Solana hook uses standardWallet, not walletClientType.
+  const isEmbedded = (w: (typeof wallets)[number]) =>
+    'isPrivyWallet' in w.standardWallet && !!(w.standardWallet as Record<string, unknown>).isPrivyWallet;
+
+  // Google login → embedded wallet ONLY (auto-signs via Privy UI, no Phantom popup).
+  //   If not ready yet, solanaWallet stays null — auth effect waits until it appears.
+  // Wallet login → prefer external wallet (the one the user connected).
+  const isGoogleUser = !!privyUser?.google;
+  const embeddedWallet = wallets.find(isEmbedded) ?? null;
+  const externalWallet = wallets.find((w) => !isEmbedded(w)) ?? null;
+  const solanaWallet = isGoogleUser
+    ? embeddedWallet
+    : (externalWallet ?? wallets[0] ?? null);
   const connectedAddress = solanaWallet?.address ?? null;
 
   // Authenticate with our backend using the Privy-managed wallet
@@ -100,10 +111,14 @@ export function useAuth() {
     else sessionStorage.removeItem('locked-in-fresh-login');
   }, []);
 
+  // Guard ref prevents the effect from firing multiple times when wallets array updates
+  const authGuardRef = useRef(false);
+
   // Only auto-authenticate after a FRESH login (user clicked sign-in), not on page reload
   useEffect(() => {
     if (
       freshLogin &&
+      !authGuardRef.current &&
       privyAuthenticated &&
       walletsReady &&
       solanaWallet &&
@@ -111,13 +126,15 @@ export function useAuth() {
       !authInProgress &&
       !authError
     ) {
-      authenticate();
+      authGuardRef.current = true;
       setFreshLogin(false);
+      authenticate();
     }
   }, [freshLogin, privyAuthenticated, walletsReady, solanaWallet, accessToken, authInProgress, authError, authenticate, setFreshLogin]);
 
   // Manual retry — called from UI
   const retry = useCallback(() => {
+    authGuardRef.current = false;
     setAuthError(null);
     authenticate();
   }, [authenticate]);
@@ -141,7 +158,10 @@ export function useAuth() {
   }, [privyReady, privyAuthenticated, walletAddress, disconnectUser]);
 
   // Called by WalletConnect after user deliberately clicks sign-in
-  const markFreshLogin = useCallback(() => setFreshLogin(true), [setFreshLogin]);
+  const markFreshLogin = useCallback(() => {
+    authGuardRef.current = false;
+    setFreshLogin(true);
+  }, [setFreshLogin]);
 
   return {
     isReady: privyReady && walletsReady,

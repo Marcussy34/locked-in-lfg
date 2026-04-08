@@ -33,12 +33,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         loginMethods: ['google', 'wallet'],
         externalWallets: {
           solana: {
-            connectors: toSolanaWalletConnectors(),
+            connectors: toSolanaWalletConnectors({ shouldAutoConnect: false }),
           },
         },
         embeddedWallets: {
           solana: {
-            createOnLogin: 'users-without-wallets',
+            createOnLogin: 'all-users',
           },
         },
       }}
