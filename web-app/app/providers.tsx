@@ -20,6 +20,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       config={{
         solana: {
           rpcs: {
+            // Privy embedded wallet defaults to mainnet — provide both so it doesn't error.
+            // All actual transactions go through the cluster set in NEXT_PUBLIC_SOLANA_CLUSTER.
+            'solana:mainnet': {
+              rpc: solanaRpc,
+              rpcSubscriptions: solanaRpcSubscriptions,
+            },
             [`solana:${SOLANA_CLUSTER}`]: {
               rpc: solanaRpc,
               rpcSubscriptions: solanaRpcSubscriptions,
