@@ -45,9 +45,10 @@ export function useAuth() {
   const isGoogleUser = !!privyUser?.google;
   const embeddedWallet = wallets.find(isEmbedded) ?? null;
   const externalWallet = wallets.find((w) => !isEmbedded(w)) ?? null;
-  const solanaWallet = isGoogleUser
-    ? embeddedWallet
-    : (externalWallet ?? wallets[0] ?? null);
+  // Google → wait for embedded wallet only.
+  // Wallet → wait for external wallet only.
+  // Both avoid falling back to the wrong wallet type.
+  const solanaWallet = isGoogleUser ? embeddedWallet : externalWallet;
   const connectedAddress = solanaWallet?.address ?? null;
 
   // Authenticate with our backend using the Privy-managed wallet

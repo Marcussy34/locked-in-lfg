@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 import { useWallets, useSignTransaction } from '@privy-io/react-auth/solana';
 import { useCourseStore, useUserStore } from '@/stores';
 import { defaultCourseLockPolicyForDifficulty } from '@/types';
@@ -69,8 +70,17 @@ function DepositContent() {
   const walletAddress = useUserStore((s) => s.walletAddress);
   const activateCourse = useCourseStore((s) => s.activateCourse);
   const courses = useCourseStore((s) => s.courses);
+  const { user: privyUser } = usePrivy();
   const { wallets: solanaWallets } = useWallets();
   const { signTransaction: privySignTransaction } = useSignTransaction();
+
+  // Pick the right wallet: Google users → embedded, wallet users → external
+  const isGoogleUser = !!privyUser?.google;
+  const isEmbedded = (w: (typeof solanaWallets)[number]) =>
+    'isPrivyWallet' in w.standardWallet && !!(w.standardWallet as Record<string, unknown>).isPrivyWallet;
+  const activeWallet = isGoogleUser
+    ? (solanaWallets.find(isEmbedded) ?? null)
+    : (solanaWallets.find((w) => !isEmbedded(w)) ?? null);
 
   // Wallet balances
   const [balances, setBalances] = useState<{ stableBalanceUi: string; skrBalanceUi: string; solBalanceUi: string } | null>(null);
@@ -248,8 +258,8 @@ function DepositContent() {
 
       setStatusMessage('Waiting for wallet approval...');
 
-      // 2. Sign via Privy wallet (works for both embedded + external wallets)
-      const wallet = solanaWallets[0];
+      // 2. Sign via the correct wallet (embedded for Google, external for Phantom)
+      const wallet = activeWallet;
       if (!wallet) {
         throw new Error('No Solana wallet available. Please reconnect.');
       }
