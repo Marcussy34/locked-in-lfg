@@ -8,7 +8,7 @@ import { useUserStore } from '@/stores/userStore';
 import type { Viewpoint } from '@/types';
 import { useSceneStore } from '@/stores/sceneStore';
 import { T, ParchmentCard, ProgressBar } from '@/components/theme';
-import { User } from 'lucide-react';
+import { User, ArrowLeft } from 'lucide-react';
 
 export default function DungeonPage() {
   const router = useRouter();
@@ -203,6 +203,21 @@ export default function DungeonPage() {
   // Dungeon is rendering via iframe — show profile button + book modal overlay
   return (
     <>
+      {/* Floating back button — mobile only, desktop has sidebar */}
+      <button
+        onClick={() => router.back()}
+        className="fixed top-4 left-4 z-30 flex items-center justify-center md:hidden"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 22,
+          backgroundColor: 'rgba(14,14,28,0.88)',
+          border: `1px solid ${T.borderAlive}`,
+        }}
+      >
+        <ArrowLeft size={18} color={T.amber} strokeWidth={2.5} />
+      </button>
+
       {/* Floating profile button — matches Android UndergroundHubScreen overlay (mobile only, desktop has sidebar) */}
       <button
         onClick={() => router.push('/profile')}
