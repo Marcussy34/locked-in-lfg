@@ -11,7 +11,6 @@ import {
   ScreenBackground,
   BackButton,
   ParchmentCard,
-  StatBox,
   SectionLabel,
 } from '@/components/theme';
 
@@ -58,6 +57,7 @@ export default function CommunityPotPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchPotData(controller.signal);
     return () => { controller.abort(); };
   }, [fetchPotData]);

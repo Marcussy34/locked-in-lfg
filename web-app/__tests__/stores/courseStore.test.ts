@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useCourseStore } from '@/stores/courseStore';
 import { DEFAULT_COURSE_STATE } from '@/types/courseState';
-import { buildCourse, buildLesson } from '../fixtures/courses';
+import { buildCourse } from '../fixtures/courses';
 
 // Mock external dependencies that courseStore imports
 vi.mock('@/services/api', () => ({

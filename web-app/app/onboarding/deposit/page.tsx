@@ -18,7 +18,6 @@ import { fetchWithAuth } from '@/services/api/httpClient';
 import { connection } from '@/services/solana/connection';
 import {
   ScreenBackground,
-  BackButton,
   ParchmentCard,
   SectionLabel,
   PrimaryButton,

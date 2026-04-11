@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLogin } from '@privy-io/react-auth';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,11 +9,9 @@ import { getUserEnrollments, getUserXp } from '@/services/api/progress/progressA
 import { useCourseStore, useUserStore } from '@/stores';
 import type { Course, CourseDifficulty } from '@/types';
 import {
-  ScreenBackground,
   ParchmentCard,
   SectionLabel,
   CornerMarks,
-  ProgressBar,
   PrimaryButton,
   T,
 } from '@/components/theme';

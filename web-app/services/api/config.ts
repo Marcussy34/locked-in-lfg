@@ -9,10 +9,12 @@ export function getLessonApiBaseUrl(): string {
   return API_BASE_URL;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function getLessonApiFallbackBaseUrls(_currentBaseUrl: string): string[] {
   return [];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function setLessonApiBaseUrl(_nextBaseUrl: string): void {
   // No-op on web — single API URL
 }

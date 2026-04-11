@@ -21,13 +21,6 @@ function rankColor(rank: number): string {
   return T.textPrimary;
 }
 
-function rankBorderColor(rank: number): string {
-  if (rank === 1) return 'rgba(212,160,74,0.4)';
-  if (rank === 2) return 'rgba(255,255,255,0.15)';
-  if (rank === 3) return 'rgba(232,132,90,0.35)';
-  return T.borderDormant;
-}
-
 export default function LeaderboardPage() {
   const router = useRouter();
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
@@ -51,6 +44,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchLeaderboard(page, controller.signal);
     return () => { controller.abort(); };
   }, [page, fetchLeaderboard]);

@@ -37,8 +37,8 @@ describe('httpClient', () => {
       }),
     );
 
-    const module = await import('@/services/api/httpClient');
-    httpRequest = module.httpRequest;
+    const httpModule = await import('@/services/api/httpClient');
+    httpRequest = httpModule.httpRequest;
   });
 
   afterEach(() => {

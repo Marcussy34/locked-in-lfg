@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, use } from 'react';
+import { useCallback, useMemo, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore, useUserStore, useFlameStore } from '@/stores';
 import { hasRemoteLessonApi, startLesson, submitLesson, fetchWithAuth } from '@/services/api';
@@ -26,7 +26,6 @@ export default function LessonPage(props: {
   // Store selectors
   const lesson = useCourseStore((s) => s.getLesson(lessonId));
   const walletAddress = useUserStore((s) => s.walletAddress);
-  const authToken = useUserStore((s) => s.authToken);
 
   // Recall: pick a random question from completed previous lessons
   const lessonProgress = useCourseStore((s) => s.lessonProgress);
@@ -65,7 +64,7 @@ export default function LessonPage(props: {
   const [error, setError] = useState<string | null>(null);
 
   // Derived values
-  const questions = lesson?.questions ?? [];
+  const questions = useMemo(() => lesson?.questions ?? [], [lesson?.questions]);
   const currentQuestion: Question | undefined = questions[currentQuestionIndex];
   const totalQuestions = questions.length;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
@@ -242,6 +241,7 @@ export default function LessonPage(props: {
       correctCount,
       courseId,
       lessonId,
+      questions,
       router,
       submitRemoteLesson,
       totalQuestions,

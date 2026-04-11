@@ -125,6 +125,7 @@ function deriveFuelEarnStatus(state: CourseGameState): FuelEarnStatus {
   return 'AVAILABLE';
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function deriveNextFuelBurnAt(_state: CourseGameState): string | null {
   // Fuel conversion is now instant — no scheduled burn
   return null;

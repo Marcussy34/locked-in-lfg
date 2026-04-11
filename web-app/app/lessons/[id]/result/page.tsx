@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, use, useEffect, useState } from 'react';
+import { Suspense, use, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCourseStore } from '@/stores';
 import {
@@ -73,17 +73,14 @@ function ResultContent({ params }: { params: Promise<{ id: string }> }) {
   const levelName = xpLevel > 0 ? (LEVEL_NAMES[xpLevel - 1] ?? `Level ${xpLevel}`) : '';
 
   // Load question review from localStorage (lesson-specific key, persists across revisits)
-  const [reviewData, setReviewData] = useState<QuizReviewData | null>(null);
-  const [showReview, setShowReview] = useState(false);
-
-  useEffect(() => {
+  const [reviewData] = useState<QuizReviewData | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const raw = localStorage.getItem(`quizReview::${_lessonId}`);
-      if (raw) {
-        setReviewData(JSON.parse(raw));
-      }
-    } catch { /* ignore */ }
-  }, [_lessonId]);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+  const [showReview, setShowReview] = useState(false);
 
   return (
     <ScreenBackground>

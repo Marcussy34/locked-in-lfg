@@ -9,7 +9,6 @@ import {
   ScreenBackground,
   BackButton,
   ParchmentCard,
-  CornerMarks,
   SecondaryButton,
 } from '@/components/theme';
 

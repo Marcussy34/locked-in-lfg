@@ -856,6 +856,7 @@ function ImageBlock({ block }: { block: LessonBlock }) {
   if (!block.imageUrl) return null;
   return (
     <figure style={{ margin: '16px 0' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={block.imageUrl}
         alt={block.caption ?? ''}

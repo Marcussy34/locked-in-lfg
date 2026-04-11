@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import type { Question } from '@/types';
 import { T, ParchmentCard, PrimaryButton } from './theme';
 

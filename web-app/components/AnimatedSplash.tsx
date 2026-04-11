@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
 
@@ -10,24 +10,15 @@ import { T } from './theme';
  * Only shows once per browser session (sessionStorage flag).
  */
 export function AnimatedSplash({ children }: { children: ReactNode }) {
-  const [showSplash, setShowSplash] = useState(false);
-  const splashShownRef = useRef(false);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    if (sessionStorage.getItem('splash-shown')) return false;
+    sessionStorage.setItem('splash-shown', '1');
+    return true;
+  });
 
-  // Check once on mount whether to show splash (ref prevents double-fire in Strict Mode)
-  useEffect(() => {
-    const prefersReducedMotion = typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (prefersReducedMotion) return;
-
-    if (!splashShownRef.current && !sessionStorage.getItem('splash-shown')) {
-      splashShownRef.current = true;
-      setShowSplash(true);
-      sessionStorage.setItem('splash-shown', '1');
-    }
-  }, []);
-
-  // Dismiss timer — separate effect so strict mode re-runs don't lose the timer
+  // Dismiss timer
   useEffect(() => {
     if (!showSplash) return;
     const timer = setTimeout(() => setShowSplash(false), 1200);
@@ -50,6 +41,7 @@ export function AnimatedSplash({ children }: { children: ReactNode }) {
             style={{ backgroundColor: '#000', zIndex: 9999 }}
           >
             {/* Logo — 160x160 matching Android styles.logo */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/logo.png"
               alt="Locked In"

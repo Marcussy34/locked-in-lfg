@@ -106,8 +106,8 @@ describe('useAuth', () => {
         connectorType: 'injected',
         // Mocked as external wallet (no isPrivyWallet flag)
         standardWallet: {},
-      } as any,
-    ];
+      } as unknown,
+    ] as typeof mockWallets.wallets;
 
     vi.mocked(createAuthChallenge).mockResolvedValueOnce({
       challengeId: 'challenge-1',
@@ -177,8 +177,8 @@ describe('useAuth', () => {
         walletClientType: 'phantom',
         connectorType: 'injected',
         standardWallet: {},
-      } as any,
-    ];
+      } as unknown,
+    ] as typeof mockWallets.wallets;
 
     vi.mocked(createAuthChallenge).mockRejectedValueOnce(new Error('Network error'));
 

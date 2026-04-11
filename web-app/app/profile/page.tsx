@@ -34,7 +34,6 @@ export default function ProfilePage() {
   const enrolledCourseIds = useCourseStore((s) => s.enrolledCourseIds);
   const lessons = useCourseStore((s) => s.lessons);
 
-  const activeState = activeCourseId ? courseStates[activeCourseId] : null;
   const activeCourse = activeCourseId
     ? courses.find((c) => c.id === activeCourseId)
     : null;
@@ -44,6 +43,7 @@ export default function ProfilePage() {
   const [xpLoading, setXpLoading] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setXpLoading(true);
     fetchWithAuth(getUserXp)
       .then((data) => {

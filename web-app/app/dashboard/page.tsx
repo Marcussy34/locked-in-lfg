@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore, useUserStore } from '@/stores';
 import { getUserXp, getYieldHistory } from '@/services/api/progress/progressApi';
@@ -70,13 +70,16 @@ export default function DashboardPage() {
   const xpProgress = Math.min(1, Math.max(0, (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold)));
 
   // Lock progress
-  const lockProgress = useMemo(() => {
-    if (!activeState?.lockStartDate) return null;
+  const [lockProgress, setLockProgress] = useState<{ totalDays: number; elapsed: number; endDate: Date } | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!activeState?.lockStartDate) { setLockProgress(null); return; }
     const start = new Date(activeState.lockStartDate).getTime();
     const totalDays = (activeState.lockDuration ?? 30) + (activeState.extensionDays ?? 0);
     const endDate = new Date(start + totalDays * 86400000);
     const elapsed = Math.max(0, Math.floor((Date.now() - start) / 86400000));
-    return { totalDays, elapsed: Math.min(elapsed, totalDays), endDate };
+    setLockProgress({ totalDays, elapsed: Math.min(elapsed, totalDays), endDate });
   }, [activeState?.lockStartDate, activeState?.lockDuration, activeState?.extensionDays]);
 
   const netEarned = yieldData.totalYield - yieldData.redirected - yieldData.fees;

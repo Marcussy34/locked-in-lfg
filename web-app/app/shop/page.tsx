@@ -15,40 +15,6 @@ import {
 
 /* ── Inline SVG Icons ──────────────────────────────────────────────── */
 
-function PotionIcon({ size = 40 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 44 44" width={size} height={size} fill="none">
-      <path
-        d="M18 8h8v5l7 12c.8 1.6.2 3.2-1 4.2S28 31 22 31s-8-.8-9.5-1.8-1.8-2.6-1-4.2L18 13V8z"
-        fill="rgba(212,160,74,0.2)"
-        stroke="#D4A04A"
-        strokeWidth="1.3"
-      />
-      <rect x="17" y="4" width="10" height="4.5" rx="2" stroke="#D4A04A" strokeWidth="1.3" />
-      <ellipse cx="22" cy="24" rx="7" ry="3.5" fill="rgba(212,160,74,0.25)" />
-      <circle cx="19" cy="22" r="1.2" fill="rgba(212,160,74,0.4)" />
-      <circle cx="24.5" cy="21" r="0.8" fill="rgba(212,160,74,0.35)" />
-    </svg>
-  );
-}
-
-function ArrowDownIcon() {
-  return (
-    <svg viewBox="0 0 20 20" width={16} height={16} fill="none">
-      <path d="M10 2v16M6 14l4 4 4-4" stroke="#D4A04A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function HexPlusIcon() {
-  return (
-    <svg viewBox="0 0 18 18" width={14} height={14} fill="none">
-      <path d="M9 1L2 5.5v7L9 17l7-4.5v-7L9 1z" stroke="rgba(255,255,255,0.35)" strokeWidth="1.2" />
-      <path d="M9 6v6M6.5 9h5" stroke="rgba(255,255,255,0.35)" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function ArrowUpIcon({ color = '#3EE68A' }: { color?: string }) {
   return (
     <svg viewBox="0 0 14 14" width={12} height={12} fill="none">
@@ -79,44 +45,6 @@ function SmallPotionIcon() {
     <svg viewBox="0 0 14 14" width={12} height={12} fill="none">
       <path d="M5 2.5h4v2.5l3 5c.4.8 0 1.5-.5 2S9.5 13.5 7 13.5s-3.5-.5-4-1-.9-1.2-.5-2l3-5V2.5z" stroke="#D4A04A" strokeWidth="1.1" />
     </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width={14} height={14} fill="none">
-      <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1" />
-      <path d="M8 4.5v4l2.5 1.5" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 14 14" width={12} height={12} fill="none">
-      <path d="M7 1l1.8 3.6L13 5.3l-3 2.9.7 4.1L7 10.4l-3.7 1.9.7-4.1-3-2.9 4.2-.7L7 1z" fill="#D4A04A" opacity="0.6" />
-    </svg>
-  );
-}
-
-function ActivityBadge() {
-  return (
-    <div
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        background: 'rgba(62,230,138,0.1)',
-        border: '1px solid rgba(62,230,138,0.15)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <svg viewBox="0 0 14 14" width={12} height={12} fill="none">
-        <path d="M7 10V4M4.5 6.5L7 4l2.5 2.5" stroke="#3EE68A" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
   );
 }
 
@@ -191,6 +119,7 @@ export default function ShopPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchShopData(activeCourseId, controller.signal);
     return () => { controller.abort(); };
   }, [activeCourseId, fetchShopData]);
