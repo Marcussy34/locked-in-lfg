@@ -90,7 +90,7 @@ describe('httpClient', () => {
 
     await expect(httpRequest('/v1/missing')).rejects.toThrow(ApiError);
 
-    const error = await httpRequest('/v1/missing2').catch((e) => e);
+    const error = await httpRequest('/v1/missing2').catch((e) => e) as ApiError;
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(404);
     expect(error.code).toBe('NOT_FOUND');

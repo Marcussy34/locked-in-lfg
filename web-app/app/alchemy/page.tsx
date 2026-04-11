@@ -20,6 +20,12 @@ export default function AlchemyPage() {
   const convertFuelForCourse = useCourseStore((s) => s.convertFuelForCourse);
   const authToken = useUserStore((s) => s.authToken);
   const [convertAmount, setConvertAmount] = useState(1);
+  const [justConverted, setJustConverted] = useState<number | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
+  const fuelBalance = activeState?.fuelCounter ?? 0;
 
   // Clamp convertAmount when fuelBalance changes
   useEffect(() => {
@@ -27,12 +33,6 @@ export default function AlchemyPage() {
       setConvertAmount(fuelBalance);
     }
   }, [fuelBalance, convertAmount]);
-  const [justConverted, setJustConverted] = useState<number | null>(null);
-  const [isConverting, setIsConverting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const activeState = activeCourseId ? courseStates[activeCourseId] ?? null : null;
-  const fuelBalance = activeState?.fuelCounter ?? 0;
   const fuelCap = activeState?.fuelCap ?? 7;
   const ichorBalance = activeState?.ichorBalance ?? 0;
   const fuelFragments = activeState?.fuelFragmentsToday ?? 0;
