@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: web-app
-        run: npm ci
+        run: npm install --prefer-offline --no-audit
 
       - name: Lint
         working-directory: web-app
@@ -100,7 +100,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci
+        run: npm install --prefer-offline --no-audit
 
       - name: Run migrations
         working-directory: backend
@@ -159,7 +159,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: web-app
-        run: npm ci
+        run: npm install --prefer-offline --no-audit
 
       - name: Run Vitest
         working-directory: web-app
@@ -201,7 +201,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: web-app
-        run: npm ci
+        run: npm install --prefer-offline --no-audit
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -212,7 +212,7 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: web-app
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install --with-deps chromium
 
       - name: Build web app
         working-directory: web-app
@@ -221,7 +221,9 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
           NEXT_PUBLIC_SOLANA_CLUSTER: devnet
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.E2E_PRIVY_APP_ID }}
+          # Dummy Privy app ID for build-time SSR pre-rendering.
+          # Pages that use PrivyProvider need a valid-looking ID to not crash.
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.E2E_PRIVY_APP_ID || 'cm000000000000000000000000' }}
           NEXT_PUBLIC_LOCK_VAULT_PROGRAM_ID: 41TexnrHDMV4ASJmqNNFcgQ7RBk6N193yvukfiCzKQmD
           NEXT_PUBLIC_LOCK_VAULT_USDC_MINT: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
           NEXT_PUBLIC_LOCK_VAULT_SKR_MINT: CQAiXocPkmrr6MTDigHn1yDJ66v5nbPyxwMoUxb4PgST
