@@ -7,7 +7,7 @@ import type { MainStackParamList } from '@/navigation/types';
 import { useFlameStore, useSceneStore, useStreakStore, useUserStore } from '@/stores';
 import { useCourseStore } from '@/stores/courseStore';
 import { useDungeon } from '@/components/DungeonProvider';
-import { GuidedTour } from '@/components/GuidedTour';
+import { DungeonTour } from '@/components/DungeonTour';
 import { T, woodBg, parchmentBg } from '@/theme';
 import { User, BookOpen, FlaskConical, Puzzle, Scroll, Library, ChevronRight } from 'lucide-react-native';
 
@@ -281,30 +281,25 @@ export function UndergroundHubScreen() {
     );
   }, [sceneReady, loadProgress, webviewError, bookModalVisible, sendMessage, cinematicPhase, cinematicOpacity, textOpacity, insets.top, navigation, setOverlay]);
 
-  const handleTourStepChange = useCallback(
-    (viewpoint: string) => sendMessage('setViewpoint', { viewpoint }),
-    [sendMessage],
-  );
-
   const handleTourComplete = useCallback(() => {
     setShowTour(false);
     completeDungeonTour();
-    sendMessage('cameraGoBack', {});
-  }, [completeDungeonTour, sendMessage]);
+  }, [completeDungeonTour]);
 
   // Tour overlay — separate from main overlay so it never remounts
   useEffect(() => {
     if (showTour && sceneReady) {
       setTourOverlay(
-        <GuidedTour
-          onStepChange={handleTourStepChange}
+        <DungeonTour
+          sendMessage={sendMessage}
+          onMessage={onMessage}
           onComplete={handleTourComplete}
         />,
       );
     } else {
       setTourOverlay(null);
     }
-  }, [showTour, sceneReady, handleTourStepChange, handleTourComplete, setTourOverlay]);
+  }, [showTour, sceneReady, sendMessage, onMessage, handleTourComplete, setTourOverlay]);
 
   // Clear tour overlay on unmount
   useEffect(() => {

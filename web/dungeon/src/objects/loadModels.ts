@@ -41,7 +41,7 @@ let activeScene: Scene;
 let gizmoManager: GizmoManager;
 
 // Model roots keyed by name — for gizmo selection
-const modelRoots: Map<string, TransformNode> = new Map();
+export const modelRoots: Map<string, TransformNode> = new Map();
 
 export type GizmoMode = 'position' | 'rotation' | 'scale' | 'none';
 

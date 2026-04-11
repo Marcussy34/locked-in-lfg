@@ -10,6 +10,8 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
+import { useUserStore } from '@/stores/userStore';
+import { TourOverlay } from './TourOverlay';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +53,7 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
   const [loadProgress, setLoadProgress] = useState(0);
   const [iframeError, setIframeError] = useState<string | null>(null);
   const [overlayContent, setOverlayContent] = useState<ReactNode>(null);
+  const [showTour, setShowTour] = useState(false);
 
   // Message handlers registered by consumers
   const handlersRef = useRef<Set<(data: Record<string, unknown>) => void>>(new Set());
@@ -121,6 +124,21 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  // Trigger dungeon tour for first-time users after scene is ready
+  useEffect(() => {
+    if (!sceneReady) return;
+    const { dungeonTourCompleted } = useUserStore.getState();
+    if (dungeonTourCompleted) return;
+
+    const t = setTimeout(() => setShowTour(true), 1000);
+    return () => clearTimeout(t);
+  }, [sceneReady]);
+
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false);
+    useUserStore.getState().completeDungeonTour();
+  }, []);
+
   const ctx = useMemo<DungeonContextType>(
     () => ({
       isLoaded,
@@ -163,6 +181,15 @@ export function DungeonProvider({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-10 pointer-events-none">
           <div className="pointer-events-auto">{overlayContent}</div>
         </div>
+      )}
+
+      {/* Dungeon tour for first-time users */}
+      {visible && showTour && (
+        <TourOverlay
+          sendMessage={sendMessage}
+          onMessage={onMessage}
+          onComplete={handleTourComplete}
+        />
       )}
     </DungeonContext.Provider>
   );
