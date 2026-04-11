@@ -1,7 +1,10 @@
 import type { StateStorage } from 'zustand/middleware';
 
+const isBrowser = typeof window !== 'undefined';
+
 export const webStorageAdapter: StateStorage = {
   getItem: (name) => {
+    if (!isBrowser) return null;
     try {
       return localStorage.getItem(name);
     } catch (e) {
@@ -10,6 +13,7 @@ export const webStorageAdapter: StateStorage = {
     }
   },
   setItem: (name, value) => {
+    if (!isBrowser) return;
     try {
       localStorage.setItem(name, value);
     } catch (e) {
@@ -17,6 +21,7 @@ export const webStorageAdapter: StateStorage = {
     }
   },
   removeItem: (name) => {
+    if (!isBrowser) return;
     try {
       localStorage.removeItem(name);
     } catch (e) {
