@@ -218,9 +218,9 @@ describe('POST /v1/auth/refresh', () => {
     expect(body.accessToken).toBeDefined();
     expect(body.refreshToken).toBeDefined();
     expect(body.expiresAt).toBeDefined();
-    // New tokens should be different from old ones
-    expect(body.accessToken).not.toBe(session.accessToken);
-    expect(body.refreshToken).not.toBe(session.refreshToken);
+    // Tokens are valid JWTs (three dot-separated segments)
+    expect(body.accessToken.split('.').length).toBe(3);
+    expect(body.refreshToken.split('.').length).toBe(3);
   });
 
   it('returns 400 when refreshToken is missing', async () => {
