@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getLeaderboard } from '@/services/api/progress/progressApi';
 import { fetchWithAuth } from '@/services/api/httpClient';
@@ -35,25 +35,25 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const resp = await fetchWithAuth((token) => getLeaderboard(token, { page, pageSize: PAGE_SIZE }));
-        if (!active) return;
-        if (!resp) { setError('Connect wallet to view leaderboard.'); setLoading(false); return; }
-        setLeaderboard(resp);
-        setError(null);
-        setLoading(false);
-      } catch (err) {
-        if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
-      }
-    };
+  const fetchLeaderboard = useCallback(async (currentPage: number, signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const resp = await fetchWithAuth((token) => getLeaderboard(token, { page: currentPage, pageSize: PAGE_SIZE }));
+      if (signal?.aborted) return;
+      if (!resp) { setError('Connect wallet to view leaderboard.'); setLoading(false); return; }
+      setLeaderboard(resp);
+      setError(null);
+      setLoading(false);
+    } catch (err) {
+      if (!signal?.aborted) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
+    }
+  }, []);
 
-    void load();
-    return () => { active = false; };
-  }, [page]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchLeaderboard(page, controller.signal);
+    return () => { controller.abort(); };
+  }, [page, fetchLeaderboard]);
 
   return (
     <ScreenBackground>
@@ -77,6 +77,13 @@ export default function LeaderboardPage() {
       ) : error ? (
         <ParchmentCard className="mt-3" style={{ borderColor: 'rgba(212,160,74,0.25)' }}>
           <p className="text-xs" style={{ color: T.amber }}>{error}</p>
+          <button
+            onClick={() => { setError(null); void fetchLeaderboard(page); }}
+            className="mt-3 mx-auto block px-4 py-2 rounded-md border text-[11px] font-semibold uppercase tracking-wide"
+            style={{ borderColor: `${T.amber}30`, backgroundColor: 'rgba(212,160,74,0.08)', color: T.amber }}
+          >
+            Retry
+          </button>
         </ParchmentCard>
       ) : leaderboard ? (
         <>

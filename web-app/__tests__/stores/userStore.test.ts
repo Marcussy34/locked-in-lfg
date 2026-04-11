@@ -103,9 +103,11 @@ describe('userStore', () => {
       expect(useUserStore.getState().tutorialCompleted).toBe(true);
     });
 
-    it('writes to localStorage', () => {
+    it('persists via Zustand store (no direct localStorage write)', () => {
       useUserStore.getState().completeTutorial();
-      expect(localStorage.getItem('locked-in-tutorial-done')).toBe('1');
+      // Tutorial flag is persisted through Zustand persist middleware in 'locked-in-user' key,
+      // not via a separate 'locked-in-tutorial-done' localStorage entry
+      expect(useUserStore.getState().tutorialCompleted).toBe(true);
     });
 
     it('writes to cookie', () => {

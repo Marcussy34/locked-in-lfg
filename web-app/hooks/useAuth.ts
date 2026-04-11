@@ -29,6 +29,15 @@ export function useAuth() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authInProgress, setAuthInProgress] = useState(false);
 
+  // Track if Privy was ever authenticated this session — skip cleanup until first auth
+  const privyWasAuthenticatedRef = useRef(false);
+
+  useEffect(() => {
+    if (privyAuthenticated) {
+      privyWasAuthenticatedRef.current = true;
+    }
+  }, [privyAuthenticated]);
+
   const walletAddress = useUserStore((s) => s.walletAddress);
   const accessToken = useUserStore((s) => s.authToken);
   const setWallet = useUserStore((s) => s.setWallet);
@@ -151,7 +160,7 @@ export function useAuth() {
 
   // Cleanup: if Privy logs out externally, clear our state
   useEffect(() => {
-    if (privyReady && !privyAuthenticated && walletAddress) {
+    if (privyReady && !privyAuthenticated && walletAddress && privyWasAuthenticatedRef.current) {
       disconnectUser();
       useCourseStore.getState().reset();
       setAuthCookie(false);

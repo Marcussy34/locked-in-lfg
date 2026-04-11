@@ -41,16 +41,23 @@ export default function ProfilePage() {
 
   // XP state
   const [xp, setXp] = useState({ xpTotal: 0, xpLevel: 1 });
+  const [xpLoading, setXpLoading] = useState(true);
 
   useEffect(() => {
-    fetchWithAuth(getUserXp).then((data) => {
-      if (data) setXp({ xpTotal: data.xpTotal, xpLevel: data.xpLevel });
-    });
+    setXpLoading(true);
+    fetchWithAuth(getUserXp)
+      .then((data) => {
+        if (data) setXp({ xpTotal: data.xpTotal, xpLevel: data.xpLevel });
+      })
+      .finally(() => setXpLoading(false));
   }, []);
 
   // Derived stats
   const lessonsCompleted = Object.values(lessonProgress).filter((lp) => lp.completed).length;
-  const longestStreak = activeState?.longestStreak ?? 0;
+  const longestStreak = Math.max(
+    ...Object.values(courseStates).map((s) => s?.longestStreak ?? 0),
+    0,
+  );
   const coursesEnrolled = enrolledCourseIds.length;
 
   // Active course lesson progress
@@ -161,26 +168,55 @@ export default function ProfilePage() {
                 </p>
                 {/* Level + XP pills */}
                 <div className="flex items-center gap-2 mt-2.5">
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-[1px] px-2.5 py-1 rounded-full"
-                    style={{
-                      color: T.amber,
-                      backgroundColor: 'rgba(212,160,74,0.1)',
-                      border: '1px solid rgba(212,160,74,0.18)',
-                    }}
-                  >
-                    Lv.{xp.xpLevel} {levelName}
-                  </span>
-                  <span
-                    className="text-[10px] font-bold tracking-[0.5px] px-2.5 py-1 rounded-full"
-                    style={{
-                      color: T.teal,
-                      backgroundColor: 'rgba(42,232,212,0.08)',
-                      border: '1px solid rgba(42,232,212,0.15)',
-                    }}
-                  >
-                    {xp.xpTotal} XP
-                  </span>
+                  {xpLoading ? (
+                    <>
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-[1px] px-2.5 py-1 rounded-full animate-pulse"
+                        style={{
+                          color: 'transparent',
+                          backgroundColor: 'rgba(212,160,74,0.08)',
+                          border: '1px solid rgba(212,160,74,0.1)',
+                          minWidth: 80,
+                        }}
+                      >
+                        Loading
+                      </span>
+                      <span
+                        className="text-[10px] font-bold tracking-[0.5px] px-2.5 py-1 rounded-full animate-pulse"
+                        style={{
+                          color: 'transparent',
+                          backgroundColor: 'rgba(42,232,212,0.06)',
+                          border: '1px solid rgba(42,232,212,0.08)',
+                          minWidth: 50,
+                        }}
+                      >
+                        --
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-[1px] px-2.5 py-1 rounded-full"
+                        style={{
+                          color: T.amber,
+                          backgroundColor: 'rgba(212,160,74,0.1)',
+                          border: '1px solid rgba(212,160,74,0.18)',
+                        }}
+                      >
+                        Lv.{xp.xpLevel} {levelName}
+                      </span>
+                      <span
+                        className="text-[10px] font-bold tracking-[0.5px] px-2.5 py-1 rounded-full"
+                        style={{
+                          color: T.teal,
+                          backgroundColor: 'rgba(42,232,212,0.08)',
+                          border: '1px solid rgba(42,232,212,0.15)',
+                        }}
+                      >
+                        {xp.xpTotal} XP
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -202,7 +238,7 @@ export default function ProfilePage() {
 
             <div className="space-y-2.5">
               <JourneyRow label="Lessons Completed" value={lessonsCompleted} />
-              <JourneyRow label="Longest Streak" value={`${longestStreak} days`} />
+              <JourneyRow label="Longest Streak (all courses)" value={`${longestStreak} days`} />
               <JourneyRow label="Courses Enrolled" value={coursesEnrolled} />
               <JourneyRow label="Member Since" value="Mar 2026" />
             </div>

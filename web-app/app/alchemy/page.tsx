@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore, useUserStore } from '@/stores';
 import {
@@ -20,6 +20,13 @@ export default function AlchemyPage() {
   const convertFuelForCourse = useCourseStore((s) => s.convertFuelForCourse);
   const authToken = useUserStore((s) => s.authToken);
   const [convertAmount, setConvertAmount] = useState(1);
+
+  // Clamp convertAmount when fuelBalance changes
+  useEffect(() => {
+    if (fuelBalance > 0 && convertAmount > fuelBalance) {
+      setConvertAmount(fuelBalance);
+    }
+  }, [fuelBalance, convertAmount]);
   const [justConverted, setJustConverted] = useState<number | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +46,7 @@ export default function AlchemyPage() {
     try {
       await convertFuelForCourse(activeCourseId, amount, authToken);
       setJustConverted(amount * ICHOR_PER_FUEL);
-      setTimeout(() => setJustConverted(null), 2000);
+      setTimeout(() => setJustConverted(null), 4000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Conversion failed');
     } finally {

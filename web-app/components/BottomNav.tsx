@@ -31,7 +31,9 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className="flex flex-col items-center gap-0.5 py-2 px-1 flex-1 transition-colors"
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
+              className="flex flex-col items-center gap-0.5 py-3 px-1 flex-1 transition-colors"
               style={{
                 backgroundColor: isActive ? `${T.amber}15` : 'transparent',
                 color: isActive ? T.amber : T.textSecondary,

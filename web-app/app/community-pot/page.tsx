@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore } from '@/stores';
 import { getCommunityPotHistory } from '@/services/api/progress/progressApi';
@@ -39,30 +39,28 @@ export default function CommunityPotPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const resp = await fetchWithAuth((token) => getCommunityPotHistory(token));
-        if (!active) return;
-        if (!resp) { setError('Connect wallet to view community pot.'); setLoading(false); return; }
-        setHistory(resp.windows);
-        setError(null);
+  const fetchPotData = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const resp = await fetchWithAuth((token) => getCommunityPotHistory(token));
+      if (signal?.aborted) return;
+      if (!resp) { setError('Connect wallet to view community pot.'); setLoading(false); return; }
+      setHistory(resp.windows);
+      setError(null);
+      setLoading(false);
+    } catch (err) {
+      if (!signal?.aborted) {
+        setError(err instanceof Error ? err.message : 'Failed to load.');
         setLoading(false);
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to load.');
-          setLoading(false);
-        }
       }
-    };
-
-    void load();
-    return () => {
-      active = false;
-    };
+    }
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchPotData(controller.signal);
+    return () => { controller.abort(); };
+  }, [fetchPotData]);
 
   // Filter payouts where user has a result
   const payoutHistory = history.filter(
@@ -113,7 +111,18 @@ export default function CommunityPotPage() {
             </p>
           </>
         )}
-        {error && <p className="text-[11px] mt-2" style={{ color: T.amber }}>{error}</p>}
+        {error && (
+          <div className="mt-2">
+            <p className="text-[11px]" style={{ color: T.amber }}>{error}</p>
+            <button
+              onClick={() => { setError(null); void fetchPotData(); }}
+              className="mt-2 mx-auto block px-4 py-2 rounded-md border text-[11px] font-semibold uppercase tracking-wide"
+              style={{ borderColor: `${T.amber}30`, backgroundColor: 'rgba(212,160,74,0.08)', color: T.amber }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2-column layout */}

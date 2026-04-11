@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourseStore } from '@/stores';
 import { getYieldHistory } from '@/services/api/progress/progressApi';
@@ -170,29 +170,30 @@ export default function ShopPage() {
   const payout = parsedAmount > 0 ? ((parsedAmount / 1000) * rate).toFixed(2) : '--';
   const balanceWorth = ((ichorBalance / 1000) * rate).toFixed(2);
 
+  const fetchShopData = useCallback(async (courseId: string | null, signal?: AbortSignal) => {
+    if (!courseId) {
+      setYieldHistory(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await fetchWithAuth((token) => getYieldHistory(courseId, token));
+      if (signal?.aborted) return;
+      if (!resp) { setError('Connect wallet to view rewards.'); setLoading(false); return; }
+      setYieldHistory(resp);
+      setError(null);
+      setLoading(false);
+    } catch (err) {
+      if (!signal?.aborted) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
+    }
+  }, []);
+
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      if (!activeCourseId) {
-        setYieldHistory(null);
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const resp = await fetchWithAuth((token) => getYieldHistory(activeCourseId, token));
-        if (!active) return;
-        if (!resp) { setError('Connect wallet to view rewards.'); setLoading(false); return; }
-        setYieldHistory(resp);
-        setError(null);
-        setLoading(false);
-      } catch (err) {
-        if (active) { setError(err instanceof Error ? err.message : 'Failed to load.'); setLoading(false); }
-      }
-    };
-    void load();
-    return () => { active = false; };
-  }, [activeCourseId]);
+    const controller = new AbortController();
+    void fetchShopData(activeCourseId, controller.signal);
+    return () => { controller.abort(); };
+  }, [activeCourseId, fetchShopData]);
 
   const recentHarvests = yieldHistory?.entries ?? [];
 
@@ -259,8 +260,12 @@ export default function ShopPage() {
           >
             <input
               type="number"
+              min={0}
               value={ichorAmount}
-              onChange={(e) => setIchorAmount(e.target.value)}
+              onChange={(e) => {
+                const val = Math.max(0, Number(e.target.value));
+                setIchorAmount(String(val));
+              }}
               placeholder="1000"
               className="bg-transparent outline-none text-2xl font-bold font-mono text-center w-full"
               style={{ color: T.amber }}
@@ -324,10 +329,10 @@ export default function ShopPage() {
             }}
             disabled
           >
-            ◆ Claim Rewards ◆
+            ◆ Coming Soon ◆
           </button>
           <p className="text-center text-[10px] mt-2" style={{ color: T.textMuted }}>
-            On-chain redemption requires wallet connection
+            On-chain redemption launching soon
           </p>
         </ParchmentCard>
 
@@ -337,7 +342,16 @@ export default function ShopPage() {
           {loading ? (
             <p className="text-sm" style={{ color: T.textSecondary }}>Loading earnings...</p>
           ) : error ? (
-            <p className="text-xs" style={{ color: T.amber }}>{error}</p>
+            <div>
+              <p className="text-xs" style={{ color: T.amber }}>{error}</p>
+              <button
+                onClick={() => { setError(null); void fetchShopData(activeCourseId); }}
+                className="mt-3 px-4 py-2 rounded-md border text-[11px] font-semibold uppercase tracking-wide"
+                style={{ borderColor: `${T.amber}30`, backgroundColor: 'rgba(212,160,74,0.08)', color: T.amber }}
+              >
+                Retry
+              </button>
+            </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2.5 mb-3">

@@ -8,6 +8,13 @@ import { ApiError } from './errors';
 import { refreshAuthSession } from './auth/authApi';
 import { useUserStore } from '@/stores/userStore';
 
+export class AuthExpiredError extends Error {
+  constructor() {
+    super('Authentication expired');
+    this.name = 'AuthExpiredError';
+  }
+}
+
 interface RequestOptions {
   method?: 'GET' | 'POST';
   body?: unknown;
@@ -185,22 +192,33 @@ export async function httpRequest<T>(
  * 4. Returns `null` when no token is available or refresh fails (lets callers handle gracefully).
  * 5. Re-throws non-auth errors so callers can display them.
  */
+// Mutex for token refresh — prevents concurrent refresh calls
+let refreshPromise: Promise<{ accessToken: string; refreshToken: string }> | null = null;
+
+async function doRefresh(currentRefreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = refreshAuthSession({ refreshToken: currentRefreshToken }).finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
 export async function fetchWithAuth<T>(
   requestFn: (token: string) => Promise<T>,
-): Promise<T | null> {
+): Promise<T> {
   const { authToken, refreshToken, setAuthSession } = useUserStore.getState();
 
   // If we have no access token, try a proactive refresh before giving up.
   let token = authToken;
   if (!token) {
-    if (!refreshToken) return null;
+    if (!refreshToken) throw new AuthExpiredError();
     try {
-      const session = await refreshAuthSession({ refreshToken });
+      const session = await doRefresh(refreshToken);
       setAuthSession(session.accessToken, session.refreshToken);
       token = session.accessToken;
     } catch {
       setAuthSession(null, null);
-      return null;
+      throw new AuthExpiredError();
     }
   }
 
@@ -213,14 +231,14 @@ export async function fetchWithAuth<T>(
       (err.status === 401 || err.code === 'TOKEN_EXPIRED')
     ) {
       const currentRefreshToken = useUserStore.getState().refreshToken;
-      if (!currentRefreshToken) return null;
+      if (!currentRefreshToken) throw new AuthExpiredError();
       try {
-        const session = await refreshAuthSession({ refreshToken: currentRefreshToken });
+        const session = await doRefresh(currentRefreshToken);
         setAuthSession(session.accessToken, session.refreshToken);
         return await requestFn(session.accessToken);
       } catch {
         setAuthSession(null, null);
-        return null;
+        throw new AuthExpiredError();
       }
     }
     throw err;

@@ -108,7 +108,7 @@ function CourseCard({
 
   return (
     <div
-      className={`w-full text-left transition-all duration-150 ${isComingSoon ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:scale-[1.01] hover:brightness-110'}`}
+      className={`w-full text-left transition-all duration-150 will-change-transform ${isComingSoon ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:scale-[1.01] hover:brightness-110'}`}
       onClick={isComingSoon ? undefined : onSelect}
       role={isComingSoon ? undefined : 'button'}
       tabIndex={isComingSoon ? undefined : 0}
@@ -129,13 +129,13 @@ function CourseCard({
         </div>
 
         <h3
-          className="text-[17px] font-bold tracking-wide leading-[22px] mb-[5px]"
+          className="text-[17px] font-bold tracking-wide leading-[22px] mb-[5px] line-clamp-2"
           style={{ color: selected ? T.textPrimary : '#B8B0A4', fontFamily: 'Georgia, serif' }}
         >
           {course.title}
         </h3>
 
-        <p className="text-xs leading-[18px] mb-3.5 line-clamp-2" style={{ color: T.textSecondary }}>
+        <p className="text-xs leading-[18px] mb-3.5 line-clamp-3" style={{ color: T.textSecondary }}>
           {course.description}
         </p>
 
@@ -239,6 +239,7 @@ export default function CoursesPage() {
   const courses = useCourseStore((s) => s.courses);
   const contentLoading = useCourseStore((s) => s.contentLoading);
   const contentError = useCourseStore((s) => s.contentError);
+  const contentInitialized = useCourseStore((s) => s.contentInitialized);
   const initializeContent = useCourseStore((s) => s.initializeContent);
   const syncOnChainEnrollments = useCourseStore((s) => s.syncOnChainEnrollments);
   const enrolledCourseIds = useCourseStore((s) => s.enrolledCourseIds);
@@ -367,7 +368,7 @@ export default function CoursesPage() {
               {(() => {
                 const currentThreshold = xp.levelThresholds?.[xp.xpLevel - 1] ?? 0;
                 const nextThreshold = xp.levelThresholds?.[xp.xpLevel] ?? currentThreshold + 1000;
-                const progress = (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold);
+                const progress = Math.min(1, Math.max(0, (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold)));
                 const LEVEL_NAMES = ['Novice', 'Apprentice', 'Scholar', 'Adept', 'Master', 'Sage', 'Legend'];
                 const levelName = LEVEL_NAMES[xp.xpLevel - 1] ?? `Level ${xp.xpLevel}`;
                 return (
@@ -496,7 +497,7 @@ export default function CoursesPage() {
         })()}
 
         {/* Empty */}
-        {courses.length === 0 && !contentLoading && !contentError && (
+        {courses.length === 0 && !contentLoading && !contentError && contentInitialized && (
           <div className="text-center py-16">
             <p className="text-sm" style={{ color: T.textMuted }}>No courses available yet.</p>
           </div>
@@ -507,7 +508,7 @@ export default function CoursesPage() {
       {isOnboardingMode && selectedCourse && (
         <div
           className="fixed bottom-0 left-0 right-0 px-[18px] pb-8 pt-4"
-          style={{ backgroundColor: `${T.bg}F5` }}
+          style={{ backgroundColor: `${T.bg}F5`, paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}
         >
           <div className="max-w-[1100px] mx-auto">
             <button

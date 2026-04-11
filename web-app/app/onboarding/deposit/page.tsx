@@ -193,60 +193,67 @@ function DepositContent() {
 
   // Build on-chain lock transaction, sign with wallet, send to network
   const handleDeposit = async () => {
-    if (!walletAddress) {
-      setStatusMessage('Connect your wallet before creating a lock.');
-      return;
-    }
+    if (isSubmitting) return; // Guard against double-click
+    setIsSubmitting(true);
 
-    const amount = Number(principalAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setStatusMessage('Enter a valid USDC amount.');
-      return;
-    }
-
-    const min = Number(courseLockPolicy.minPrincipalAmountUi);
-    const max = courseLockPolicy.maxPrincipalAmountUi
-      ? Number(courseLockPolicy.maxPrincipalAmountUi)
-      : null;
-    const demo = courseLockPolicy.demoPrincipalAmountUi
-      ? Number(courseLockPolicy.demoPrincipalAmountUi)
-      : null;
-    if (amount < min && amount !== demo) {
-      setStatusMessage(
-        `This course requires at least ${courseLockPolicy.minPrincipalAmountUi} USDC.`,
-      );
-      return;
-    }
-    if (max != null && amount > max) {
-      setStatusMessage(
-        `This course allows at most ${courseLockPolicy.maxPrincipalAmountUi} USDC.`,
-      );
-      return;
-    }
-
-    if (!hasLockVaultConfig()) {
-      setStatusMessage('LockVault program not configured. Check env vars.');
-      return;
-    }
-
-    // Re-validate wallet balance before building transaction
     try {
-      const freshBalances = await fetchWalletDepositBalances(walletAddress);
-      setBalances(freshBalances);
-      const usdcBalance = Number(freshBalances.stableBalanceUi);
-      if (usdcBalance < amount) {
-        setStatusMessage(`Insufficient USDC. You have ${freshBalances.stableBalanceUi} USDC.`);
+      if (!walletAddress) {
+        setStatusMessage('Connect your wallet before creating a lock.');
         return;
       }
-    } catch {
-      // If balance fetch fails, proceed with stale balance — the on-chain tx will fail if insufficient
-      console.warn('[deposit] Could not re-fetch balance before tx');
-    }
 
-    setIsSubmitting(true);
-    setStatusMessage('Building transaction...');
+      if (!/^\d+\.?\d{0,6}$/.test(principalAmount.trim())) {
+        setStatusMessage('Enter a valid amount (up to 6 decimal places).');
+        return;
+      }
 
-    try {
+      const amount = Number(principalAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setStatusMessage('Enter a valid USDC amount.');
+        return;
+      }
+
+      const min = Number(courseLockPolicy.minPrincipalAmountUi);
+      const max = courseLockPolicy.maxPrincipalAmountUi
+        ? Number(courseLockPolicy.maxPrincipalAmountUi)
+        : null;
+      const demo = courseLockPolicy.demoPrincipalAmountUi
+        ? Number(courseLockPolicy.demoPrincipalAmountUi)
+        : null;
+      if (amount < min && amount !== demo) {
+        setStatusMessage(
+          `This course requires at least ${courseLockPolicy.minPrincipalAmountUi} USDC.`,
+        );
+        return;
+      }
+      if (max != null && amount > max) {
+        setStatusMessage(
+          `This course allows at most ${courseLockPolicy.maxPrincipalAmountUi} USDC.`,
+        );
+        return;
+      }
+
+      if (!hasLockVaultConfig()) {
+        setStatusMessage('LockVault program not configured. Check env vars.');
+        return;
+      }
+
+      // Re-validate wallet balance before building transaction
+      try {
+        const freshBalances = await fetchWalletDepositBalances(walletAddress);
+        setBalances(freshBalances);
+        const usdcBalance = Number(freshBalances.stableBalanceUi);
+        if (usdcBalance < amount) {
+          setStatusMessage(`Insufficient USDC. You have ${freshBalances.stableBalanceUi} USDC.`);
+          return;
+        }
+      } catch {
+        // If balance fetch fails, proceed with stale balance — the on-chain tx will fail if insufficient
+        console.warn('[deposit] Could not re-fetch balance before tx');
+      }
+
+      setStatusMessage('Building transaction...');
+
       // 1. Build the lock transaction (derives PDAs, encodes instruction data)
       const buildResult = await buildLockFundsTransaction({
         ownerAddress: walletAddress,
@@ -298,6 +305,7 @@ function DepositContent() {
       const message = error instanceof Error ? error.message : 'Transaction failed';
       console.error('[deposit] Lock transaction failed:', error);
       setStatusMessage(message);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -362,7 +370,9 @@ function DepositContent() {
           <ParchmentCard>
             {/* Principal Amount */}
             <SectionLabel>Amount</SectionLabel>
+            <label htmlFor="principal-amount" className="sr-only">USDC deposit amount</label>
             <input
+              id="principal-amount"
               type="number"
               inputMode="decimal"
               value={principalAmount}
@@ -384,7 +394,7 @@ function DepositContent() {
                   <button
                     key={value}
                     onClick={() => setPrincipalAmount(String(value))}
-                    className="px-3 py-2 rounded-full border text-[13px] font-semibold transition-colors"
+                    className="px-4 py-3 rounded-full border text-[13px] font-semibold transition-colors"
                     style={{
                       borderColor: selected ? T.amber : T.borderDormant,
                       backgroundColor: selected
@@ -409,7 +419,9 @@ function DepositContent() {
             {/* SKR Boost */}
             <div className="mt-5">
               <SectionLabel>SKR Boost (optional)</SectionLabel>
+              <label htmlFor="skr-boost" className="sr-only">SKR boost amount</label>
               <input
+                id="skr-boost"
                 type="number"
                 inputMode="decimal"
                 value={skrAmount}
@@ -425,14 +437,17 @@ function DepositContent() {
             </div>
 
             {/* Lock Duration */}
-            <div className="mt-5">
+            <fieldset className="mt-5 border-none p-0 m-0">
+              <legend className="sr-only">Lock duration</legend>
               <SectionLabel>Lock Duration</SectionLabel>
-              <div className="flex gap-2.5 mt-1.5">
+              <div className="flex gap-2.5 mt-1.5" role="radiogroup" aria-label="Lock duration">
                 {availableLockDurations.map((duration) => {
                   const selected = lockDuration === duration;
                   return (
                     <button
                       key={duration}
+                      role="radio"
+                      aria-checked={selected}
                       onClick={() => setLockDuration(duration)}
                       className="flex-1 py-2.5 rounded-lg border text-sm font-semibold text-center transition-colors"
                       style={{
@@ -448,7 +463,7 @@ function DepositContent() {
                   );
                 })}
               </div>
-            </div>
+            </fieldset>
           </ParchmentCard>
 
           {/* Status message */}
@@ -463,7 +478,15 @@ function DepositContent() {
           {/* Deposit button */}
           <div className="mt-4">
             <PrimaryButton onClick={handleDeposit} disabled={isDisabled}>
-              {isSubmitting ? 'Creating Lock...' : 'Deposit & Start Learning'}
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating Lock...
+                </>
+              ) : 'Deposit & Start Learning'}
             </PrimaryButton>
           </div>
         </div>

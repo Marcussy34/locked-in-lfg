@@ -131,6 +131,8 @@ function deriveNextFuelBurnAt(_state: CourseGameState): string | null {
 }
 
 
+let enrollmentSyncInProgress = false;
+
 export const useCourseStore = create<CourseStore>()(
   persist(
     (set, get) => ({
@@ -246,6 +248,7 @@ export const useCourseStore = create<CourseStore>()(
               saverRecoveryMode: false,
               flameState: flameState as CourseGameState['flameState'],
               lightIntensity: INTENSITY[flameState] ?? 0.15,
+              lastLocalCompletionAt: Date.now(),
             },
           },
         });
@@ -277,6 +280,9 @@ export const useCourseStore = create<CourseStore>()(
         const toConvert = Math.min(fuelAmount, state.fuelCounter);
         const ICHOR_PER_FUEL = 100;
         const ichorGained = toConvert * ICHOR_PER_FUEL;
+
+        // Snapshot for safe revert
+        const preOpState = { ...state };
 
         // Optimistic update for instant UI feedback
         set({
@@ -315,22 +321,16 @@ export const useCourseStore = create<CourseStore>()(
           }
           return { applied: true, ichorGained };
         } catch (error) {
-          // Revert optimistic update on failure
+          // Revert to pre-operation snapshot instead of reading current state
           const currentStates = get().courseStates;
-          const currentState = currentStates[courseId];
-          if (currentState) {
-            set({
-              courseStates: {
-                ...currentStates,
-                [courseId]: {
-                  ...currentState,
-                  fuelCounter: currentState.fuelCounter + toConvert,
-                  ichorBalance: currentState.ichorBalance - ichorGained,
-                  totalIchorProduced: currentState.totalIchorProduced - ichorGained,
-                },
+          set({
+            courseStates: {
+              ...currentStates,
+              [courseId]: {
+                ...preOpState,
               },
-            });
-          }
+            },
+          });
           throw error;
         }
       },
@@ -365,6 +365,8 @@ export const useCourseStore = create<CourseStore>()(
             enrolledCourseIds: [],
             courseStates: {},
             lessonProgress: {},
+            modules: {},
+            lessons: {},
             courses: state.courses.map((course) => ({
               ...course,
               completedLessons: 0,
@@ -486,7 +488,14 @@ export const useCourseStore = create<CourseStore>()(
 
       syncCourseRuntime: (courseId, snapshot) => {
         const state = get();
-        const existingState = normalizeCourseGameState(state.courseStates[courseId]);
+        const existing = state.courseStates[courseId];
+
+        // Don't overwrite streak if we just completed locally (within last 10 seconds)
+        if (existing?.lastLocalCompletionAt && Date.now() - existing.lastLocalCompletionAt < 10_000) {
+          return;
+        }
+
+        const existingState = normalizeCourseGameState(existing);
 
         set({
           courseStates: {
@@ -580,33 +589,39 @@ export const useCourseStore = create<CourseStore>()(
       },
 
       syncOnChainEnrollments: async (walletAddress) => {
-        const { courses, enrolledCourseIds, courseStates } = get();
-        if (!walletAddress || courses.length === 0) return;
-
-        // Only check courses not already enrolled
-        const unenrolledCourseIds = courses
-          .map((c) => c.id)
-          .filter((id) => !enrolledCourseIds.includes(id) || !courseStates[id]?.lockAccountAddress);
-
-        if (unenrolledCourseIds.length === 0) return;
-
+        if (enrollmentSyncInProgress) return;
+        enrollmentSyncInProgress = true;
         try {
-          const lockMap = await batchCheckLockAccounts(walletAddress, unenrolledCourseIds);
+          const { courses, enrolledCourseIds, courseStates } = get();
+          if (!walletAddress || courses.length === 0) return;
 
-          for (const [courseId, snapshot] of lockMap) {
-            // Enroll + activate with lock data from chain
-            const derivedDuration = snapshot.lockEndDate && snapshot.lockStartDate
-              ? Math.round((new Date(snapshot.lockEndDate).getTime() - new Date(snapshot.lockStartDate).getTime()) / 86400000)
-              : 30;
-            get().activateCourse(courseId, {
-              amount: parseFloat(snapshot.principalAmountUi),
-              duration: derivedDuration as 14 | 30 | 45 | 60 | 90 | 180 | 365,
-              lockAccountAddress: snapshot.lockAccountAddress,
-            });
-            get().syncLockSnapshot(courseId, snapshot);
+          // Only check courses not already enrolled
+          const unenrolledCourseIds = courses
+            .map((c) => c.id)
+            .filter((id) => !enrolledCourseIds.includes(id) || !courseStates[id]?.lockAccountAddress);
+
+          if (unenrolledCourseIds.length === 0) return;
+
+          try {
+            const lockMap = await batchCheckLockAccounts(walletAddress, unenrolledCourseIds);
+
+            for (const [courseId, snapshot] of lockMap) {
+              // Enroll + activate with lock data from chain
+              const derivedDuration = snapshot.lockEndDate && snapshot.lockStartDate
+                ? Math.round((new Date(snapshot.lockEndDate).getTime() - new Date(snapshot.lockStartDate).getTime()) / 86400000)
+                : 30;
+              get().activateCourse(courseId, {
+                amount: parseFloat(snapshot.principalAmountUi),
+                duration: derivedDuration as 14 | 30 | 45 | 60 | 90 | 180 | 365,
+                lockAccountAddress: snapshot.lockAccountAddress,
+              });
+              get().syncLockSnapshot(courseId, snapshot);
+            }
+          } catch (error) {
+            console.warn('[on-chain-sync] Failed to check lock accounts:', error);
           }
-        } catch (error) {
-          console.warn('[on-chain-sync] Failed to check lock accounts:', error);
+        } finally {
+          enrollmentSyncInProgress = false;
         }
       },
 

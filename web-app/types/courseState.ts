@@ -40,6 +40,9 @@ export interface CourseGameState {
   // Flame (visual state, derived from streak)
   flameState: FlameState;
   lightIntensity: number;
+
+  // Local completion timestamp (epoch ms) for sync guard
+  lastLocalCompletionAt: number | null;
 }
 
 export const DEFAULT_COURSE_STATE: CourseGameState = {
@@ -66,4 +69,5 @@ export const DEFAULT_COURSE_STATE: CourseGameState = {
   totalIchorProduced: 0,
   flameState: 'COLD',
   lightIntensity: 0.05,
+  lastLocalCompletionAt: null,
 };

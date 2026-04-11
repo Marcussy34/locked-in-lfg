@@ -27,7 +27,9 @@ function formatFuelEarnStatus(status: string): string {
 // Format a burn timestamp or fallback
 function formatBurnTime(timestamp: string | null): string {
   if (!timestamp) return 'No burn scheduled';
-  return new Date(timestamp).toLocaleString();
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return 'Unknown';
+  return date.toLocaleString();
 }
 
 export default function InventoryPage() {

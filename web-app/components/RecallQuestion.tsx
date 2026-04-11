@@ -49,7 +49,7 @@ export function RecallQuestion({ question, lessonTitle, onComplete }: RecallQues
     (!isMcq && textAnswer.trim().length > 0);
 
   return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center px-6">
+    <div className="min-h-[60vh] md:min-h-[80vh] flex flex-col items-center justify-center px-6">
       {/* Header */}
       <div className="text-center mb-6">
         <div className="flex items-center justify-center gap-2 mb-3">
@@ -115,6 +115,7 @@ export function RecallQuestion({ question, lessonTitle, onComplete }: RecallQues
                     key={optId}
                     onClick={() => !hasChecked && setSelectedOption(optId)}
                     disabled={hasChecked}
+                    aria-label={optText}
                     className="w-full text-left px-4 py-3 rounded-lg border text-[13px] transition-colors"
                     style={{
                       borderColor,

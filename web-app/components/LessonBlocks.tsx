@@ -108,7 +108,7 @@ function RichParagraph({ block }: { block: LessonBlock }) {
                       >
                         {numMatch[1]}.
                       </span>
-                      <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', flex: 1, margin: 0 }}>
+                      <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)', flex: 1, margin: 0 }}>
                         {renderInline(numMatch[2])}
                       </p>
                     </div>
@@ -119,7 +119,7 @@ function RichParagraph({ block }: { block: LessonBlock }) {
                   return (
                     <div key={j} style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
                       <span style={{ fontSize: 8, marginTop: 8, flexShrink: 0, color: T.amber }}>{'\u25CF'}</span>
-                      <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', flex: 1, margin: 0 }}>
+                      <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)', flex: 1, margin: 0 }}>
                         {renderInline(t.slice(2))}
                       </p>
                     </div>
@@ -201,7 +201,7 @@ function RichParagraph({ block }: { block: LessonBlock }) {
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.amber, flexShrink: 0, width: 20, textAlign: 'right' }}>
                   {numMatch[1]}.
                 </span>
-                <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', flex: 1, margin: 0 }}>
+                <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)', flex: 1, margin: 0 }}>
                   {renderInline(numMatch[2])}
                 </p>
               </div>,
@@ -215,7 +215,7 @@ function RichParagraph({ block }: { block: LessonBlock }) {
             elements.push(
               <div key={`bullet-${j}`} style={{ display: 'flex', gap: 12, marginLeft: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 8, marginTop: 8, flexShrink: 0, color: T.amber }}>{'\u25CF'}</span>
-                <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', flex: 1, margin: 0 }}>
+                <p style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)', flex: 1, margin: 0 }}>
                   {renderInline(t.slice(2))}
                 </p>
               </div>,
@@ -286,7 +286,7 @@ function FlowSteps({ block }: { block: LessonBlock }) {
   const steps = block.steps ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, margin: '24px 0' }}>
+    <ol style={{ display: 'flex', flexDirection: 'column', gap: 0, margin: '24px 0', listStyle: 'none', padding: 0 }}>
       {steps.map((step, idx) => {
         const isGreen = step.color === 'green';
         const numberBg = isGreen ? 'rgba(62,230,138,0.1)' : 'rgba(212,160,74,0.1)';
@@ -294,7 +294,7 @@ function FlowSteps({ block }: { block: LessonBlock }) {
         const numberBorder = isGreen ? 'rgba(62,230,138,0.2)' : 'rgba(212,160,74,0.2)';
 
         return (
-          <div key={idx}>
+          <li key={idx}>
             {/* Connector line between steps */}
             {idx > 0 && (
               <div style={{ width: 32, display: 'flex', justifyContent: 'center', padding: 0 }}>
@@ -337,10 +337,10 @@ function FlowSteps({ block }: { block: LessonBlock }) {
                 </div>
               </div>
             </div>
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }
 
@@ -356,42 +356,44 @@ function ConceptList({ block }: { block: LessonBlock }) {
           {renderInline(block.text)}
         </p>
       )}
-      {items.map((item, idx) => (
-        <div
-          key={idx}
-          style={{
-            display: 'flex',
-            gap: 16,
-            padding: '16px 0',
-            borderBottom: idx < items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-          }}
-        >
-          <div
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+        {items.map((item, idx) => (
+          <li
+            key={idx}
             style={{
-              width: 42,
-              height: 42,
-              borderRadius: 10,
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 18,
-              flexShrink: 0,
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.06)',
+              gap: 16,
+              padding: '16px 0',
+              borderBottom: idx < items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
             }}
           >
-            {item.icon}
-          </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.textPrimary, marginBottom: 3 }}>
-              {item.name}
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 18,
+                flexShrink: 0,
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              {item.icon}
             </div>
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: 'rgba(255,255,255,0.5)' }}>
-              {renderInline(item.desc)}
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.textPrimary, marginBottom: 3 }}>
+                {item.name}
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.6, color: 'rgba(255,255,255,0.5)' }}>
+                {renderInline(item.desc)}
+              </div>
             </div>
-          </div>
-        </div>
-      ))}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -650,9 +652,9 @@ function Checklist({ block }: { block: LessonBlock }) {
   const items = (block.items ?? []) as string[];
 
   return (
-    <div style={{ margin: '20px 0' }}>
+    <ul style={{ margin: '20px 0', padding: 0, listStyle: 'none' }}>
       {items.map((item, idx) => (
-        <div
+        <li
           key={idx}
           style={{
             display: 'flex',
@@ -684,9 +686,9 @@ function Checklist({ block }: { block: LessonBlock }) {
           <div style={{ fontSize: 15, lineHeight: 1.6, color: 'rgba(255,255,255,0.6)' }}>
             {renderInline(item)}
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -838,7 +840,7 @@ function CodeBlock({ block }: { block: LessonBlock }) {
           lineHeight: '22px',
           fontFamily: 'monospace',
           background: 'rgba(0,0,0,0.4)',
-          color: 'rgba(255,255,255,0.7)',
+          color: 'rgba(255,255,255,0.85)',
           margin: 0,
         }}
       >

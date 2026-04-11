@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T } from './theme';
 
@@ -11,10 +11,17 @@ import { T } from './theme';
  */
 export function AnimatedSplash({ children }: { children: ReactNode }) {
   const [showSplash, setShowSplash] = useState(false);
+  const splashShownRef = useRef(false);
 
-  // Check once on mount whether to show splash
+  // Check once on mount whether to show splash (ref prevents double-fire in Strict Mode)
   useEffect(() => {
-    if (!sessionStorage.getItem('splash-shown')) {
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) return;
+
+    if (!splashShownRef.current && !sessionStorage.getItem('splash-shown')) {
+      splashShownRef.current = true;
       setShowSplash(true);
       sessionStorage.setItem('splash-shown', '1');
     }
@@ -49,6 +56,7 @@ export function AnimatedSplash({ children }: { children: ReactNode }) {
               width={160}
               height={160}
               className="object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
             {/* Title text below logo */}
             <p

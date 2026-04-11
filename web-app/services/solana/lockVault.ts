@@ -415,9 +415,14 @@ export async function batchCheckLockAccounts(
         skrDecimals,
       );
       result.set(courseIds[i], snapshot);
-    } catch {
-      // Not a valid lock account — skip
+    } catch (err) {
+      console.warn(`[lockVault] Failed to decode lock account for course ${courseIds[i]}:`, err);
+      continue;
     }
+  }
+
+  if (result.size === 0 && courseIds.length > 0) {
+    console.error('[lockVault] All lock account checks failed — user may have orphaned enrollments');
   }
 
   return result;

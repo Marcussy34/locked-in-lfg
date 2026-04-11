@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, type CSSProperties } from 'react';
+import { useRouter } from 'next/navigation';
 
 // ── Color palette (Dead Cells inspired — matches RN theme.tsx exactly) ──
 export const T = {
@@ -37,7 +38,7 @@ export function ScreenBackground({ children }: { children: ReactNode }) {
       }}
     >
       {/* Semi-transparent overlay — fixed so it doesn't scroll with content */}
-      <div className="fixed inset-0" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
+      <div className="fixed inset-0 z-[-1]" style={{ backgroundColor: 'rgba(6,6,12,0.4)' }} />
       <div className="relative max-w-[1100px] mx-auto px-[18px] pb-10">
         {children}
       </div>
@@ -81,10 +82,24 @@ export function ParchmentCard({
 }
 
 /** Back button */
-export function BackButton({ onClick }: { onClick: () => void }) {
+export function BackButton({ onClick }: { onClick?: () => void }) {
+  const router = useRouter();
+
+  const handleBack = () => {
+    if (onClick) {
+      onClick();
+      return;
+    }
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/courses');
+    }
+  };
+
   return (
     <button
-      onClick={onClick}
+      onClick={handleBack}
       className="py-3 font-mono text-xs md:hidden"
       style={{ color: T.textSecondary }}
     >
@@ -302,7 +317,7 @@ export function PrimaryButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`w-full py-3.5 rounded-lg border text-center transition-opacity ${disabled ? 'opacity-40' : ''} ${className}`}
+      className={`w-full py-3.5 rounded-lg border text-center transition-opacity focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black ${disabled ? 'opacity-40' : ''} ${className}`}
       style={{
         backgroundColor: T.amber,
         borderColor: '#E8B860',
@@ -312,6 +327,7 @@ export function PrimaryButton({
         color: '#1A1000',
         letterSpacing: 2.5,
         textTransform: 'uppercase',
+        outline: 'none',
       }}
     >
       {children}

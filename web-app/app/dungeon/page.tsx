@@ -48,7 +48,7 @@ export default function DungeonPage() {
 
   // Auto-select first locked course if none active
   useEffect(() => {
-    if (lockedCourseIds.length > 0 && (!activeCourseId || !lockedCourseIds.includes(activeCourseId))) {
+    if (!activeCourseId && lockedCourseIds.length > 0) {
       setActiveCourse(lockedCourseIds[0]);
     }
   }, [activeCourseId, lockedCourseIds, setActiveCourse]);
@@ -170,7 +170,7 @@ export default function DungeonPage() {
   // Error state — fixed z-[5] so it stacks above the dungeon iframe (z-0)
   if (iframeError) {
     return (
-      <div className="fixed inset-0 z-[5] flex items-center justify-center" style={{ backgroundColor: T.bg }}>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: T.bg }}>
         <div className="text-center space-y-4">
           <h2 className="text-xl font-bold" style={{ color: T.crimson }}>Dungeon Error</h2>
           <p style={{ color: T.textSecondary }}>{iframeError}</p>

@@ -12,7 +12,7 @@ import { getUserEnrollments } from '@/services/api/progress/progressApi';
 import { T } from './theme';
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ['/', '/courses'];
+const PUBLIC_ROUTES = ['/courses'];
 
 // Routes allowed during onboarding (before active lock)
 const ONBOARDING_ROUTES = ['/courses', '/onboarding/deposit', '/onboarding/tutorial'];
@@ -184,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       {isInMainApp && <Sidebar />}
       {isInMainApp && <BottomNav />}
-      <main className={`flex-1 ${isInMainApp ? 'md:ml-[240px] pb-[72px] md:pb-0' : ''}`}>
+      <main className={`flex-1 ${isInMainApp ? 'md:ml-[240px] pb-[calc(72px_+_env(safe-area-inset-bottom,0px))] md:pb-0' : ''}`}>
         {children}
       </main>
     </>

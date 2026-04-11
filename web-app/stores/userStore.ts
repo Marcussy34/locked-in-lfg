@@ -89,8 +89,7 @@ export const useUserStore = create<UserStore>()(
       completeDungeonTour: () => set({ dungeonTourCompleted: true }),
       completeTutorial: () => {
         set({ tutorialCompleted: true });
-        // Persist outside Zustand — survives store resets AND localStorage.clear()
-        try { localStorage.setItem('locked-in-tutorial-done', '1'); } catch {}
+        // Cookie needed for server-side checks; localStorage handled by Zustand persist middleware
         try { document.cookie = 'locked-in-tutorial-done=1; path=/; max-age=31536000; samesite=lax'; } catch {}
       },
     }),

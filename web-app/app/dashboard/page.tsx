@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const levelName = LEVEL_NAMES[xp.xpLevel - 1] ?? `Level ${xp.xpLevel}`;
   const currentThreshold = XP_THRESHOLDS[xp.xpLevel - 1] ?? 0;
   const nextThreshold = XP_THRESHOLDS[xp.xpLevel] ?? currentThreshold + 1000;
-  const xpProgress = (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold);
+  const xpProgress = Math.min(1, Math.max(0, (xp.xpTotal - currentThreshold) / (nextThreshold - currentThreshold)));
 
   // Lock progress
   const lockProgress = useMemo(() => {

@@ -106,6 +106,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
                   className="group flex items-center gap-3 px-5 py-2.5 text-[13px] relative transition-colors duration-150"
                   style={{
                     fontFamily: 'system-ui, -apple-system, sans-serif',
