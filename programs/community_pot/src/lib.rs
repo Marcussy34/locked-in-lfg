@@ -746,4 +746,144 @@ mod tests {
         assert_eq!(distribution_window.status, DISTRIBUTED_STATUS);
         assert_eq!(distribution_window.remaining_amount(), 0);
     }
+
+    // ── New tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn record_redirect_near_u64_max_overflows() {
+        let mut window = seeded_window(202605);
+        window.total_redirected_amount = u64::MAX - 10;
+
+        let result = window.record_redirect(20, 1_700_100_000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remaining_amount_saturates_when_distributed_exceeds_total() {
+        let protocol = Pubkey::new_unique();
+        let pot_window = Pubkey::new_unique();
+        let mut dw = DistributionWindow {
+            protocol_config: Pubkey::default(),
+            pot_window: Pubkey::default(),
+            window_id: 0,
+            total_redirected_amount: 0,
+            total_weight: 0,
+            eligible_recipient_count: 0,
+            distributed_amount: 0,
+            distribution_count: 0,
+            closed_at_ts: 0,
+            status: OPEN_STATUS,
+            bump: 0,
+        };
+
+        dw.initialize(protocol, pot_window, 202606, 100, 1_000, 1, 1_700_300_000, 210);
+        // Manually set distributed > total to exercise saturating_sub
+        dw.distributed_amount = 200;
+        assert_eq!(dw.remaining_amount(), 0);
+    }
+
+    #[test]
+    fn record_distribution_overflow_is_caught() {
+        let protocol = Pubkey::new_unique();
+        let pot_window = Pubkey::new_unique();
+        let mut dw = DistributionWindow {
+            protocol_config: Pubkey::default(),
+            pot_window: Pubkey::default(),
+            window_id: 0,
+            total_redirected_amount: 0,
+            total_weight: 0,
+            eligible_recipient_count: 0,
+            distributed_amount: 0,
+            distribution_count: 0,
+            closed_at_ts: 0,
+            status: OPEN_STATUS,
+            bump: 0,
+        };
+
+        dw.initialize(
+            protocol,
+            pot_window,
+            202607,
+            u64::MAX,
+            1_000,
+            1,
+            1_700_400_000,
+            220,
+        );
+        dw.distributed_amount = u64::MAX - 5;
+        let result = dw.record_distribution(10);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn partial_distribution_keeps_closed_status() {
+        let protocol = Pubkey::new_unique();
+        let pot_window = Pubkey::new_unique();
+        let mut dw = DistributionWindow {
+            protocol_config: Pubkey::default(),
+            pot_window: Pubkey::default(),
+            window_id: 0,
+            total_redirected_amount: 0,
+            total_weight: 0,
+            eligible_recipient_count: 0,
+            distributed_amount: 0,
+            distribution_count: 0,
+            closed_at_ts: 0,
+            status: OPEN_STATUS,
+            bump: 0,
+        };
+
+        dw.initialize(protocol, pot_window, 202608, 100_000, 1_000, 2, 1_700_500_000, 230);
+        dw.record_distribution(40_000).unwrap();
+
+        assert_eq!(dw.distributed_amount, 40_000);
+        assert_eq!(dw.distribution_count, 1);
+        assert_eq!(dw.status, CLOSED_STATUS);
+        assert_eq!(dw.remaining_amount(), 60_000);
+    }
+
+    #[test]
+    fn pot_window_is_initialized_returns_false_for_default_pubkey() {
+        let window = PotWindow {
+            protocol_config: Pubkey::default(),
+            window_id: 0,
+            total_redirected_amount: 0,
+            redirect_count: 0,
+            opened_at_ts: 0,
+            last_recorded_at_ts: 0,
+            status: OPEN_STATUS,
+            bump: 0,
+        };
+        assert!(!window.is_initialized());
+    }
+
+    #[test]
+    fn redirect_receipt_is_initialized_returns_false_when_window_is_default() {
+        let receipt = RedirectReceipt {
+            window: Pubkey::default(),
+            receipt_key: [0; 32],
+            amount: 0,
+            recorded_at_ts: 0,
+            bump: 0,
+        };
+        assert!(!receipt.is_initialized());
+    }
+
+    #[test]
+    fn distribution_window_is_initialized_returns_false_for_default() {
+        let dw = DistributionWindow {
+            protocol_config: Pubkey::default(),
+            pot_window: Pubkey::default(),
+            window_id: 0,
+            total_redirected_amount: 0,
+            total_weight: 0,
+            eligible_recipient_count: 0,
+            distributed_amount: 0,
+            distribution_count: 0,
+            closed_at_ts: 0,
+            status: OPEN_STATUS,
+            bump: 0,
+        };
+        assert!(!dw.is_initialized());
+    }
 }

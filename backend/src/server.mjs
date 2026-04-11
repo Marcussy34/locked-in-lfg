@@ -38,7 +38,7 @@ function buildLoggerConfig() {
   return loggerConfig;
 }
 
-function buildServer() {
+export function buildServer() {
   const app = Fastify({
     logger: buildLoggerConfig(),
     // We emit our own concise request lifecycle logs below.
@@ -169,4 +169,8 @@ async function shutdown(signal) {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-start();
+const isDirectRun = import.meta.url === `file://${process.argv[1]}` ||
+                    process.argv[1]?.endsWith('/server.mjs');
+if (isDirectRun) {
+  start();
+}

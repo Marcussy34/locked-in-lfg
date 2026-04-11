@@ -2165,4 +2165,366 @@ mod tests {
         assert_eq!(lock.extension_seconds_total, 7 * DAY_SECONDS as u64);
         assert!(lock.saver_recovery_mode);
     }
+
+    // ── Boundary validation tests ──────────────────────────────────────
+
+    #[test]
+    fn validate_protocol_params_fuel_cap_at_min_passes() {
+        let usdc = Pubkey::new_unique();
+        let skr = Pubkey::new_unique();
+        assert!(validate_protocol_params(MIN_FUEL_CAP, DEFAULT_MAX_SAVERS, 7, usdc, skr).is_ok());
+    }
+
+    #[test]
+    fn validate_protocol_params_fuel_cap_below_min_fails() {
+        let usdc = Pubkey::new_unique();
+        let skr = Pubkey::new_unique();
+        assert!(validate_protocol_params(MIN_FUEL_CAP - 1, DEFAULT_MAX_SAVERS, 7, usdc, skr).is_err());
+    }
+
+    #[test]
+    fn validate_protocol_params_fuel_cap_at_max_passes() {
+        let usdc = Pubkey::new_unique();
+        let skr = Pubkey::new_unique();
+        assert!(validate_protocol_params(MAX_FUEL_CAP, DEFAULT_MAX_SAVERS, 7, usdc, skr).is_ok());
+    }
+
+    #[test]
+    fn validate_protocol_params_fuel_cap_above_max_fails() {
+        let usdc = Pubkey::new_unique();
+        let skr = Pubkey::new_unique();
+        assert!(validate_protocol_params(MAX_FUEL_CAP + 1, DEFAULT_MAX_SAVERS, 7, usdc, skr).is_err());
+    }
+
+    #[test]
+    fn validate_protocol_params_miss_extension_days_zero_fails() {
+        let usdc = Pubkey::new_unique();
+        let skr = Pubkey::new_unique();
+        assert!(validate_protocol_params(7, DEFAULT_MAX_SAVERS, 0, usdc, skr).is_err());
+    }
+
+    #[test]
+    fn validate_protocol_params_miss_extension_days_one_passes() {
+        let usdc = Pubkey::new_unique();
+        let skr = Pubkey::new_unique();
+        assert!(validate_protocol_params(7, DEFAULT_MAX_SAVERS, 1, usdc, skr).is_ok());
+    }
+
+    // ── Completion edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn completion_with_zero_reward_units_credits_no_fuel() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+
+        let effect = lock
+            .apply_verified_completion(&protocol, 20000, 0)
+            .unwrap();
+        assert!(effect.applied);
+        assert_eq!(effect.outcome, OUTCOME_NO_REWARD_UNITS);
+        assert_eq!(effect.fuel_awarded, 0);
+        assert_eq!(lock.fuel_counter, 0);
+    }
+
+    #[test]
+    fn completion_twice_same_day_returns_already_earned() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+
+        let first = lock
+            .apply_verified_completion(&protocol, 20000, 100)
+            .unwrap();
+        assert_eq!(first.outcome, OUTCOME_FUEL_CREDITED);
+        assert_eq!(first.fuel_awarded, 1);
+
+        let second = lock
+            .apply_verified_completion(&protocol, 20000, 100)
+            .unwrap();
+        assert_eq!(second.outcome, OUTCOME_ALREADY_EARNED_TODAY);
+        assert_eq!(second.fuel_awarded, 0);
+    }
+
+    #[test]
+    fn completion_non_consecutive_days_resets_streak() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+
+        lock.apply_verified_completion(&protocol, 20000, 100).unwrap();
+        lock.apply_verified_completion(&protocol, 20001, 100).unwrap();
+        assert_eq!(lock.current_streak, 2);
+
+        lock.apply_verified_completion(&protocol, 20005, 100).unwrap();
+        assert_eq!(lock.current_streak, 1);
+        assert_eq!(lock.longest_streak, 2);
+    }
+
+    #[test]
+    fn completion_at_fuel_cap_returns_at_cap_outcome() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.fuel_counter = protocol.fuel_cap;
+        lock.last_fuel_credit_day = 19999;
+
+        let effect = lock
+            .apply_verified_completion(&protocol, 20000, 100)
+            .unwrap();
+        assert_eq!(effect.outcome, OUTCOME_AT_FUEL_CAP);
+        assert_eq!(effect.fuel_awarded, 0);
+        assert_eq!(lock.fuel_counter, protocol.fuel_cap);
+    }
+
+    // ── Fuel mechanics ─────────────────────────────────────────────────
+
+    #[test]
+    fn consume_daily_fuel_zero_counter_returns_no_fuel() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.gauntlet_day = 8;
+        lock.fuel_counter = 0;
+
+        let effect = lock.consume_daily_fuel(1_700_000_000).unwrap();
+        assert!(!effect.applied);
+        assert_eq!(effect.outcome, OUTCOME_NO_FUEL_AVAILABLE);
+        assert_eq!(effect.fuel_burned, 0);
+    }
+
+    #[test]
+    fn convert_fuel_to_ichor_zero_fuel_counter_returns_no_fuel() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.gauntlet_day = 8;
+        lock.fuel_counter = 0;
+
+        let effect = lock.convert_fuel_to_ichor(5).unwrap();
+        assert!(!effect.applied);
+        assert_eq!(effect.outcome, OUTCOME_CONVERSION_NO_FUEL);
+        assert_eq!(effect.fuel_consumed, 0);
+        assert_eq!(effect.ichor_gained, 0);
+    }
+
+    #[test]
+    fn convert_fuel_to_ichor_clamps_to_fuel_counter() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.gauntlet_day = 8;
+        lock.fuel_counter = 3;
+
+        let effect = lock.convert_fuel_to_ichor(10).unwrap();
+        assert!(effect.applied);
+        assert_eq!(effect.outcome, OUTCOME_CONVERSION_APPLIED);
+        assert_eq!(effect.fuel_consumed, 3);
+        assert_eq!(effect.ichor_gained, 3 * ICHOR_PER_FUEL);
+        assert_eq!(lock.fuel_counter, 0);
+    }
+
+    #[test]
+    fn convert_fuel_to_ichor_during_gauntlet_returns_locked() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.fuel_counter = 5;
+
+        let effect = lock.convert_fuel_to_ichor(3).unwrap();
+        assert!(!effect.applied);
+        assert_eq!(effect.outcome, OUTCOME_CONVERSION_GAUNTLET_LOCKED);
+        assert_eq!(effect.fuel_consumed, 0);
+        assert_eq!(effect.ichor_gained, 0);
+        assert_eq!(lock.fuel_counter, 5);
+    }
+
+    #[test]
+    fn convert_fuel_to_ichor_verifies_ichor_equals_fuel_times_rate() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.gauntlet_day = 8;
+        lock.fuel_counter = 7;
+
+        let effect = lock.convert_fuel_to_ichor(4).unwrap();
+        assert!(effect.applied);
+        assert_eq!(effect.fuel_consumed, 4);
+        assert_eq!(effect.ichor_gained, 4 * ICHOR_PER_FUEL);
+        assert_eq!(lock.fuel_counter, 3);
+        assert_eq!(lock.ichor_counter, 4 * ICHOR_PER_FUEL);
+        assert_eq!(lock.ichor_lifetime_total, 4 * ICHOR_PER_FUEL);
+    }
+
+    // ── Miss consequence edge cases ────────────────────────────────────
+
+    #[test]
+    fn miss_during_gauntlet_returns_locked_outcome() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+
+        let effect = lock
+            .consume_saver_or_apply_full_consequence(&protocol, 20000)
+            .unwrap();
+        assert!(!effect.applied);
+        assert_eq!(effect.outcome, OUTCOME_GAUNTLET_LOCKED);
+        assert_eq!(effect.extension_seconds_added, 0);
+    }
+
+    #[test]
+    fn multiple_full_consequences_each_extend_lock_end() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.gauntlet_day = 8;
+        lock.savers_remaining = 0;
+        let original_end = lock.lock_end_ts;
+        let extension = i64::from(protocol.miss_extension_days) * DAY_SECONDS;
+
+        let first = lock
+            .consume_saver_or_apply_full_consequence(&protocol, 20000)
+            .unwrap();
+        assert_eq!(first.outcome, OUTCOME_FULL_CONSEQUENCE);
+        assert_eq!(lock.lock_end_ts, original_end + extension);
+
+        let second = lock
+            .consume_saver_or_apply_full_consequence(&protocol, 20001)
+            .unwrap();
+        assert_eq!(second.outcome, OUTCOME_FULL_CONSEQUENCE);
+        assert_eq!(lock.lock_end_ts, original_end + 2 * extension);
+        assert_eq!(lock.extension_seconds_total, 2 * extension as u64);
+    }
+
+    // ── Unlock edge cases ──────────────────────────────────────────────
+
+    #[test]
+    fn assert_unlockable_exactly_at_lock_end_passes() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.initialize_from_funding(
+            &protocol,
+            Pubkey::new_unique(),
+            [3; 32],
+            protocol.usdc_mint,
+            1_000_000,
+            0,
+            0,
+            30,
+            1_700_000_000,
+            99,
+        )
+        .unwrap();
+
+        assert!(lock.assert_unlockable(lock.lock_end_ts).is_ok());
+    }
+
+    #[test]
+    fn assert_unlockable_one_second_before_lock_end_fails() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.initialize_from_funding(
+            &protocol,
+            Pubkey::new_unique(),
+            [3; 32],
+            protocol.usdc_mint,
+            1_000_000,
+            0,
+            0,
+            30,
+            1_700_000_000,
+            99,
+        )
+        .unwrap();
+
+        assert!(lock.assert_unlockable(lock.lock_end_ts - 1).is_err());
+    }
+
+    // ── Ichor redemption edge cases ────────────────────────────────────
+
+    #[test]
+    fn redeem_ichor_zero_amount_fails() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.ichor_counter = 1_000;
+
+        let err = lock.redeem_ichor(0, 6);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn redeem_ichor_exceeds_balance_fails() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.ichor_counter = 500;
+
+        let err = lock.redeem_ichor(501, 6);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn redeem_ichor_on_closed_lock_fails() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+        lock.ichor_counter = 1_000;
+        lock.status = CLOSED_STATUS;
+
+        let err = lock.redeem_ichor(100, 6);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn redeem_ichor_conversion_tiers_match_lifetime_total() {
+        let protocol = protocol();
+        let mut lock = lock(&protocol);
+        lock.gauntlet_complete = true;
+
+        // Tier 1: lifetime 0..=9_999 => 9_000 bps
+        lock.ichor_counter = 100;
+        lock.ichor_lifetime_total = 5_000;
+        let effect = lock.redeem_ichor(10, 6).unwrap();
+        assert_eq!(effect.conversion_bps, 9_000);
+
+        // Tier 2: lifetime 10_000..=49_999 => 10_000 bps
+        lock.ichor_counter = 100;
+        lock.ichor_lifetime_total = 25_000;
+        let effect = lock.redeem_ichor(10, 6).unwrap();
+        assert_eq!(effect.conversion_bps, 10_000);
+
+        // Tier 3: lifetime 50_000..=99_999 => 11_000 bps
+        lock.ichor_counter = 100;
+        lock.ichor_lifetime_total = 75_000;
+        let effect = lock.redeem_ichor(10, 6).unwrap();
+        assert_eq!(effect.conversion_bps, 11_000);
+
+        // Tier 4: lifetime >= 100_000 => 12_500 bps
+        lock.ichor_counter = 100;
+        lock.ichor_lifetime_total = 200_000;
+        let effect = lock.redeem_ichor(10, 6).unwrap();
+        assert_eq!(effect.conversion_bps, 12_500);
+    }
+
+    // ── Pure function tests ────────────────────────────────────────────
+
+    #[test]
+    fn saver_redirect_bps_for_all_consumed_counts() {
+        // consumed = 0 (max_savers=3, remaining=3) => 0
+        assert_eq!(saver_redirect_bps(DEFAULT_MAX_SAVERS, 3), 0);
+        // consumed = 1 (remaining=2) => 1_000
+        assert_eq!(saver_redirect_bps(DEFAULT_MAX_SAVERS, 2), 1_000);
+        // consumed = 2 (remaining=1) => 2_000
+        assert_eq!(saver_redirect_bps(DEFAULT_MAX_SAVERS, 1), 2_000);
+        // consumed = 3 (remaining=0) => 2_000
+        assert_eq!(saver_redirect_bps(DEFAULT_MAX_SAVERS, 0), 2_000);
+        // consumed = 4+ => FULL_REDIRECT_BPS (simulated with max_savers=5, remaining=0)
+        assert_eq!(saver_redirect_bps(5, 0), FULL_REDIRECT_BPS);
+    }
+
+    #[test]
+    fn ichor_conversion_bps_at_boundary_values() {
+        assert_eq!(ichor_conversion_bps(0), 9_000);
+        assert_eq!(ichor_conversion_bps(9_999), 9_000);
+        assert_eq!(ichor_conversion_bps(10_000), 10_000);
+        assert_eq!(ichor_conversion_bps(49_999), 10_000);
+        assert_eq!(ichor_conversion_bps(50_000), 11_000);
+        assert_eq!(ichor_conversion_bps(99_999), 11_000);
+        assert_eq!(ichor_conversion_bps(100_000), 12_500);
+    }
 }

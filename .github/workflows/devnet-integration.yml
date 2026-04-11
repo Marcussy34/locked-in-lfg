@@ -1,0 +1,60 @@
+name: Devnet Integration Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1' # Weekly Monday 6am UTC
+
+concurrency:
+  group: devnet-integration
+  cancel-in-progress: true
+
+jobs:
+  devnet-smoke:
+    name: Solana Devnet Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Run Rust unit tests
+        run: cargo test --workspace
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend unit tests
+        working-directory: backend
+        run: npx vitest run --project unit
+        env:
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          LOCK_VAULT_PROGRAM_ID: 41TexnrHDMV4ASJmqNNFcgQ7RBk6N193yvukfiCzKQmD
+          YIELD_SPLITTER_PROGRAM_ID: 8bevd3T3LWoUh2Z9348UKwFFN1p5MdbRbAe2zniCrnVv
+          COMMUNITY_POT_PROGRAM_ID: BsJDnhJGVdLQ3mxBJ7YCMkkBitKP2RT49zFqR9XsGri1
+          LOCK_VAULT_USDC_MINT: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
+          LOCK_VAULT_SKR_MINT: CQAiXocPkmrr6MTDigHn1yDJ66v5nbPyxwMoUxb4PgST
+          JWT_SECRET: ci-devnet-jwt-secret-at-least-32-characters-long
+          JWT_ISSUER: lockedin-api
+          JWT_AUDIENCE: lockedin-mobile
+          JWT_ACCESS_TTL: 15m
+          JWT_REFRESH_TTL: 30d

@@ -407,4 +407,71 @@ mod tests {
         receipt.lock_account = Pubkey::new_unique();
         assert!(receipt.is_initialized());
     }
+
+    // ── New tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn validate_platform_fee_bps_zero_passes() {
+        assert!(validate_platform_fee_bps(0).is_ok());
+    }
+
+    #[test]
+    fn validate_platform_fee_bps_at_max_passes() {
+        assert!(validate_platform_fee_bps(FULL_REDIRECT_BPS).is_ok());
+    }
+
+    #[test]
+    fn validate_platform_fee_bps_above_max_fails() {
+        assert!(validate_platform_fee_bps(FULL_REDIRECT_BPS + 1).is_err());
+    }
+
+    #[test]
+    fn percentage_of_amount_zero_amount_returns_zero() {
+        let result = percentage_of_amount(0, 5_000).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn percentage_of_amount_zero_bps_returns_zero() {
+        let result = percentage_of_amount(100_000_000, 0).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn apply_skr_multiplier_zero_base_returns_zero() {
+        let result = apply_skr_multiplier(0, 3).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn harvest_split_gross_yield_one_verifies_rounding() {
+        // gross=1, fee_bps=1000, redirect_bps=2000, active, tier 0
+        // platform_fee = 1 * 1000 / 10000 = 0 (truncated)
+        // redirect = 1 * 2000 / 10000 = 0 (truncated)
+        // user_share = 1 - 0 - 0 = 1
+        // ichor = 1 * 10000 / 10000 = 1 (tier 0 = 1x)
+        let split = calculate_harvest_split(1, 1_000, 2_000, true, 0).unwrap();
+        assert_eq!(split.platform_fee_amount, 0);
+        assert_eq!(split.redirected_amount, 0);
+        assert_eq!(split.user_share_amount, 1);
+        assert_eq!(split.ichor_awarded, 1);
+        assert!(split.applied);
+        assert_eq!(split.outcome, OUTCOME_SPLIT_APPLIED);
+    }
+
+    #[test]
+    fn harvest_split_fee_plus_redirect_consume_everything() {
+        // platform_fee_bps=5000, redirect_bps=5000 => combined=10000
+        // platform_fee = 100_000 * 5000 / 10000 = 50_000
+        // redirect = 100_000 * 5000 / 10000 = 50_000
+        // user_share = 100_000 - 50_000 - 50_000 = 0
+        // brewer active but user_share=0 => no ichor, inactive outcome
+        let split = calculate_harvest_split(100_000, 5_000, 5_000, true, 0).unwrap();
+        assert_eq!(split.platform_fee_amount, 50_000);
+        assert_eq!(split.redirected_amount, 50_000);
+        assert_eq!(split.user_share_amount, 0);
+        assert_eq!(split.ichor_awarded, 0);
+        assert!(!split.applied);
+        assert_eq!(split.outcome, OUTCOME_BREWER_INACTIVE);
+    }
 }

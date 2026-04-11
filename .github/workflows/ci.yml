@@ -1,0 +1,254 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lint-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: web-app/node_modules
+          key: node-modules-web-${{ runner.os }}-${{ hashFiles('web-app/package-lock.json') }}
+          restore-keys: node-modules-web-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: web-app
+        run: npm ci
+
+      - name: Lint
+        working-directory: web-app
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: web-app
+        run: npx tsc --noEmit
+
+  rust-test:
+    name: Rust Program Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Run cargo test
+        run: cargo test --workspace
+
+  backend-test:
+    name: Backend Tests
+    needs: lint-typecheck
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_DB: lockedin_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd "pg_isready -U test -d lockedin_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: node-modules-backend-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: node-modules-backend-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run migrations
+        working-directory: backend
+        run: |
+          for f in sql/*.sql; do
+            PGPASSWORD=test psql -h localhost -p 5433 -U test -d lockedin_test -f "$f"
+          done
+
+      - name: Run unit tests
+        working-directory: backend
+        run: npx vitest run --project unit
+
+      - name: Run API integration tests
+        working-directory: backend
+        run: npx vitest run --project api
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5433/lockedin_test
+          JWT_SECRET: ci-test-jwt-secret-that-is-at-least-32-characters-long
+          JWT_ISSUER: lockedin-api
+          JWT_AUDIENCE: lockedin-mobile
+          JWT_ACCESS_TTL: 15m
+          JWT_REFRESH_TTL: 30d
+          SCHEDULER_SECRET: ci-test-scheduler-secret
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          LOCK_VAULT_PROGRAM_ID: 41TexnrHDMV4ASJmqNNFcgQ7RBk6N193yvukfiCzKQmD
+          YIELD_SPLITTER_PROGRAM_ID: 8bevd3T3LWoUh2Z9348UKwFFN1p5MdbRbAe2zniCrnVv
+          COMMUNITY_POT_PROGRAM_ID: BsJDnhJGVdLQ3mxBJ7YCMkkBitKP2RT49zFqR9XsGri1
+          LOCK_VAULT_USDC_MINT: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
+          LOCK_VAULT_SKR_MINT: CQAiXocPkmrr6MTDigHn1yDJ66v5nbPyxwMoUxb4PgST
+          LOCK_VAULT_RELAY_ENABLED: 'false'
+          RUNTIME_SCHEDULER_ENABLED: 'false'
+          LEADERBOARD_SNAPSHOT_ENABLED: 'false'
+          UNLOCK_INDEXER_ENABLED: 'false'
+          REDEMPTION_VAULT_AUTOFUND_ENABLED: 'false'
+          FAUCET_ENABLED: 'false'
+          YIELD_STRATEGY_ENABLED: 'false'
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+
+  web-test:
+    name: Web App Tests
+    needs: lint-typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: web-app/node_modules
+          key: node-modules-web-${{ runner.os }}-${{ hashFiles('web-app/package-lock.json') }}
+          restore-keys: node-modules-web-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: web-app
+        run: npm ci
+
+      - name: Run Vitest
+        working-directory: web-app
+        run: npx vitest run --coverage
+        env:
+          NEXT_PUBLIC_API_URL: ''
+          NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
+          NEXT_PUBLIC_SOLANA_CLUSTER: devnet
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: web-app/coverage/
+          retention-days: 14
+
+  playwright:
+    name: E2E Tests (${{ matrix.project }})
+    needs: [web-test]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop-chrome, mobile-iphone]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: web-app/node_modules
+          key: node-modules-web-${{ runner.os }}-${{ hashFiles('web-app/package-lock.json') }}
+          restore-keys: node-modules-web-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: web-app
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web-app/package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright browsers
+        working-directory: web-app
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Build web app
+        working-directory: web-app
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
+          NEXT_PUBLIC_SOLANA_CLUSTER: devnet
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.E2E_PRIVY_APP_ID }}
+          NEXT_PUBLIC_LOCK_VAULT_PROGRAM_ID: 41TexnrHDMV4ASJmqNNFcgQ7RBk6N193yvukfiCzKQmD
+          NEXT_PUBLIC_LOCK_VAULT_USDC_MINT: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
+          NEXT_PUBLIC_LOCK_VAULT_SKR_MINT: CQAiXocPkmrr6MTDigHn1yDJ66v5nbPyxwMoUxb4PgST
+          NEXT_PUBLIC_DUNGEON_URL: https://dist-ochre-kappa-70.vercel.app
+
+      - name: Start web app
+        working-directory: web-app
+        run: npm start &
+        env:
+          PORT: 3000
+
+      - name: Wait for server
+        run: npx wait-on http://localhost:3000 --timeout 30000
+
+      - name: Run Playwright
+        working-directory: web-app
+        run: npx playwright test --config e2e/playwright.config.ts --project=${{ matrix.project }}
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: |
+            web-app/playwright-report/
+            web-app/test-results/
+          retention-days: 14
