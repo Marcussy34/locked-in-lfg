@@ -54,8 +54,7 @@ let startedDocker = false;
 
 export async function setup() {
   if (await isDbReady()) {
-    // DB already running (CI service container) — just run migrations
-    await runMigrations();
+    // DB already running (CI service container) — migrations already applied by CI workflow
     return;
   }
 
