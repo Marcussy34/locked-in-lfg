@@ -38,16 +38,39 @@ async function runMigrations() {
   }
 }
 
+// Check if DB is already running (e.g., CI service container)
+async function isDbReady() {
+  try {
+    const pool = new pg.Pool({ connectionString: TEST_DB_URL });
+    await pool.query('SELECT 1');
+    await pool.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let startedDocker = false;
+
 export async function setup() {
+  if (await isDbReady()) {
+    // DB already running (CI service container) — just run migrations
+    await runMigrations();
+    return;
+  }
+
+  // Local dev — start Docker
   execSync(`docker compose -f "${composeFile}" up -d --wait`, {
     stdio: 'pipe',
     cwd: backendRoot,
   });
+  startedDocker = true;
   await waitForDb();
   await runMigrations();
 }
 
 export async function teardown() {
+  if (!startedDocker) return;
   execSync(`docker compose -f "${composeFile}" down -v`, {
     stdio: 'pipe',
     cwd: backendRoot,

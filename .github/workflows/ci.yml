@@ -221,9 +221,8 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
           NEXT_PUBLIC_SOLANA_CLUSTER: devnet
-          # Dummy Privy app ID for build-time SSR pre-rendering.
-          # Pages that use PrivyProvider need a valid-looking ID to not crash.
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.E2E_PRIVY_APP_ID || 'cm000000000000000000000000' }}
+          # Public client-side Privy app ID (required for SSR pre-rendering)
+          NEXT_PUBLIC_PRIVY_APP_ID: cmncshird026v0cl5n6yqq8z0
           NEXT_PUBLIC_LOCK_VAULT_PROGRAM_ID: 41TexnrHDMV4ASJmqNNFcgQ7RBk6N193yvukfiCzKQmD
           NEXT_PUBLIC_LOCK_VAULT_USDC_MINT: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
           NEXT_PUBLIC_LOCK_VAULT_SKR_MINT: CQAiXocPkmrr6MTDigHn1yDJ66v5nbPyxwMoUxb4PgST
