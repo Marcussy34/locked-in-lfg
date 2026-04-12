@@ -201,7 +201,7 @@ function ActiveCourseCard({ course, streak, lessonCount, onPress }: { course: Co
 /* ── Main page — adapts between onboarding and post-onboarding ── */
 export default function CoursesPage() {
   const router = useRouter();
-  const { isAuthenticated, markFreshLogin, disconnect } = useAuth();
+  const { isAuthenticated, markFreshLogin, ensureFreshSession, disconnect } = useAuth();
 
   const { login } = useLogin({
     onComplete: async () => {
@@ -266,9 +266,13 @@ export default function CoursesPage() {
     }
   }, [walletAddress, courses.length, syncOnChainEnrollments]);
 
-  const activeCourseIds = enrolledCourseIds.filter((courseId) =>
-    Boolean(courseStates[courseId]?.lockAccountAddress),
-  );
+  // Only show active/enrolled courses when authenticated — prevents stale
+  // enrollment state from leaking into the disconnected view.
+  const activeCourseIds = isAuthenticated
+    ? enrolledCourseIds.filter((courseId) =>
+        Boolean(courseStates[courseId]?.lockAccountAddress),
+      )
+    : [];
   const activeCourses = courses.filter((c) => activeCourseIds.includes(c.id));
   const availableCourses = courses.filter((c) => !activeCourseIds.includes(c.id));
 
@@ -280,7 +284,11 @@ export default function CoursesPage() {
     router.push('/dungeon');
   };
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
+    // If Privy still has a stale session from a previous disconnect,
+    // this clears it so login() shows wallet selection instead of
+    // auto-signing with the previously used wallet.
+    await ensureFreshSession();
     markFreshLogin();
     login({ loginMethods: ['google', 'wallet'] });
   };

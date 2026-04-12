@@ -421,8 +421,10 @@ export async function batchCheckLockAccounts(
     }
   }
 
+  // No on-chain lock accounts found — normal for users who haven't enrolled yet,
+  // or wallets that have never locked. Only surface at info level.
   if (result.size === 0 && courseIds.length > 0) {
-    console.error('[lockVault] All lock account checks failed — user may have orphaned enrollments');
+    console.info('[lockVault] No on-chain lock accounts found for this wallet');
   }
 
   return result;

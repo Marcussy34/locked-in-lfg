@@ -16,6 +16,49 @@ function setAuthCookie(value: boolean) {
 }
 
 /**
+ * Nuclear client-state wipe — deletes every cookie, localStorage entry, and
+ * sessionStorage entry visible to JS. Preserves the `locked-in-tutorial-done`
+ * cookie so returning users don't replay the tutorial.
+ *
+ * We go scorched-earth because narrower approaches (only `privy:*` keys,
+ * only cookies containing "privy") didn't fully clear Privy's session —
+ * Privy uses a mix of cookie names and storage locations that changes
+ * between versions, and we can't afford to miss one.
+ */
+function wipeClientAuthState() {
+  if (typeof window === 'undefined') return;
+  try {
+    const tutorialDoneBackup = document.cookie
+      .split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith('locked-in-tutorial-done='));
+
+    localStorage.clear();
+    sessionStorage.clear();
+
+    const hostname = window.location.hostname;
+    const parentDomain = hostname.split('.').slice(-2).join('.');
+    const expiry = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    for (const cookie of document.cookie.split(';')) {
+      const name = cookie.split('=')[0].trim();
+      if (!name) continue;
+      document.cookie = `${name}=; ${expiry}; path=/`;
+      document.cookie = `${name}=; ${expiry}; path=/; domain=${hostname}`;
+      if (parentDomain !== hostname) {
+        document.cookie = `${name}=; ${expiry}; path=/; domain=.${parentDomain}`;
+      }
+    }
+
+    // Restore the tutorial flag so returning users don't re-see the tutorial
+    if (tutorialDoneBackup) {
+      document.cookie = `${tutorialDoneBackup}; path=/; max-age=31536000; samesite=lax`;
+    }
+  } catch {
+    // ignore — best-effort cleanup
+  }
+}
+
+/**
  * Auth hook — uses Privy for wallet management, our backend for JWT.
  *
  * Flow: Privy login (Google or wallet) → get Solana wallet → challenge-sign-verify → JWT
@@ -149,29 +192,55 @@ export function useAuth() {
     authenticate();
   }, [authenticate]);
 
-  // Disconnect — clears Privy + all app state
+  // Disconnect — clears Privy + all app state and reloads the page.
+  // Note: Privy's session cookies live on auth.privy.io (cross-origin).
+  // We can't clear those from JS — only Privy's own logout() can invalidate
+  // them server-side. If the session somehow survives, we detect that
+  // on the next Sign In click via `ensureFreshSession` below.
   const handleDisconnect = useCallback(async () => {
     await privyLogout();
+    await new Promise((r) => setTimeout(r, 800));
     disconnectUser();
     useCourseStore.getState().reset();
     setAuthCookie(false);
     setAuthError(null);
+    wipeClientAuthState();
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
   }, [privyLogout, disconnectUser]);
 
-  // Cleanup: if Privy logs out externally, clear our state
+  // Cleanup: if Privy logs out externally (session expiry, etc.), clear
+  // our state the same way a manual disconnect does.
   useEffect(() => {
     if (privyReady && !privyAuthenticated && walletAddress && privyWasAuthenticatedRef.current) {
       disconnectUser();
       useCourseStore.getState().reset();
       setAuthCookie(false);
+      wipeClientAuthState();
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
     }
   }, [privyReady, privyAuthenticated, walletAddress, disconnectUser]);
+
 
   // Called by WalletConnect after user deliberately clicks sign-in
   const markFreshLogin = useCallback(() => {
     authGuardRef.current = false;
     setFreshLogin(true);
   }, [setFreshLogin]);
+
+  // If Privy still considers the user authenticated (stale cross-origin
+  // session that survived our last disconnect), log out first so the
+  // next `login()` call opens the wallet-selection modal instead of
+  // throwing "already logged in" and auto-signing with the old wallet.
+  // Call this BEFORE `login()` whenever you're about to prompt sign-in.
+  const ensureFreshSession = useCallback(async () => {
+    if (!privyAuthenticated) return;
+    await privyLogout();
+    await new Promise((r) => setTimeout(r, 500));
+  }, [privyAuthenticated, privyLogout]);
 
   return {
     isReady: privyReady && walletsReady,
@@ -183,6 +252,7 @@ export function useAuth() {
     loginMethod: privyUser?.google ? 'google' as const : privyAuthenticated ? 'wallet' as const : null,
     authenticate,
     markFreshLogin,
+    ensureFreshSession,
     retry,
     disconnect: handleDisconnect,
   };
