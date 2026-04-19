@@ -95,7 +95,17 @@ export const useUserStore = create<UserStore>()(
     }),
     {
       name: 'locked-in-user',
+      version: 1,
       storage: createJSONStorage(() => webStorageAdapter),
+      migrate: (persistedState, version) => {
+        const state = (persistedState ?? {}) as Partial<UserStore>;
+        if (version < 1) {
+          // Users whose state predates v1 existed before the dungeon tour UI shipped.
+          // Mark the tour complete so they don't see it on first post-upgrade visit.
+          state.dungeonTourCompleted = true;
+        }
+        return state as UserStore;
+      },
       merge: (persisted, current) => {
         const merged = { ...current, ...(persisted as Partial<UserStore>) };
         // Migrate legacy 'gauntlet' phase to 'main'
